@@ -1025,9 +1025,22 @@ fn finish(
                 enabled: true,
             }
         }
-        Err(_) => MatchView {
+        Err(error) => MatchView {
             source: Some("provider_unavailable".into()),
-            reason: Some("Goal matching unavailable; activity stays unassigned.".into()),
+            // The category is what the user can act on: an exhausted built-in allowance
+            // needs waiting or personal keys, a timeout needs nothing.
+            reason: Some(
+                match crate::engine_observability::error_category(&error) {
+                    "provider_rate_limit" => {
+                        "Built-in AI allowance reached; goal matching resumes when it resets or with personal API keys."
+                    }
+                    "provider_timeout_or_network" => {
+                        "Goal matching timed out; activity stays unassigned until the next attempt."
+                    }
+                    _ => "Goal matching unavailable; activity stays unassigned.",
+                }
+                .into(),
+            ),
             enabled: true,
             ..Default::default()
         },
