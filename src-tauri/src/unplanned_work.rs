@@ -86,6 +86,8 @@ pub struct Runtime {
     last_classified: Option<String>,
     // A separate boundary is needed only while no existing goal owns intervals.
     unassigned_usage: crate::insights::UsageTracker,
+    /// Contexts just left: a quick return resumes their stability clock.
+    presences: std::collections::VecDeque<crate::goal_matching::stability::Presence>,
 }
 impl Runtime {
     pub(crate) fn reset_sample(&mut self) {
@@ -177,16 +179,34 @@ fn observe_at(
         }
         return Ok(());
     }
-    let changed =
-        inner.unplanned_work.sample.as_ref().is_none_or(|old| {
+    let stale = inner
+        .unplanned_work
+        .last_seen
+        .is_none_or(|at| now.saturating_duration_since(at) > Duration::from_secs(15));
+    let changed = stale
+        || inner.unplanned_work.sample.as_ref().is_none_or(|old| {
             !crate::tracking::same_context(old, a) || old.window_id != a.window_id
-        }) || inner
-            .unplanned_work
-            .last_seen
-            .is_none_or(|at| now.saturating_duration_since(at) > Duration::from_secs(15));
+        });
     if changed {
-        inner.unplanned_work.stable_since = Some(now);
-        inner.unplanned_work.generation = inner.unplanned_work.generation.wrapping_add(1);
+        use crate::goal_matching::stability::{remember_presence, resume_presence};
+        let runtime = &mut inner.unplanned_work;
+        if !stale {
+            if let (Some(key), Some(since), Some(last)) = (
+                runtime.session_key.clone(),
+                runtime.stable_since,
+                runtime.last_seen,
+            ) {
+                remember_presence(&mut runtime.presences, key, since, last);
+            }
+        }
+        // Hopping to another window and straight back keeps this context's clock.
+        runtime.stable_since = Some(
+            (!stale)
+                .then(|| resume_presence(&mut runtime.presences, &context_key(a), now))
+                .flatten()
+                .unwrap_or(now),
+        );
+        runtime.generation = runtime.generation.wrapping_add(1);
     }
     // Time is filed per context: the same app, title and page, whatever the daily
     // summary's review segments do. Which stretch of it a suggestion covers is decided

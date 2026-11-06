@@ -11,7 +11,7 @@ mod lanes;
 #[cfg(test)]
 mod metadata_tests;
 mod resolution;
-mod stability;
+pub(crate) mod stability;
 use stability::metadata_unavailable;
 pub(crate) mod suggestions;
 pub const AUTO_ASSIGN_CONFIDENCE: f64 = 0.8;
@@ -94,6 +94,9 @@ pub struct Runtime {
     /// The window last asked about and when. Changing text in the same window (a chat,
     /// an editor) is asked about again only after `REASK`, not on every sample.
     asked: Option<(String, Instant)>,
+    /// Windows left within the last moments: their presence clock resumes on a quick
+    /// return, so hopping between two windows still lets each become stable.
+    presences: std::collections::VecDeque<stability::Presence>,
 }
 impl Runtime {
     fn record_trail(&mut self, sample: &ActivitySnapshot, goal: Option<i64>, now: i64) {
@@ -192,6 +195,8 @@ impl Runtime {
         self.text_fingerprint = None;
         self.pending_suggestion = None;
         self.asked = None;
+        // Disallowed observation discards paused recognition time, resumable or not.
+        self.presences.clear();
     }
     #[cfg(test)]
     pub fn observe(&mut self, sample: &ActivitySnapshot, allowed: bool) {

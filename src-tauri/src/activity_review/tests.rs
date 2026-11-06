@@ -393,3 +393,51 @@ fn changing_summary_time_preserves_the_open_period_and_uses_new_time_next_period
         chrono::NaiveTime::from_hms_opt(20, 0, 0).unwrap()
     );
 }
+
+#[test]
+fn repeated_review_failures_close_the_period_with_pending_blocks_and_free_its_evidence() {
+    let mut s = fixture();
+    let now = Utc::now();
+    let period = s.review_period(now).unwrap();
+    for n in 1..MAX_REVIEW_FAILURES {
+        assert!(!s
+            .record_review_failure(period, "provider_timeout", now)
+            .unwrap());
+        let (failures, last): (i64, String) = s
+            .connection
+            .query_row(
+                "SELECT failures,last_failure FROM review_periods WHERE id=?1",
+                [period],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
+            .unwrap();
+        assert_eq!(failures, n);
+        assert_eq!(last, "provider_timeout");
+    }
+    // The period has not ended, so even the last failure cannot finalise it yet.
+    assert!(s
+        .record_review_failure(period, "provider_timeout", now)
+        .unwrap());
+    let closed: bool = s
+        .connection
+        .query_row(
+            "SELECT analysis_done=1 FROM review_periods WHERE id=?1",
+            [period],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert!(closed);
+    // Once the period's end has passed, the summary is saved and the evidence released.
+    let later = now + Duration::days(2);
+    s.finish_due_reviews(later).unwrap();
+    let saved: bool = s
+        .connection
+        .query_row(
+            "SELECT summary IS NOT NULL FROM review_periods WHERE id=?1",
+            [period],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert!(saved);
+    assert_eq!(s.review_vault_usage().unwrap().0, 0);
+}

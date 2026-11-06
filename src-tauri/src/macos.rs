@@ -223,12 +223,27 @@ pub fn install_shortcuts(app: &tauri::AppHandle) {
     }
 }
 
+/// A browser window between pages ("Untitled", the browser's own name, or a titled page
+/// whose address has not arrived yet) is skipped for this long before it counts as a
+/// context of its own, so one page visit is not split into three.
+const TRANSITIONAL_GRACE: std::time::Duration = std::time::Duration::from_secs(6);
 #[derive(Default)]
 pub struct MacCollector {
     tracker: crate::collector::DurationTracker,
     previous_window: u64,
     settings: crate::tracking::TrackingSettings,
     excluded: Vec<String>,
+    transitional_since: Option<std::time::Instant>,
+}
+fn transitional(process: &str, title: &str, domain: Option<&str>) -> bool {
+    let title = title.trim();
+    crate::browser::browser_name(process).is_some()
+        && domain.is_none_or(str::is_empty)
+        && (title.is_empty()
+            || title.eq_ignore_ascii_case(process)
+            || title.eq_ignore_ascii_case("untitled")
+            || title.eq_ignore_ascii_case("new tab")
+            || title.to_ascii_lowercase().starts_with("loading"))
 }
 impl crate::collector::ActivityCollector for MacCollector {
     fn configure(&mut self, settings: &crate::tracking::TrackingSettings, excluded: &[String]) {
@@ -249,8 +264,13 @@ impl crate::collector::ActivityCollector for MacCollector {
             .excluded
             .iter()
             .any(|p| p.eq_ignore_ascii_case(&active.process));
-        // Exclusions are checked before reading any browser address metadata.
-        let active = if self.settings.browser_metadata && !excluded {
+        // Exclusions are checked before reading any browser address metadata. Only a
+        // browser gets the second, address-bearing read; every other application is
+        // sampled once per tick.
+        let active = if self.settings.browser_metadata
+            && !excluded
+            && crate::browser::browser_name(&active.process).is_some()
+        {
             let metadata = foreground(true)?;
             if active.window != metadata.window || active.title != metadata.title {
                 self.tracker = Default::default();
@@ -264,6 +284,16 @@ impl crate::collector::ActivityCollector for MacCollector {
             .address
             .as_deref()
             .and_then(crate::browser::sanitize_domain);
+        if transitional(&active.process, &active.title, domain.as_deref()) {
+            let since = *self
+                .transitional_since
+                .get_or_insert_with(std::time::Instant::now);
+            if since.elapsed() < TRANSITIONAL_GRACE {
+                return Err(crate::collector::CONTEXT_CHANGED.into());
+            }
+        } else {
+            self.transitional_since = None;
+        }
         let browser = crate::browser::context(&active.process, &active.title, domain);
         let idle = if active.idle.is_finite() && active.idle >= 0.0 {
             active.idle as u64
@@ -431,6 +461,16 @@ mod tests {
             assert!(!app.process_name.contains('/'));
             assert!(!app.name.contains("/Applications/"));
         }
+    }
+    #[test]
+    fn page_loads_are_transitional_only_for_browsers_without_an_address() {
+        assert!(transitional("Safari", "Safari", None));
+        assert!(transitional("Safari", "Untitled", Some("")));
+        assert!(transitional("Google Chrome", "Loading…", None));
+        assert!(!transitional("Safari", "Register – L’Oréal Groupe", None));
+        assert!(!transitional("Safari", "Untitled", Some("example.com")));
+        assert!(!transitional("Claude", "Claude", None));
+        assert!(!transitional("Telegram", "", None));
     }
     #[test]
     fn idle_is_a_valid_duration() {

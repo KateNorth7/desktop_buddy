@@ -408,13 +408,15 @@ pub fn collect(state: &AppState) -> Result<(), String> {
                 snapshot
             }
             Err(error) => {
+                // A title that changed mid-read is a skipped sample, not a lost context:
+                // the trackers' own 15-second gap rule decides whether continuity holds.
+                if error == collector::CONTEXT_CHANGED {
+                    return Ok(());
+                }
                 inner.usage = Default::default();
                 inner.window_history.clear();
                 inner.unplanned_work.reset_sample();
                 inner.companion.semantic.invalidate_evidence();
-                if error == collector::CONTEXT_CHANGED {
-                    return Ok(());
-                }
                 inner.status.tracking_error = Some(error.clone());
                 return Err(error);
             }

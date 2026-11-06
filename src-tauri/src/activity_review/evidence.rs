@@ -9,6 +9,9 @@ use ring::{
 };
 
 const MAX_REVIEW_BYTES: i64 = 64 * 1024 * 1024;
+/// Image descriptions a single review period may request; beyond this, blocks are
+/// reviewed on their text evidence.
+const MAX_DESCRIBED_IMAGES: i64 = 24;
 #[cfg(any(windows, test))]
 const KEY_NAME: &str = "BUDDY_ACTIVITY_EVIDENCE";
 
@@ -106,10 +109,36 @@ fn open(mut bytes: Vec<u8>, aad: &str) -> Result<Vec<u8>, String> {
     Ok(decrypted.to_vec())
 }
 impl Storage {
+    /// How much of the encrypted evidence store is in use, and its ceiling.
+    pub(crate) fn review_vault_usage(&self) -> Result<(i64, i64), String> {
+        let bytes: i64 = self
+            .connection
+            .query_row(
+                "SELECT COALESCE(SUM(length(encrypted)),0) FROM review_evidence",
+                [],
+                |r| r.get(0),
+            )
+            .map_err(db)?;
+        Ok((bytes, MAX_REVIEW_BYTES))
+    }
     pub(super) fn unreviewed_image(
         &self,
         period: i64,
     ) -> Result<Option<(i64, String, String)>, String> {
+        // Describing images is the costly part of a review, one call each. A period gets a
+        // bounded number of descriptions; the rest of its blocks are reviewed on their
+        // retained text and the descriptions already made.
+        let described: i64 = self
+            .connection
+            .query_row(
+                "SELECT COUNT(*) FROM review_evidence WHERE period_id=?1 AND kind='image' AND analyzed=1",
+                [period],
+                |r| r.get(0),
+            )
+            .map_err(db)?;
+        if described >= MAX_DESCRIBED_IMAGES {
+            return Ok(None);
+        }
         let row:Option<(i64,String)>=self.connection.query_row("SELECT e.id,e.context_key FROM review_evidence e JOIN review_contexts c ON c.period_id=e.period_id AND c.context_key=e.context_key WHERE e.period_id=?1 AND e.kind='image' AND e.analyzed=0 AND c.final_reviewed=0 AND c.description IN ('','Activity could not be identified confidently') AND EXISTS(SELECT 1 FROM review_intervals i WHERE i.period_id=e.period_id AND i.context_key=e.context_key AND i.status='pending' AND i.manual=0) ORDER BY e.id DESC LIMIT 1",[period],|r|Ok((r.get(0)?,r.get(1)?))).optional().map_err(db)?;
         row.map(|(id, context)| {
             let image = self.review_image(id)?;
@@ -184,6 +213,14 @@ impl Storage {
         let exists:bool=self.connection.query_row("SELECT EXISTS(SELECT 1 FROM review_evidence WHERE period_id=?1 AND context_key=?2 AND kind=?3 AND fingerprint=?4)",params![period,context,kind,fingerprint],|r|r.get(0)).map_err(db)?;
         if exists {
             return Ok(());
+        }
+        // One image per context segment is enough for the review; later frames of the
+        // same five-minute presence add storage, not evidence.
+        if kind == "image" {
+            let pictured:bool=self.connection.query_row("SELECT EXISTS(SELECT 1 FROM review_evidence WHERE period_id=?1 AND context_key=?2 AND kind='image')",params![period,context],|r|r.get(0)).map_err(db)?;
+            if pictured {
+                return Ok(());
+            }
         }
         let bytes: i64 = self
             .connection

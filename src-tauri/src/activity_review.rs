@@ -14,6 +14,9 @@ use rusqlite::OptionalExtension;
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager, State, WebviewWindow};
 
+/// Failed attempts (five minutes apart) before a period is closed with pending blocks.
+const MAX_REVIEW_FAILURES: i64 = 12;
+
 pub(crate) struct PlanningContext {
     pub goal_id: Option<i64>,
     pub at: std::time::Instant,
@@ -106,7 +109,55 @@ impl Storage {
     pub(crate) fn initialize_activity_review(&self) -> Result<(), String> {
         self.connection
             .execute_batch(include_str!("activity_review/schema.sql"))
-            .map_err(db)
+            .map_err(db)?;
+        // Additive migration: periods created before failure accounting existed.
+        let columns: Vec<String> = self
+            .connection
+            .prepare("PRAGMA table_info(review_periods)")
+            .map_err(db)?
+            .query_map([], |r| r.get::<_, String>(1))
+            .map_err(db)?
+            .collect::<Result<_, _>>()
+            .map_err(db)?;
+        if !columns.iter().any(|c| c == "failures") {
+            self.connection
+                .execute_batch(
+                    "ALTER TABLE review_periods ADD COLUMN failures INTEGER NOT NULL DEFAULT 0; ALTER TABLE review_periods ADD COLUMN last_failure TEXT;",
+                )
+                .map_err(db)?;
+        }
+        Ok(())
+    }
+    /// A failed review attempt: retried after five minutes, and after `MAX_REVIEW_FAILURES`
+    /// the period is closed with its remaining blocks pending, so a request the provider
+    /// keeps refusing cannot hold a day's evidence (and the vault) forever. Returns whether
+    /// the period was given up on.
+    pub(crate) fn record_review_failure(
+        &mut self,
+        period: i64,
+        category: &str,
+        now: DateTime<Utc>,
+    ) -> Result<bool, String> {
+        self.connection.execute("UPDATE review_periods SET retry_after=?1,failures=failures+1,last_failure=?2 WHERE id=?3",params![(now + Duration::minutes(5)).to_rfc3339(),category,period]).map_err(db)?;
+        let failures: i64 = self
+            .connection
+            .query_row(
+                "SELECT failures FROM review_periods WHERE id=?1",
+                [period],
+                |r| r.get(0),
+            )
+            .map_err(db)?;
+        if failures < MAX_REVIEW_FAILURES {
+            return Ok(false);
+        }
+        self.connection
+            .execute(
+                "UPDATE review_periods SET analysis_done=1 WHERE id=?1",
+                [period],
+            )
+            .map_err(db)?;
+        self.finish_due_reviews(now)?;
+        Ok(true)
     }
     fn review_period(&self, at: DateTime<Utc>) -> Result<i64, String> {
         let existing:Option<i64>=self.connection.query_row("SELECT id FROM review_periods WHERE summary IS NULL AND julianday(starts_at)<=julianday(?1) AND julianday(ends_at)>julianday(?1) ORDER BY id LIMIT 1",[at.to_rfc3339()],|r|r.get(0)).optional().map_err(db)?;

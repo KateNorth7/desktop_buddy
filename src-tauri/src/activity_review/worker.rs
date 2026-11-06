@@ -269,16 +269,25 @@ pub(crate) async fn run_due(_app: &AppHandle, state: &AppState) -> Result<(), St
                     inner.storage.finish_due_reviews(Utc::now())?;
                 }
             }
-            Err(_) => {
-                inner
+            Err(error) => {
+                let category = crate::engine_observability::error_category(&error);
+                let gave_up = inner
                     .storage
-                    .connection
-                    .execute(
-                        "UPDATE review_periods SET retry_after=?1 WHERE id=?2",
-                        params![(Utc::now() + Duration::minutes(5)).to_rfc3339(), period],
-                    )
-                    .map_err(db)?;
-                inner.last_error=Some("Daily summary is pending. Retained activity will be reviewed again when AI is available.".into());
+                    .record_review_failure(period, category, Utc::now())?;
+                crate::engine_observability::record(
+                    &mut inner,
+                    "daily_review",
+                    category,
+                    if gave_up { "closed_pending" } else { "retry" },
+                    None,
+                    None,
+                );
+                inner.last_error = Some(if gave_up {
+                    "Daily summary saved with unreviewed activity after repeated AI failures."
+                        .into()
+                } else {
+                    "Daily summary is pending. Retained activity will be reviewed again when AI is available.".into()
+                });
             }
         }
     }

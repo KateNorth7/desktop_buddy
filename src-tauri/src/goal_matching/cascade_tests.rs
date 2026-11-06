@@ -969,6 +969,29 @@ fn one_shared_word_or_a_domain_is_a_hint_that_neither_assigns_nor_blocks_the_mat
     assert_eq!(i.goal_matching.view.goal_id, Some(ids[1]));
 }
 #[test]
+fn hopping_between_windows_lets_the_main_one_become_stable_but_not_the_glanced_one() {
+    let (state, _ids) = setup(&["Atlas launch alpha", "Atlas launch beta", "Vega budget"]);
+    let mut i = state.inner.lock().unwrap();
+    let base = Instant::now();
+    let main = sample("Atlas launch beta");
+    let glance = sample("Research notes");
+    // Twelve seconds in the main window, a three-second glance elsewhere, and again.
+    feed(&mut i, &main, base, 0, 12);
+    feed(&mut i, &glance, base, 15, 15);
+    feed(&mut i, &main, base, 18, 30);
+    feed(&mut i, &glance, base, 33, 33);
+    feed(&mut i, &main, base, 36, 42);
+    // Thirty seconds of actual presence have accumulated although no stint reached thirty.
+    assert!(due_inner(&i, base + Duration::from_secs(42)));
+    // The glanced window has only a few seconds of dwell and is never asked about.
+    feed(&mut i, &glance, base, 45, 45);
+    assert!(!due_inner(&i, base + Duration::from_secs(45)));
+    feed(&mut i, &main, base, 48, 60);
+    feed(&mut i, &glance, base, 63, 63);
+    assert!(!due_inner(&i, base + Duration::from_secs(63)));
+}
+
+#[test]
 fn changing_text_in_the_same_window_is_asked_again_only_after_reask() {
     let (state, ids) = setup(&["Atlas launch alpha", "Atlas launch beta", "Vega budget"]);
     let mut i = state.inner.lock().unwrap();

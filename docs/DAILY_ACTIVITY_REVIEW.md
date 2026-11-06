@@ -53,8 +53,12 @@ not continuous recording or a promise of an image for every activity.
    and preserve uncertainty. Automatic transfers to existing goals require
    Automatic goal matching. New goals require user confirmation.
 5. Save the summary and delete temporary images/raw samples in one transaction.
-   Provider failure retries after five minutes. Failed saves and interrupted
-   jobs preserve evidence and their durable completion markers.
+   Provider failure retries after five minutes; the failure category is kept on
+   the period, and after twelve failures the period is closed with its remaining
+   blocks pending so its evidence is released rather than held indefinitely. A
+   period describes at most 24 retained images before reviewing the remaining
+   blocks on text, and one image is retained per context segment. Failed saves
+   and interrupted jobs preserve evidence and their durable completion markers.
 
 When AI is disabled, sharing is revoked, no provider is configured, or mock
 responses are enabled, save an honest local summary with unresolved blocks.
