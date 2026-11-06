@@ -527,6 +527,22 @@ pub fn collect(state: &AppState) -> Result<(), String> {
                             reason: attribution.reason.clone(),
                         }),
                     )?;
+                    // Confident AI, user and profile attributions teach the goal's lane
+                    // profile; keyword guesses never do.
+                    let taught = !in_sumi
+                        && attribution.goal_id.as_deref() == Some(goal.id.to_string().as_str())
+                        && matches!(
+                            inner.goal_matching.view.source.as_deref(),
+                            Some("nebius" | "nebius_carry" | "explicit_focus" | "learned_lane")
+                        );
+                    if taught {
+                        inner.storage.learn_lane_profile(
+                            goal.id,
+                            &snapshot,
+                            (interval.end - interval.start).num_milliseconds(),
+                            attribution.confidence,
+                        )?;
+                    }
                 }
                 inner
                     .storage

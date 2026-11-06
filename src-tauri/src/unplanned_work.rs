@@ -438,7 +438,7 @@ pub async fn identify(app: &AppHandle, state: &AppState) -> Result<(), String> {
             inner.unplanned_work.generation,
             (observed / 1000) as u64,
             presence,
-            inner.goal_matching.recent_context(wall),
+            inner.goal_matching.recent_context(wall, now),
             inner.goal_matching.trail_entries(wall),
         )
     };

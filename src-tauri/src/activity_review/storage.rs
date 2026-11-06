@@ -524,6 +524,29 @@ impl Storage {
             }
         }
         self.connection.execute("UPDATE review_intervals SET source_id=?1,source_step=?2,goal_id=?3,status=?4,reason=?5,manual=?6 WHERE id=?7",params![(source!=0).then_some(source),step,target,status,reason,manual,id]).map_err(db)?;
+        // Assignments teach the goal's lane profile (a browser's site; the review keeps no
+        // document identity), and a manual move away withdraws the old goal's evidence.
+        let activity = ActivitySnapshot {
+            process_name: row.3.clone(),
+            window_title: row.4.clone(),
+            browser: crate::browser::context(&row.3, &row.4, row.5.clone()),
+            ..Default::default()
+        };
+        if let Some(goal) = target {
+            if status == "assigned" {
+                self.learn_lane_profile(
+                    goal,
+                    &activity,
+                    row.2,
+                    if manual { 1.0 } else { confidence },
+                )?;
+            }
+        }
+        if manual {
+            if let Some(old) = row.8.filter(|old| Some(*old) != target) {
+                self.unlearn_lane_profile(old, &activity, row.2)?;
+            }
+        }
         Ok(())
     }
 }

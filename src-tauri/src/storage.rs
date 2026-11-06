@@ -25,6 +25,7 @@ impl Storage {
         store.initialize_coaching()?;
         store.initialize_skills()?;
         store.initialize_goal_matching()?;
+        store.initialize_lane_profiles()?;
         store.initialize_unplanned_work()?;
         store.initialize_activity_review()?;
         store.initialize_work_journal()?;
@@ -151,6 +152,9 @@ impl Storage {
             "DELETE FROM goal_match_negatives WHERE ?1 IS NULL OR created_at<?1 OR expires_at<=unixepoch()",
             [cutoff_unix],
         ).map_err(|e| e.to_string())?;
+        // Learned lane profiles are aggregates, kept by retention and removed by an explicit clear.
+        tx.execute("DELETE FROM goal_lane_profiles WHERE ?1 IS NULL", [cutoff])
+            .map_err(|e| e.to_string())?;
         tx.execute(
             "DELETE FROM deleted_goal_backups WHERE ?1 IS NULL OR deleted_at<?1",
             [cutoff_unix],

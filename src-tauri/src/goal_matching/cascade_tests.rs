@@ -878,7 +878,7 @@ fn the_matcher_receives_a_bounded_trail_of_recent_windows_and_their_goals() {
     let generic = sample("Research notes");
     feed(&mut i, &generic, base, 63, 123);
     let now = chrono::Utc::now().timestamp();
-    let recent = i.goal_matching.recent_context(now);
+    let recent = i.goal_matching.recent_context(now, Instant::now());
     let trail = recent["trail"].as_array().unwrap();
     assert_eq!(
         trail.len(),
@@ -898,7 +898,7 @@ fn the_matcher_receives_a_bounded_trail_of_recent_windows_and_their_goals() {
     let mut private = sample("password manager vault");
     private.window_title = "Vault - 1Password".into();
     observe_inner_at(&mut i, &private, false, base + Duration::from_secs(126)).unwrap();
-    let recent = i.goal_matching.recent_context(now);
+    let recent = i.goal_matching.recent_context(now, Instant::now());
     assert_eq!(recent["trail"].as_array().unwrap().len(), 2);
     assert!(!recent.to_string().contains("1Password"));
     for n in 0..20 {
@@ -989,6 +989,96 @@ fn hopping_between_windows_lets_the_main_one_become_stable_but_not_the_glanced_o
     feed(&mut i, &main, base, 48, 60);
     feed(&mut i, &glance, base, 63, 63);
     assert!(!due_inner(&i, base + Duration::from_secs(63)));
+}
+
+#[test]
+fn a_dominant_learned_profile_assigns_locally_without_the_matcher() {
+    let (state, ids) = setup(&["Apply to jobs on LinkedIn", "Create CV versions"]);
+    let mut i = state.inner.lock().unwrap();
+    let mut site = sample("Register – L'Oréal Groupe");
+    site.process_name = "safari".into();
+    site.window_id = Some(9);
+    site.browser = crate::browser::context(
+        "safari",
+        &site.window_title,
+        Some("careers-apply.loreal.com".into()),
+    );
+    // Six attributed minutes on the site teach the goal's profile.
+    i.storage
+        .learn_lane_profile(ids[0], &site, 360_000, 0.9)
+        .unwrap();
+    let base = Instant::now();
+    feed(&mut i, &site, base, 0, 30);
+    assert_eq!(i.goal_matching.view.goal_id, Some(ids[0]));
+    assert_eq!(i.goal_matching.view.source.as_deref(), Some("learned_lane"));
+    assert_eq!(i.goal_matching.metrics.nemotron_calls, 0);
+    assert!(
+        !due_inner(&i, base + Duration::from_secs(60)),
+        "no cloud question is needed"
+    );
+    assert!(attribution(&i, &site).unwrap().confidence >= AUTO_ASSIGN_CONFIDENCE);
+    // Split evidence hints the matcher instead of assigning.
+    let (state, ids) = setup(&["Apply to jobs on LinkedIn", "Create CV versions"]);
+    let mut i = state.inner.lock().unwrap();
+    i.storage
+        .learn_lane_profile(ids[0], &site, 360_000, 0.9)
+        .unwrap();
+    i.storage
+        .learn_lane_profile(ids[1], &site, 240_000, 0.9)
+        .unwrap();
+    feed(&mut i, &site, base, 0, 30);
+    assert!(i.goal_matching.view.goal_id.is_none());
+    let job = claim(&mut i, base + AI_STABLE).unwrap().unwrap();
+    let mut hinted: Vec<i64> = job
+        .goals
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|g| g["learned_hint"] == json!(true))
+        .map(|g| g["id"].as_i64().unwrap())
+        .collect();
+    hinted.sort();
+    let mut expected = ids.clone();
+    expected.sort();
+    assert_eq!(hinted, expected);
+}
+
+#[test]
+fn a_run_of_short_windows_with_enough_pending_time_is_asked_about_as_one_episode() {
+    let (state, _ids) = setup(&["Atlas launch alpha", "Vega budget"]);
+    let mut i = state.inner.lock().unwrap();
+    let base = Instant::now();
+    let research = sample("Research notes");
+    let draft = sample("Draft email");
+    feed(&mut i, &research, base, 0, 180);
+    feed(&mut i, &draft, base, 183, 195);
+    // The newest window is twelve seconds old, yet the episode holds three unassigned minutes.
+    let episode = i.goal_matching.episode(base + Duration::from_secs(195));
+    assert_eq!(episode.windows, 2);
+    assert!(episode.pending >= Duration::from_secs(190));
+    assert!(due_inner(&i, base + Duration::from_secs(195)));
+    let job = claim(&mut i, base + Duration::from_secs(195))
+        .unwrap()
+        .unwrap();
+    assert_eq!(job.recent["episode"]["windows"], json!(2));
+    assert!(job.recent["episode"]["pending_seconds"].as_u64().unwrap() >= 190);
+    assert!(job.recent["trail"][0]["seconds"].as_i64().unwrap() >= 0);
+    // Without an answer, the same episode is not asked about again before REASK.
+    finish(
+        &mut i,
+        &job,
+        Err("timeout".into()),
+        base + Duration::from_secs(196),
+    )
+    .unwrap();
+    let another = sample("Another window");
+    feed(&mut i, &another, base, 199, 205);
+    assert!(!due_inner(&i, base + Duration::from_secs(205)));
+    // A gap longer than two minutes ends the episode; the next window starts a new one.
+    feed(&mut i, &another, base, 330, 336);
+    let fresh = i.goal_matching.episode(base + Duration::from_secs(336));
+    assert_eq!(fresh.windows, 1);
+    assert!(fresh.pending < Duration::from_secs(10));
 }
 
 #[test]

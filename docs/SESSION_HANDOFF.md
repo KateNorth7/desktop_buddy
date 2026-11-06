@@ -1,5 +1,14 @@
 # sumi session handoff
 
+## Unreleased — episodes and learned lane profiles, 6 November 2026
+
+Two structural additions on top of the attribution fixes below, on the fork `KateNorth7/desktop_buddy` (`origin`; the hackathon submission `ArtmarketVM/desktop_buddy` is the `hackathon` remote and stays untouched):
+
+- **Learned lane profiles** (`src-tauri/src/lane_profiles.rs`, table `goal_lane_profiles`): confident attributions teach each goal what its work looks like, as a browser's sanitized site or the hashed document identity of a non-browser window (never titles or text). Teachers: intervals recorded while the match view's source is `nebius`, `nebius_carry`, `explicit_focus` or `learned_lane` at confidence ≥ 0.8 (`commands.rs` collect), and review assignments at ≥ 0.8 or manual (`assign_review_interval`, site only); a manual move away withdraws the old goal's evidence. Keyword guesses never teach. In `resolution::resolve`, after explicit focus and a unique user rule, a profile with ≥ 5 attributed minutes on the sample's site or document that holds ≥ 80% of all evidence on that value assigns at 0.9 (`learned_lane`) with no cloud call; split or thin evidence is sent to the matcher as `learned_hint`. Profiles cascade with goal deletion and are removed by Clear local history (retention keeps them).
+- **Episodes** (`goal_matching.rs` `Runtime::episode`, `EPISODE_GAP` 120 s, `EPISODE_ASK` 180 s): trail entries now carry monotonic timestamps; the current episode is the trail's final run of windows with no gap over two minutes. The matcher becomes due when an episode of two or more windows holds three unassigned minutes, even while its newest window is under the 30 s stability bar, and that question is debounced per episode by `REASK`. The request's `recent_context` gains per-entry `seconds` and an `episode` block (windows, pending_seconds, started_minutes_ago); the prompt asks for `same_task_trail` across the episode so the existing retroactive assignment attributes all of it at once. No blind carry across windows: linking stays the model's decision.
+
+Evidence: `cargo test --locked` 785 passed / 5 ignored (four new tests: profile dominance and keys, local assignment without the matcher, episode-level ask); `cargo clippy --locked --all-targets -- -D warnings` and `cargo fmt --check` pass. Not done: a live run (the built-in gateway allowance was exhausted on 6 November), and the installed bundle predates this change.
+
 ## Unreleased — tracking attribution fixes, 6 November 2026
 
 Read-only audit of the installed 0.49.4 and its `buddy.db` on Apple Silicon: over 5–6 November 21 of 197 engaged minutes reached a goal. Three causes were fixed on `main` (no version bump, no release):

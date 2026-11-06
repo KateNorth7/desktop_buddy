@@ -33,6 +33,7 @@ mod history;
 mod http;
 mod insights;
 mod installed_apps;
+mod lane_profiles;
 mod local_voice;
 #[cfg(target_os = "macos")]
 mod macos;

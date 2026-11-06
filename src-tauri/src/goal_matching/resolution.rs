@@ -150,6 +150,17 @@ pub(super) fn resolve(inner: &Inner, sample: &ActivitySnapshot) -> Result<Resolu
             "user_rule",
             "A unique user app rule selects this goal",
         )
+    } else if let Some(learned) = inner
+        .storage
+        .learned_lane_match(sample, &local.iter().map(|c| c.0).collect::<Vec<_>>())?
+    {
+        // Earlier confident attributions on this site or document decide locally.
+        view(
+            Some(learned.goal_id),
+            crate::lane_profiles::LEARNED_CONFIDENCE,
+            "learned_lane",
+            &learned.reason,
+        )
     } else {
         let matched = crate::relevance::classify(&local, sample);
         if let Some(id) = matched.goal_id.and_then(|id| id.parse().ok()) {
