@@ -21,6 +21,56 @@ fn store() -> Storage {
 }
 
 #[test]
+fn document_keys_separate_windows_that_share_a_title() {
+    // A chat app or editor whose window title never changes is told apart by the
+    // hashed document identity; the raw identity is never part of the snapshot.
+    let mut a = snapshot("claude", "Claude");
+    let mut b = a.clone();
+    assert!(same_context(&a, &b));
+    a.document_key = Some(crate::companion::engine::fingerprint("claude.ai/chat/one"));
+    b.document_key = Some(crate::companion::engine::fingerprint("claude.ai/chat/two"));
+    assert!(!same_context(&a, &b));
+    b.document_key = a.document_key.clone();
+    assert!(same_context(&a, &b));
+    assert!(!serde_json::to_string(&a).unwrap().contains("claude.ai"));
+    let mut tracker = UsageTracker::default();
+    let start = Instant::now();
+    assert!(tracker
+        .observe_at(1, &a, true, ActivityState::Focused, start, Utc::now())
+        .is_none());
+    assert!(
+        tracker
+            .observe_at(
+                1,
+                &b,
+                true,
+                ActivityState::Focused,
+                start + Duration::from_secs(3),
+                Utc::now() + chrono::Duration::seconds(3)
+            )
+            .is_some(),
+        "the same document continues the interval"
+    );
+    let mut c = b.clone();
+    c.document_key = Some(crate::companion::engine::fingerprint(
+        "claude.ai/chat/three",
+    ));
+    assert!(
+        tracker
+            .observe_at(
+                1,
+                &c,
+                true,
+                ActivityState::Focused,
+                start + Duration::from_secs(6),
+                Utc::now() + chrono::Duration::seconds(6)
+            )
+            .is_none(),
+        "a different document starts a new interval"
+    );
+}
+
+#[test]
 fn transitions_between_apps_tabs_and_windows_do_not_bridge_contexts() {
     let now = Instant::now();
     let wall = Utc::now();

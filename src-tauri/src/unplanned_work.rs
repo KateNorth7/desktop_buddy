@@ -113,7 +113,8 @@ fn context_key(a: &ActivitySnapshot) -> String {
                 .and_then(crate::browser::sanitize_domain),
             a.browser
                 .as_ref()
-                .map(|b| crate::browser::minimize_title(&b.page_title))
+                .map(|b| crate::browser::minimize_title(&b.page_title)),
+            a.document_key
         ])
         .to_string(),
     )
@@ -291,21 +292,10 @@ fn valid_title(title: &str) -> bool {
         && !title.contains('@')
         && !title.to_lowercase().contains("api_key")
 }
-/// Preserve both ends of a sample without increasing the existing 400-character
-/// disclosure budget. Visual context is always labelled as unverified.
+/// Preserve both ends of a sample within the shared disclosure budget. Visual
+/// context is always labelled as unverified.
 fn observation_excerpt(a: &ActivitySnapshot, text: &str) -> Option<String> {
-    fn bounded(text: &str, budget: usize) -> String {
-        let chars: Vec<char> = text.chars().collect();
-        if chars.len() <= budget {
-            return text.into();
-        }
-        let half = (budget - 5) / 2;
-        chars[..half]
-            .iter()
-            .chain(['\n', '…', '\n'].iter())
-            .chain(chars[chars.len() - half..].iter())
-            .collect()
-    }
+    use crate::companion::screen_context::{bounded, EXCERPT_CHARS};
     if crate::companion::sensitive_window(a) {
         return None;
     }
@@ -316,11 +306,11 @@ fn observation_excerpt(a: &ActivitySnapshot, text: &str) -> Option<String> {
     let excerpt = if let Some(visual) = visual {
         format!(
             "{}\n[Visual context — unverified]\n{}",
-            bounded(&native, 240),
-            bounded(&crate::companion::redact_sample(visual), 128)
+            bounded(&native, EXCERPT_CHARS - 240),
+            bounded(&crate::companion::redact_sample(visual), 200)
         )
     } else {
-        bounded(&native, 400)
+        bounded(&native, EXCERPT_CHARS)
     };
     (!excerpt.trim().is_empty()).then_some(excerpt)
 }

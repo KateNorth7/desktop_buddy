@@ -71,6 +71,10 @@ pub struct Foreground {
     pub idle: f64,
     pub media: bool,
     pub address: Option<String>,
+    /// Document identity of the focused window (an AXDocument path, or a web app's
+    /// document URL without query or fragment). Hashed by the collector; never stored raw.
+    #[serde(default)]
+    pub document: Option<String>,
 }
 /// Registers or removes the macOS login item. Called only from release builds
 /// (`autostart::sync`), so debug Clippy and tests never compile a caller.
@@ -274,6 +278,16 @@ impl crate::collector::ActivityCollector for MacCollector {
                 .and_then(|b| b.domain.as_deref())
                 .unwrap_or("")
         );
+        // Browsers are identified by domain and page title as before. Other applications
+        // whose windows share one title (chat apps, editors, web apps) are told apart by a
+        // hash of their document identity; the raw value is dropped here.
+        let document_key = active
+            .document
+            .as_deref()
+            .map(str::trim)
+            .filter(|d| !d.is_empty() && browser.is_none())
+            .map(crate::companion::engine::fingerprint);
+        let context = format!("{context}|{}", document_key.as_deref().unwrap_or_default());
         let duration =
             self.tracker
                 .update(&active.process, &context, idle, self.settings.idle_seconds);
@@ -288,6 +302,7 @@ impl crate::collector::ActivityCollector for MacCollector {
             window_id: Some(active.window),
             browser,
             media_playing: active.media,
+            document_key,
         })
     }
 }

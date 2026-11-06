@@ -13,6 +13,12 @@ pub struct ActivitySnapshot {
     pub browser: Option<crate::browser::BrowserContext>,
     #[serde(default)]
     pub media_playing: bool,
+    /// Local-only hash of the window's document identity (an editor file, a web app's
+    /// document URL), so two documents behind the same window title are distinct
+    /// contexts. Never the raw value: it is hashed at the native boundary and is not
+    /// disclosed to any provider.
+    #[serde(default)]
+    pub document_key: Option<String>,
 }
 impl ActivitySnapshot {
     /// Passive foreground playback remains observable without keyboard or mouse input.

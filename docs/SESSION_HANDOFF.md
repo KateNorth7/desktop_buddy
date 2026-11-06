@@ -1,5 +1,15 @@
 # sumi session handoff
 
+## Unreleased — tracking attribution fixes, 6 November 2026
+
+Read-only audit of the installed 0.49.4 and its `buddy.db` on Apple Silicon: over 5–6 November 21 of 197 engaged minutes reached a goal. Three causes were fixed on `main` (no version bump, no release):
+
+- **Document identity** (`native/macos.m` `documentIdentity`, `macos.rs` MacCollector, `models.rs` `document_key`): the focused window's AXDocument, or a web area's `AXURL` without query/fragment (falling back to a web-area title that differs from the window title), is hashed with `engine::fingerprint` and carried on `ActivitySnapshot.document_key`. `same_context`, the matcher fingerprint, the stability frame, the screen-context cache, and the unplanned-work and review context keys include it, so every Claude conversation, editor document or web-app view is its own context instead of one "Claude" key per day. Browsers keep domain + page title; Windows sets `None` (unchanged). The raw identity is never stored or disclosed.
+- **Content-first text walk** (`native/visible_text_walk.h`, `buddy_context` deadline 0.20 → 0.45 s, 256 → 1024 nodes): navigation/banner/footer/search landmarks, toolbars and menus are skipped; a web area resets the output once and a main landmark resets it once more, so a web app's sidebar (recent chat titles) no longer displaces the conversation. `screen_context::EXCERPT_CHARS` = 1,200 with head + tail bounding (`screen_context::bounded`), shared by the matcher and the unlisted-work classifier (previously the first 400 characters, or 197 + 197).
+- **Empty-plan fallback** (`goal_matching::planned_lanes`, `relevance::recent_lane_candidates`): when Today is empty, lanes worked on within 24 hours stand in for the plan for the 0.8 threshold, candidate ordering, the `lane.in_today` flag sent to the matcher, and local keyword matching (which previously had zero candidates).
+
+Evidence: `cargo test --locked` 775 passed / 5 ignored (773 baseline + `document_keys_separate_windows_that_share_a_title`, `an_unplanned_day_uses_recently_worked_lanes_as_its_plan`); `cargo clippy --locked --all-targets -- -D warnings` and `cargo fmt --check` pass; `node --test scripts/native-context.verify.mjs` passes with the new landmark case. Local Rust builds need `cmake` for whisper: a pip-installed one lives in the ignored `.tools/cmake-venv/bin`. Not done: a live run of the installed app against the Claude desktop window (the probe confirmed Safari's web area exposes `AXURL`; Claude's remains to be checked), Windows build, frontend tests (no TypeScript changed). Still open from the audit: selected-goal time inflating `usage_daily` (Today totals), the shared 120-calls-per-hour budget saturating with four consumers, window-churn resets of the 30 s stability clock, the stuck 5 November daily review and the 47 of 64 MB evidence vault.
+
 ## Implementation guidelines — 4 November 2026
 
 - Added five implementation-decision rules to `AGENTS.md`: reuse existing code, trace shared callers and platform effects, prefer readable complete solutions, justify dependencies, and preserve safety guarantees when simplifying.

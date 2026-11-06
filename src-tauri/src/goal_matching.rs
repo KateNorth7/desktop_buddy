@@ -121,6 +121,7 @@ impl Runtime {
                 window_title: sample.window_title.clone(),
                 window_id: sample.window_id,
                 browser: sample.browser.clone(),
+                document_key: sample.document_key.clone(),
                 ..Default::default()
             },
         });
@@ -210,7 +211,8 @@ fn fingerprint(sample: &ActivitySnapshot) -> String {
             sample.process_name.to_lowercase(),
             sample.window_id,
             sample.window_title,
-            sample.browser
+            sample.browser,
+            sample.document_key
         ])
         .to_string(),
     )
@@ -511,13 +513,29 @@ fn attribute_context(
         inner.last_error = Some(error);
     }
 }
+/// Today's plan anchors matching. On a day without a plan, the lanes worked on within the
+/// last 24 hours stand in for it, so the matcher still has an anchor instead of every goal
+/// competing on the strictest threshold.
+pub(crate) fn planned_lanes(
+    storage: &crate::storage::Storage,
+    today: &[i64],
+    now: chrono::DateTime<chrono::Utc>,
+) -> Result<Vec<lanes::Lane>, String> {
+    let mut lanes = storage.lane_state(today)?;
+    if today.is_empty() {
+        for lane in &mut lanes {
+            lane.in_today = lane.recent(now);
+        }
+    }
+    Ok(lanes)
+}
 /// Today's plan is the user's own statement of intent; a goal outside it needs clearer evidence.
 fn assign_threshold(inner: &crate::commands::Inner, id: i64) -> f64 {
-    let today = inner
-        .storage
-        .core_work_snapshot()
-        .is_ok_and(|s| s.today.contains(&id));
-    if today {
+    let planned = inner.storage.core_work_snapshot().is_ok_and(|s| {
+        planned_lanes(&inner.storage, &s.today, chrono::Utc::now())
+            .is_ok_and(|lanes| lanes.iter().any(|l| l.id == id && l.in_today))
+    });
+    if planned {
         AUTO_ASSIGN_CONFIDENCE
     } else {
         OUTSIDE_TODAY_ASSIGN_CONFIDENCE
@@ -594,7 +612,8 @@ pub fn attribution(
 fn candidates(inner: &crate::commands::Inner, sample: &ActivitySnapshot) -> Result<Value, String> {
     let snapshot = inner.storage.core_work_snapshot()?;
     let now = chrono::Utc::now();
-    let lanes = inner.storage.lane_state(&snapshot.today)?;
+    let lanes = planned_lanes(&inner.storage, &snapshot.today, now)?;
+    let planned = |id: i64| lanes.iter().any(|lane| lane.id == id && lane.in_today);
     let mut goals: Vec<_> = snapshot
         .goals
         .iter()
@@ -612,7 +631,7 @@ fn candidates(inner: &crate::commands::Inner, sample: &ActivitySnapshot) -> Resu
                     >= 0.75
         })
         .collect();
-    goals.sort_by_key(|goal| !snapshot.today.contains(&goal.id));
+    goals.sort_by_key(|goal| !planned(goal.id));
     Ok(json!(goals
         .into_iter()
         .take(20)
@@ -1191,7 +1210,7 @@ mod tests {
         };
         let text = format!(
             "Review release notes\nAPI_KEY=fictional-secret-canary\n{}",
-            "界".repeat(500)
+            "界".repeat(1500)
         );
         for enabled in [false, true] {
             assert_eq!(
@@ -1242,8 +1261,14 @@ mod tests {
                 assert!(context["activity"]["visible_text"].is_null());
             } else {
                 let text = context["activity"]["visible_text"].as_str().unwrap();
-                assert_eq!(text.chars().count(), 400);
+                assert_eq!(
+                    text.chars().count(),
+                    crate::companion::screen_context::EXCERPT_CHARS
+                );
                 assert!(text.contains("[sensitive line omitted]"));
+                // Both ends survive: the opening lines and the newest lines of the window.
+                assert!(text.starts_with("Review release notes"));
+                assert!(text.ends_with('界'));
             }
             assert_eq!(context["open_goals"], goals);
             assert!(context.get("profile").is_none());

@@ -145,6 +145,7 @@ pub fn same_context(a: &ActivitySnapshot, b: &ActivitySnapshot) -> bool {
         && a.window_id == b.window_id
         && a.window_title == b.window_title
         && a.browser == b.browser
+        && a.document_key == b.document_key
 }
 
 #[derive(Default)]

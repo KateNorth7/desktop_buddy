@@ -969,6 +969,48 @@ fn one_shared_word_or_a_domain_is_a_hint_that_neither_assigns_nor_blocks_the_mat
     assert_eq!(i.goal_matching.view.goal_id, Some(ids[1]));
 }
 #[test]
+fn an_unplanned_day_uses_recently_worked_lanes_as_its_plan() {
+    // Today is empty: both lanes were created today, so both stand in for the plan.
+    let (state, ids) = setup(&["Atlas launch alpha", "Vega budget"]);
+    let mut i = state.inner.lock().unwrap();
+    let date = i.storage.core_snapshot(None).unwrap().date;
+    for id in &ids {
+        i.storage.core_today(*id, false, &date).unwrap();
+    }
+    assert!(i.storage.core_snapshot(None).unwrap().today.is_empty());
+    // Local keyword matching keeps working without a plan.
+    assert_eq!(
+        i.storage
+            .matching_goals(&sample("Atlas launch alpha notes"))
+            .unwrap(),
+        vec![ids[0]]
+    );
+    let base = Instant::now();
+    let a = sample("Research notes");
+    feed(&mut i, &a, base, 0, 60);
+    let job = claim(&mut i, base + AI_STABLE).unwrap().unwrap();
+    assert_eq!(job.goals[0]["lane"]["in_today"], json!(true));
+    assert_eq!(job.goals[1]["lane"]["in_today"], json!(true));
+    finish(
+        &mut i,
+        &job,
+        Ok(MatchResult {
+            goal_id: Some(ids[1]),
+            confidence: 0.82,
+            reason: "Notes".into(),
+            same_task_trail: vec![],
+        }),
+        base + AI_STABLE,
+    )
+    .unwrap();
+    assert_eq!(
+        i.goal_matching.view.goal_id,
+        Some(ids[1]),
+        "0.82 assigns a recently worked lane when no plan exists"
+    );
+}
+
+#[test]
 fn goals_outside_today_need_stronger_evidence_than_planned_ones() {
     let (state, ids) = setup(&["Atlas launch alpha", "Vega budget"]);
     let mut i = state.inner.lock().unwrap();

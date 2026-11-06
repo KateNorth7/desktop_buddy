@@ -259,16 +259,19 @@ async fn consent_changes_and_window_switches_during_sampling_discard_the_result(
     }
 }
 #[test]
-fn excerpts_redact_whole_secret_lines_before_the_four_hundred_character_limit() {
+fn excerpts_redact_whole_secret_lines_before_the_character_limit() {
     let (_, activity) = fixture();
     let raw = format!(
         "{}api_key=fictional-secret\n{}",
         "a".repeat(395),
-        "界".repeat(700)
+        "界".repeat(1500)
     );
     let excerpt = matching_excerpt(&activity, true, Some(&raw)).unwrap();
-    assert_eq!(excerpt.chars().count(), 400);
+    assert_eq!(excerpt.chars().count(), EXCERPT_CHARS);
     assert!(excerpt.starts_with("[sensitive line omitted]"));
+    assert!(excerpt.contains("\n…\n"), "the omitted middle is marked");
+    assert_eq!(bounded("short", 1200), "short");
+    assert_eq!(bounded(&"x".repeat(2000), 1200).chars().count(), 1200);
     assert!(!excerpt.contains("api_key"));
     assert!(!excerpt.contains("fictional-secret"));
     assert!(matching_excerpt(&activity, false, Some(&raw)).is_none());

@@ -10,7 +10,7 @@ const RECENT_HOURS: i64 = 24;
 /// A parked lane idle for this long leaves the matcher's candidate set unless its own words match.
 pub(super) const STALE_PARKED_DAYS: i64 = 14;
 
-pub(super) struct Lane {
+pub(crate) struct Lane {
     pub id: i64,
     pub active: bool,
     pub in_today: bool,
@@ -20,7 +20,7 @@ impl Lane {
     pub(super) fn idle_days(&self, now: DateTime<Utc>) -> i64 {
         (now - self.last_active_at).num_days().max(0)
     }
-    pub(super) fn recent(&self, now: DateTime<Utc>) -> bool {
+    pub(crate) fn recent(&self, now: DateTime<Utc>) -> bool {
         self.active || (now - self.last_active_at).num_hours() < RECENT_HOURS
     }
     pub(super) fn stale(&self, now: DateTime<Utc>) -> bool {
@@ -37,7 +37,7 @@ impl Lane {
 impl Storage {
     /// Last activity is the latest of creation, a counted interval, a goal or step event and a
     /// saved checkpoint. Lane switches record no time of their own.
-    pub(super) fn lane_state(&self, today: &[i64]) -> Result<Vec<Lane>, String> {
+    pub(crate) fn lane_state(&self, today: &[i64]) -> Result<Vec<Lane>, String> {
         let mut q = self.connection.prepare(
             "SELECT g.id,g.status='active',MAX(g.created_at,
                 COALESCE((SELECT MAX(u.ended_at) FROM usage_intervals u WHERE u.goal_id=g.id AND u.match_confidence>=0.7),''),

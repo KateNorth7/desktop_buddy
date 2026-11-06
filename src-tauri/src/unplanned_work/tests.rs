@@ -437,7 +437,7 @@ async fn classifier_uses_minimized_redacted_context_once_without_credentials_or_
         let body:Value=serde_json::from_slice(&r.body).unwrap();
         let context:Value=serde_json::from_str(body["messages"][1]["content"].as_str().unwrap()).unwrap();
         assert_eq!(context["activity"]["domain"],"mail.google.com");
-        assert!(context["activity"]["visible_text"].as_str().unwrap().chars().count()<=400);
+        assert!(context["activity"]["visible_text"].as_str().unwrap().chars().count()<=crate::companion::screen_context::EXCERPT_CHARS);
         assert!(!body.to_string().contains("fictional-secret-canary"));
         assert!(!body.to_string().contains("isolated-test-key"));
         assert!(!body.to_string().contains("/mail/u/0"));
@@ -556,7 +556,7 @@ fn observation_excerpt_preserves_late_receipts_and_bounded_untrusted_visual_cont
     assert!(excerpt.contains("Message sent successfully. Undo."));
     assert!(excerpt.contains("[Visual context — unverified]\nFollow-up composer"));
     assert!(!excerpt.contains("do-not-disclose"));
-    assert!(excerpt.chars().count() <= 400);
+    assert!(excerpt.chars().count() <= crate::companion::screen_context::EXCERPT_CHARS);
     let mut private = sample();
     private.window_title = "Private browsing".into();
     assert!(observation_excerpt(&private, &text).is_none());

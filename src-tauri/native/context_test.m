@@ -30,6 +30,25 @@ int main(void) { @autoreleasepool {
     assert([content containsString:@"launch checklist"] && ![content containsString:@"toolbar"]);
     // No browser/document role is required for a native application's text.
     assert([collect(root, deadline) containsString:@"Prepare"]);
+    // A web app's sidebar (a navigation landmark listing other conversations) and its
+    // toolbar are chrome; the main landmark is the content, even when it comes last.
+    id sidebar = @{@"AXRole":@"AXGroup", @"AXSubrole":@"AXLandmarkNavigation", @"visible":@YES,
+        @"children":@[node(@"AXStaticText", @"Recents", @[], YES), node(@"AXStaticText", @"Brainstorm startup ideas", @[], YES)]};
+    id toolbar = node(@"AXToolbar", @"", @[node(@"AXStaticText", @"Share", @[], YES)], YES);
+    id banner = @{@"AXRole":@"AXGroup", @"AXSubrole":@"AXLandmarkBanner", @"visible":@YES,
+        @"children":@[node(@"AXStaticText", @"Claude", @[], YES)]};
+    id aside = @{@"AXRole":@"AXGroup", @"AXSubrole":@"AXLandmarkComplementary", @"visible":@YES,
+        @"children":@[node(@"AXStaticText", @"Artifact panel", @[], YES)]};
+    id mainArea = @{@"AXRole":@"AXGroup", @"AXSubrole":@"AXLandmarkMain", @"visible":@YES,
+        @"children":@[node(@"AXStaticText", @"Right-to-work checks: the four-week plan", @[], YES)]};
+    id webApp = node(@"AXWindow", @"", @[toolbar, node(@"AXWebArea", @"", @[banner, sidebar, aside, mainArea], YES)], YES);
+    NSString *app = collect(webApp, deadline);
+    assert([app containsString:@"Right-to-work"] && ![app containsString:@"Brainstorm"]
+        && ![app containsString:@"Recents"] && ![app containsString:@"Share"] && ![app containsString:@"Artifact panel"]);
+    // Without a main landmark the whole web area remains content, minus navigation chrome.
+    id plainApp = node(@"AXWindow", @"", @[node(@"AXWebArea", @"", @[sidebar, aside], YES)], YES);
+    NSString *plain = collect(plainApp, deadline);
+    assert([plain containsString:@"Artifact panel"] && ![plain containsString:@"Brainstorm"]);
     NSMutableArray *wide = [NSMutableArray array];
     for (int i = 0; i < 40; i++) [wide addObject:node(@"AXButton", @"", @[], YES)];
     [wide addObject:document];

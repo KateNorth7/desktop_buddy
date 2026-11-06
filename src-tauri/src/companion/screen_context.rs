@@ -27,6 +27,26 @@ fn same_window(a: &ActivitySnapshot, b: &ActivitySnapshot) -> bool {
         && a.process_name == b.process_name
         && a.window_title == b.window_title
         && a.browser == b.browser
+        && a.document_key == b.document_key
+}
+/// Excerpt budget for one cloud disclosure of visible text. Content regions are read
+/// first (see the native walk), so the start holds the document's opening and the end
+/// holds the newest lines of a conversation or log; both ends are kept.
+pub(crate) const EXCERPT_CHARS: usize = 1200;
+/// Keep both ends of a sample within the budget, marking the omitted middle.
+pub(crate) fn bounded(text: &str, budget: usize) -> String {
+    let chars: Vec<char> = text.chars().collect();
+    if chars.len() <= budget {
+        return text.into();
+    }
+    let keep = budget.saturating_sub(3);
+    let head = keep / 2;
+    let tail = keep - head;
+    chars[..head]
+        .iter()
+        .chain(['\n', '…', '\n'].iter())
+        .chain(chars[chars.len() - tail..].iter())
+        .collect()
 }
 pub(crate) fn allowed(inner: &Inner, activity: &ActivitySnapshot) -> bool {
     allowed_in_session(inner, activity, crate::collector::session_active())
@@ -71,7 +91,7 @@ pub(crate) fn matching_excerpt(
     }
     text.map(redact_sample)
         .filter(|s| !s.trim().is_empty())
-        .map(|s| s.chars().take(400).collect())
+        .map(|s| bounded(&s, EXCERPT_CHARS))
 }
 pub(crate) async fn read(
     state: &AppState,

@@ -66,7 +66,8 @@ pub(crate) fn context_key(activity: &ActivitySnapshot) -> String {
         &serde_json::json!([
             activity.process_name.to_lowercase(),
             crate::browser::minimize_title(&activity.window_title),
-            activity.browser
+            activity.browser,
+            activity.document_key
         ])
         .to_string(),
     )

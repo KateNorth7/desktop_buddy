@@ -1,5 +1,5 @@
 use crate::{models::ActivitySnapshot, storage::Storage};
-use rusqlite::params;
+use rusqlite::{params, OptionalExtension};
 use serde::Serialize;
 use std::collections::HashSet;
 use tauri::State;
@@ -159,6 +159,11 @@ impl Storage {
             .map_err(|_| "Today goals unavailable")?
             .collect::<Result<Vec<_>, _>>()
             .map_err(|_| "Today goals unavailable")?;
+        let rows = if rows.is_empty() {
+            self.recent_lane_candidates()?
+        } else {
+            rows
+        };
         let mut candidates = vec![];
         for (id, title, description) in rows {
             if self.category(id, &activity.process_name.to_ascii_lowercase())?
@@ -186,6 +191,36 @@ impl Storage {
             candidates.push((id, context, explicit));
         }
         Ok(candidates)
+    }
+    /// A day without a plan still has an anchor: the open goals worked on within the last
+    /// 24 hours take the place of Today for local matching, exactly as they do for the
+    /// AI matcher's thresholds.
+    fn recent_lane_candidates(&self) -> Result<Vec<(i64, String, String)>, String> {
+        let now = chrono::Utc::now();
+        let recent: Vec<i64> = self
+            .lane_state(&[])?
+            .into_iter()
+            .filter(|lane| lane.recent(now))
+            .map(|lane| lane.id)
+            .collect();
+        let mut query = self.connection.prepare("SELECT g.id,g.text,COALESCE(m.description,'') FROM goals g JOIN core_goals c ON c.goal_id=g.id LEFT JOIN core_goal_details m ON m.goal_id=g.id WHERE g.id=?1 AND c.state='open' AND g.status!='completed'").map_err(|_| "Recent goals unavailable")?;
+        let mut rows = vec![];
+        for id in recent {
+            if let Some(row) = query
+                .query_row([id], |r| {
+                    Ok((
+                        r.get::<_, i64>(0)?,
+                        r.get::<_, String>(1)?,
+                        r.get::<_, String>(2)?,
+                    ))
+                })
+                .optional()
+                .map_err(|_| "Recent goals unavailable")?
+            {
+                rows.push(row);
+            }
+        }
+        Ok(rows)
     }
     pub fn relevant_seconds(&self, id: i64, day: Option<&str>) -> Result<u64, String> {
         self.connection.query_row("SELECT COALESCE(SUM(milliseconds),0)/1000 FROM goal_relevant_daily WHERE goal_id=?1 AND (?2 IS NULL OR day=?2)",params![id,day],|r|r.get(0)).map_err(|_| "Goal progress unavailable".into())

@@ -153,6 +153,41 @@ static NSString *addressBar(AXUIElementRef root, NSUInteger depth, NSUInteger *v
     }
     return nil;
 }
+// The document behind a window: an editor's file (AXDocument) or, for web apps and other
+// Chromium-based applications, the web area's document URL without query or fragment,
+// falling back to a web-area title that differs from the window title. Windows that share
+// one title (chat apps, notes, editors) are told apart by it. The collector keeps only a
+// hash; the value itself is never stored or disclosed.
+static NSString *trimmedAddress(id value) {
+    NSString *string = [value isKindOfClass:NSURL.class] ? [(NSURL *)value absoluteString] : ([value isKindOfClass:NSString.class] ? value : nil);
+    if (!string.length) return nil;
+    NSRange cut = [string rangeOfCharacterFromSet:[NSCharacterSet characterSetWithCharactersInString:@"?#"]];
+    if (cut.location != NSNotFound) string = [string substringToIndex:cut.location];
+    return string.length ? [string substringToIndex:MIN((NSUInteger)512, string.length)] : nil;
+}
+static NSString *documentIdentity(AXUIElementRef window, NSString *title, NSTimeInterval deadline) {
+    NSString *document = trimmedAddress(attribute(window, kAXDocumentAttribute));
+    if (document) return document;
+    NSMutableArray *queue = [NSMutableArray arrayWithObject:(__bridge id)window];
+    NSUInteger visited = 0, index = 0;
+    while (index < queue.count && visited++ < 96 && NSDate.timeIntervalSinceReferenceDate <= deadline) {
+        AXUIElementRef node = (__bridge AXUIElementRef)queue[index++];
+        NSString *role = attribute(node, kAXRoleAttribute);
+        if ([role isEqualToString:@"AXWebArea"]) {
+            NSString *address = trimmedAddress(attribute(node, kAXURLAttribute)) ?: trimmedAddress(attribute(node, kAXDocumentAttribute));
+            if (address) return address;
+            NSString *heading = text(attribute(node, kAXTitleAttribute), 160);
+            return (heading.length && ![heading isEqualToString:title]) ? heading : nil;
+        }
+        if ([@[@"AXMenuBar", @"AXToolbar", @"AXStaticText", @"AXButton", @"AXTextField", @"AXTextArea"] containsObject:role] || queue.count > 160) continue;
+        CFArrayRef children = NULL;
+        if (AXUIElementCopyAttributeValues(node, kAXChildrenAttribute, 0, 32, &children) == kAXErrorSuccess) {
+            [queue addObjectsFromArray:(__bridge NSArray *)children];
+            CFRelease(children);
+        }
+    }
+    return nil;
+}
 char *buddy_foreground(bool metadata) {
     @autoreleasepool {
         if (!buddy_session_active()) return failure(@"Desktop session is inactive or locked");
@@ -172,13 +207,14 @@ char *buddy_foreground(bool metadata) {
             }
         }
         BOOL fullscreen = [attribute(window, CFSTR("AXFullScreen")) boolValue];
+        NSString *document = window ? documentIdentity(window, title, NSDate.timeIntervalSinceReferenceDate + 0.08) : nil;
         uint64_t identity = windowID(pid, window);
         AXUIElementRef latest = focusedWindow(pid);
         BOOL changed = NSWorkspace.sharedWorkspace.frontmostApplication.processIdentifier != pid || identity != windowID(pid, latest) || ![(latest ? text(attribute(latest, kAXTitleAttribute), 160) : application.localizedName) isEqualToString:title];
         if (window) CFRelease(window);
         if (latest) CFRelease(latest);
         if (changed) return failure(@"Foreground context changed during collection");
-        return json(@{@"process": process, @"title": title ?: @"", @"window": @(identity), @"idle": @(buddy_idle()), @"fullscreen": @(fullscreen), @"media": @(audioPlaying(application)), @"address": address ?: NSNull.null});
+        return json(@{@"process": process, @"title": title ?: @"", @"window": @(identity), @"idle": @(buddy_idle()), @"fullscreen": @(fullscreen), @"media": @(audioPlaying(application)), @"address": address ?: NSNull.null, @"document": document ?: NSNull.null});
     }
 }
 // Keep the mascot on every Space and above full-screen apps so it never gets left behind.
@@ -236,8 +272,10 @@ char *buddy_context(uint64_t identity, bool selected) {
             CFRelease(app);
         } else {
             CGRect frame = elementFrame(window);
+            // Chrome is skipped and content regions take priority, so the budget is spent
+            // on the document; deep web-app trees need more than a browser toolbar did.
             [output appendString:buddyVisibleText((__bridge id)window,
-                NSDate.timeIntervalSinceReferenceDate + 0.20,
+                NSDate.timeIntervalSinceReferenceDate + 0.45,
                 ^NSString *(id node, NSString *name) {
                     if ([name isEqualToString:@"AXHidden"])
                         return [attribute((__bridge AXUIElementRef)node, kAXHiddenAttribute) boolValue] ? @"true" : @"";

@@ -31,6 +31,7 @@ fn foreground(sample: &ActivitySnapshot) -> Option<String> {
             sample.window_title,
             browser.browser,
             browser.page_title,
+            sample.document_key,
         ])
         .to_string(),
     ))

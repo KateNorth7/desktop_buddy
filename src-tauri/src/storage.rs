@@ -401,6 +401,7 @@ impl Storage {
                         })?,
                     window_id: r.get(6)?,
                     media_playing: r.get(7)?,
+                    document_key: None,
                 })
             })
             .map_err(|e| e.to_string())?;

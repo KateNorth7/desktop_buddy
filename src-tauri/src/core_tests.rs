@@ -344,6 +344,7 @@ fn import_validation_is_atomic_and_goal_deletion_handles_existing_foreign_keys()
         window_id: None,
         browser: None,
         media_playing: false,
+        document_key: None,
     };
     s.activity(goal.id, &activity).unwrap();
     s.core_transition(goal.id, "delete").unwrap();

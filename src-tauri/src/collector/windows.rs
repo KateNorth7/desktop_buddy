@@ -139,6 +139,7 @@ impl ActivityCollector for WindowsCollector {
                 window_id: Some(hwnd.0 as u64),
                 browser,
                 media_playing,
+                document_key: None,
             })
         }
     }
