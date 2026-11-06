@@ -36,6 +36,8 @@ Clippy shares each native job's Cargo cache; it no longer has a separate runner/
 
 ## Prepare a complete release once
 
+Since 0.50.0 releases publish from `KateNorth7/desktop_buddy`, the repository named by `RELEASE_REPOSITORY` in `scripts/product-branding.mjs` and `src-tauri/src/signing_trust.rs`; the Tauri updater endpoints must point at the same repository, which `scripts/check-version.mjs` enforces. The hackathon submission `ArtmarketVM/desktop_buddy` stays at 0.49.4 and keeps the retained Windows compatibility assets and the Pages privacy policy. The releasing repository needs the five signing secrets; changing the repository never changes the trusted signing keys.
+
 Use one release owner for the combined changes. Developers finish and share their small code commits first; the release owner prepares notes, policy and synchronized metadata, then starts one signed release. Do not independently package the same version from both developer sessions.
 
 The fast source check compares the documented capture cadence with `observation::SAMPLE_INTERVAL` and checks the current encrypted-evidence disclosure. CI planning and `release:prepare --check` run it before native builds, so a stale privacy statement stops the inexpensive preflight instead of cancelling completed installers. Source-only policy corrections do not invalidate application proof; public Pages/content verification remains separate.

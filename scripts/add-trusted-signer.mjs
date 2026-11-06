@@ -2,6 +2,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { publicKey, validateTrust } from "./signing-trust.mjs";
+import { updateChannelUrl } from "./product-branding.mjs";
 
 export function addSigner(trust, id, publicFile) {
   const next = {
@@ -34,7 +35,7 @@ if (
     );
   history[String(trust.epoch)] = trust;
   config.plugins.updater.endpoints = [
-    `https://github.com/ArtmarketVM/desktop_buddy/releases/latest/download/updates-epoch-${next.epoch}.json`,
+    updateChannelUrl(`updates-epoch-${next.epoch}.json`),
   ];
   writeFileSync(trustPath, JSON.stringify(next, null, 2) + "\n");
   writeFileSync(configPath, JSON.stringify(config, null, 2) + "\n");

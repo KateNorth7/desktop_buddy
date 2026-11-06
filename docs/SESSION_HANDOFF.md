@@ -1,5 +1,13 @@
 # sumi session handoff
 
+## 0.50.0 release preparation — 6 November 2026
+
+Releases now publish from the fork `KateNorth7/desktop_buddy`; the hackathon submission `ArtmarketVM/desktop_buddy` stays frozen at 0.49.4. The repository is one constant on each side: `RELEASE_REPOSITORY` in `scripts/product-branding.mjs` (`releaseDownloadUrl`, `updateChannelUrl`, used by the manifest, version-check, retained-Windows and signer-enrollment scripts) and in `src-tauri/signing_trust.rs` (the updater endpoint and the download-URL check in `updates.rs`). Both Tauri updater endpoints point at the fork; `assertNewerRelease` accepts an empty latest tag, so the workflow's first release in a repository without one passes without a workflow change. Retained Windows bridges in `updates/compatibility.json`, the privacy page on the original Pages site and historic run links are unchanged. Installed 0.49.4 apps check the old endpoint and will not update by themselves.
+
+`npm run release:prepare -- 0.50.0` synchronized the five manifests with `docs/RELEASE_0.50.0.md` (minor bump: document identity, lane profiles, episodes, budget priority). The fork needs the five release secrets (`TAURI_SIGNING_PRIVATE_KEY`, `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`, `TAURI_SIGNING_PRIVATE_KEY_MACOS`, `BUDDY_MACOS_P12_BASE64`, `BUDDY_MACOS_P12_PASSWORD`) with the same values as the original repository before **Publish Windows and macOS release** can sign.
+
+Evidence: `npm run test:release` 20 passed; `node --test scripts/ci.verify.mjs scripts/acceptance.verify.mjs` 25 passed; `node scripts/check-version.mjs` reports 0.50.0; `cargo test --locked -- updates signing_trust` 12 passed; `cargo clippy --locked --all-targets -- -D warnings` and `cargo fmt --check` clean. Frontend untouched.
+
 ## Unreleased — episodes and learned lane profiles, 6 November 2026
 
 Two structural additions on top of the attribution fixes below, on the fork `KateNorth7/desktop_buddy` (`origin`; the hackathon submission `ArtmarketVM/desktop_buddy` is the `hackathon` remote and stays untouched):

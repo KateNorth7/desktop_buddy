@@ -45,9 +45,10 @@ fn validate_platform_download(url: &reqwest::Url, extension: &str) -> Result<(),
         || !url.username().is_empty()
         || url.password().is_some()
         || url.port_or_known_default() != Some(443)
-        || !url
-            .path()
-            .starts_with("/ArtmarketVM/desktop_buddy/releases/download/")
+        || !url.path().starts_with(&format!(
+            "/{}/releases/download/",
+            crate::signing_trust::RELEASE_REPOSITORY
+        ))
         || !url.path().ends_with(extension)
     {
         return Err("The update does not match this platform or sumi's repository".into());
@@ -245,7 +246,7 @@ mod tests {
     }
     #[test]
     fn accepts_only_https_installers_from_the_pinned_repository() {
-        let valid = "https://github.com/ArtmarketVM/desktop_buddy/releases/download/v0.11.0/Desktop.Buddy_0.11.0_x64-setup.exe";
+        let valid = "https://github.com/KateNorth7/desktop_buddy/releases/download/v0.11.0/Desktop.Buddy_0.11.0_x64-setup.exe";
         assert!(validate_platform_download(&valid.parse().unwrap(), ".exe").is_ok());
         let mac = valid.replace("_x64-setup.exe", "_aarch64.app.tar.gz");
         assert!(validate_platform_download(&mac.parse().unwrap(), ".app.tar.gz").is_ok());
@@ -253,7 +254,8 @@ mod tests {
         assert!(validate_platform_download(&valid.parse().unwrap(), ".app.tar.gz").is_err());
         for invalid in [
             valid.replace("https:", "http:"),
-            valid.replace("ArtmarketVM", "other"),
+            valid.replace("KateNorth7", "other"),
+            valid.replace("KateNorth7", "ArtmarketVM"),
             valid.replace("github.com", "github.com.evil.example"),
             valid.replace(".exe", ".zip"),
             valid.replace("github.com", "user:password@github.com"),

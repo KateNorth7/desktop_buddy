@@ -1,4 +1,4 @@
-import { assetPrefix } from "./product-branding.mjs";
+import { assetPrefix, releaseDownloadUrl } from "./product-branding.mjs";
 import { readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -24,7 +24,7 @@ export function createMacManifest({ directory, version, tag, trust }) {
     verifyArtifact(bytes, signature, trust, version);
     platforms[`darwin-${architecture}`] = {
       signature,
-      url: `https://github.com/ArtmarketVM/desktop_buddy/releases/download/${tag}/${name}`,
+      url: releaseDownloadUrl(tag, name),
     };
   }
   if (!Object.keys(platforms).length)

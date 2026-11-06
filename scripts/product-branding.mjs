@@ -7,3 +7,12 @@ export function assetPrefix(version) {
     ? "sumi"
     : "Desktop.Buddy";
 }
+
+// Releases are published from this GitHub repository; installed apps accept updates only from it.
+export const RELEASE_REPOSITORY = "KateNorth7/desktop_buddy";
+export function releaseDownloadUrl(tag, assetName) {
+  return `https://github.com/${RELEASE_REPOSITORY}/releases/download/${tag}/${assetName}`;
+}
+export function updateChannelUrl(channel) {
+  return `https://github.com/${RELEASE_REPOSITORY}/releases/latest/download/${channel}`;
+}

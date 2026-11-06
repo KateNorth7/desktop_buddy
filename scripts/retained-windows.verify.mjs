@@ -25,7 +25,7 @@ test("retained Windows channels reject changed bridges, URLs and installer bytes
     platforms: {
       "windows-x86_64": {
         signature: signer.signature,
-        url: `https://github.com/ArtmarketVM/desktop_buddy/releases/download/v0.13.0/${name}`,
+        url: `https://github.com/KateNorth7/desktop_buddy/releases/download/v0.13.0/${name}`,
       },
     },
   };

@@ -1,4 +1,4 @@
-import { assetPrefix } from "./product-branding.mjs";
+import { assetPrefix, releaseDownloadUrl } from "./product-branding.mjs";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -23,7 +23,7 @@ export function verifyRetainedWindows(
   if (!/^\d+\.\d+\.\d+$/.test(manifest.version) || !platform)
     throw new Error("Invalid retained Windows manifest.");
   const name = `${assetPrefix(manifest.version)}_${manifest.version}_x64-setup.exe`;
-  const expectedUrl = `https://github.com/ArtmarketVM/desktop_buddy/releases/download/v${manifest.version}/${name}`;
+  const expectedUrl = releaseDownloadUrl(`v${manifest.version}`, name);
   if (platform.url !== expectedUrl)
     throw new Error("Windows updater must keep its pinned official URL.");
   const signature = readFileSync(

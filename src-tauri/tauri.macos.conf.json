@@ -25,7 +25,7 @@
     "updater": {
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDZFQ0NDRjkxQzA0QzhGMkQKUldRdGowekFrYy9NYmdGRnV4RCtzd3hwQnJxc21BN25BM2kwcy9XMVZCVzBEQzJUOFpIVkZJMHoK",
       "endpoints": [
-        "https://github.com/ArtmarketVM/desktop_buddy/releases/latest/download/updates-macos-epoch-1.json"
+        "https://github.com/KateNorth7/desktop_buddy/releases/latest/download/updates-macos-epoch-1.json"
       ],
       "requireSignedVersion": true
     }

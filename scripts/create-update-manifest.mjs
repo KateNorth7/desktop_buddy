@@ -2,6 +2,7 @@ import { readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { readTrust, verifyArtifact, validateTrust } from "./signing-trust.mjs";
+import { releaseDownloadUrl } from "./product-branding.mjs";
 
 export function createManifest({
   directory,
@@ -47,7 +48,7 @@ export function createManifest({
     platforms: {
       "windows-x86_64": {
         signature,
-        url: `https://github.com/ArtmarketVM/desktop_buddy/releases/download/${tag}/${encodeURIComponent(assetName)}`,
+        url: releaseDownloadUrl(tag, encodeURIComponent(assetName)),
       },
     },
   };
@@ -138,9 +139,7 @@ if (
   const compatibilityPath = resolve(root, "updates/compatibility.json");
   const channels = prepareChannels({
     manifest,
-    bytes: readFileSync(
-      resolve(directory, `sumi_${version}_x64-setup.exe`),
-    ),
+    bytes: readFileSync(resolve(directory, `sumi_${version}_x64-setup.exe`)),
     trust,
     history: JSON.parse(
       readFileSync(resolve(root, "updates/trust-history.json"), "utf8"),

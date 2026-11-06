@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { readTrust, validateTrust } from "./signing-trust.mjs";
+import { updateChannelUrl } from "./product-branding.mjs";
 const read = (path) =>
   readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
 const version = JSON.parse(read("package.json")).version;
@@ -24,7 +25,7 @@ const trust = readTrust(fileURLToPath(new URL("..", import.meta.url)));
 const updater = JSON.parse(read("src-tauri/tauri.conf.json")).plugins.updater;
 if (
   updater.endpoints[0] !==
-    `https://github.com/ArtmarketVM/desktop_buddy/releases/latest/download/updates-epoch-${trust.epoch}.json` ||
+    updateChannelUrl(`updates-epoch-${trust.epoch}.json`) ||
   updater.requireSignedVersion !== true
 )
   throw new Error(
@@ -38,7 +39,7 @@ const macTrust = validateTrust(
 );
 if (
   mac.plugins.updater.endpoints[0] !==
-    `https://github.com/ArtmarketVM/desktop_buddy/releases/latest/download/updates-macos-epoch-${macTrust.epoch}.json` ||
+    updateChannelUrl(`updates-macos-epoch-${macTrust.epoch}.json`) ||
   mac.plugins.updater.requireSignedVersion !== true ||
   mac.bundle.createUpdaterArtifacts !== true
 ) {

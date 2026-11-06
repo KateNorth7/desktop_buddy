@@ -26,7 +26,7 @@ test("macOS manifests verify the archive, signer and signed version before publi
     );
     assert.equal(
       manifest.platforms["darwin-aarch64"].url,
-      `https://github.com/ArtmarketVM/desktop_buddy/releases/download/v0.13.0/${name}`,
+      `https://github.com/KateNorth7/desktop_buddy/releases/download/v0.13.0/${name}`,
     );
     assert.equal(manifest.platforms["windows-x86_64"], undefined);
     const intelName = name.replace("aarch64", "x86_64");

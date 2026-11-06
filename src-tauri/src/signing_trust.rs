@@ -2,6 +2,9 @@ use base64::{engine::general_purpose::STANDARD, Engine};
 use minisign_verify::{PublicKey, Signature};
 use serde::Deserialize;
 
+/// The GitHub repository releases are published from; updates come only from it.
+pub const RELEASE_REPOSITORY: &str = "KateNorth7/desktop_buddy";
+
 #[derive(Deserialize)]
 pub struct Trust {
     pub epoch: u32,
@@ -76,7 +79,10 @@ impl Trust {
         } else {
             "updates-epoch"
         };
-        format!("https://github.com/ArtmarketVM/desktop_buddy/releases/latest/download/{channel}-{}.json", self.epoch)
+        format!(
+            "https://github.com/{RELEASE_REPOSITORY}/releases/latest/download/{channel}-{}.json",
+            self.epoch
+        )
     }
 }
 

@@ -15,6 +15,8 @@ export function assertNewerRelease(tag, latestTag) {
     return parts;
   };
   const candidate = parse(tag);
+  // A repository without a published release yet compares against nothing.
+  if (!latestTag.trim()) return;
   const latest = parse(latestTag.startsWith("v") ? latestTag : `v${latestTag}`);
   for (let index = 0; index < 3; index++) {
     if (candidate[index] > latest[index]) return;

@@ -21,7 +21,7 @@ const manifest = (key, version) => ({
   platforms: {
     "windows-x86_64": {
       signature: key.versions[version],
-      url: `https://github.com/ArtmarketVM/desktop_buddy/releases/download/v${version}/Desktop.Buddy_${version}_x64-setup.exe`,
+      url: `https://github.com/KateNorth7/desktop_buddy/releases/download/v${version}/Desktop.Buddy_${version}_x64-setup.exe`,
     },
   },
 });

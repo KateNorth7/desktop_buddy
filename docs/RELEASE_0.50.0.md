@@ -1,0 +1,14 @@
+# sumi 0.50.0
+
+Goal attribution is more accurate and spends the built-in AI allowance where it matters.
+
+- Windows that share one title are told apart by the document behind them. macOS reads the focused document or web page identity through Accessibility, so each Claude conversation, editor file or browser page keeps its own match instead of inheriting the previous one. Visible-text reading skips navigation chrome and prefers the main content, and page loads get a six-second grace period before a window counts as changed.
+- Goals learn where their work happens. Confident attributions (AI matches at 0.8 or higher, an explicit focus, review assignments) teach each goal a lane profile: the sanitized sites and hashed document identities it was worked on in, never titles or text. A profile with five attributed minutes that holds four fifths of the evidence on a site or document assigns the next visit locally at 0.9 without a cloud call; split evidence reaches the matcher as a hint. A manual move in the review withdraws the old goal's evidence. Profiles follow goal deletion and Clear local history.
+- Short windows that belong together are matched as one episode. Windows separated by no more than two minutes form an episode; once two or more of them hold three unassigned minutes, the matcher is asked about the episode as a whole with per-window durations, and its answer can attribute every window it names at once.
+- The hourly AI budget is shared by priority rather than first come. Goal attribution, verification and the daily review may use all of it, the unlisted-work classifier nine tenths, screenshot descriptions two thirds and the routine observation pass one half. The matcher and classifier ask about the same window no sooner than 90 seconds after their previous question, so a conversation whose text changes every sample cannot exhaust the hour. Screenshot descriptions are requested only when a window's visible text is under 120 characters.
+- Hopping between windows no longer resets attribution. A glance away of up to 20 seconds keeps the main window's dwell, while the glanced window does not become stable on its own. Context changes no longer discard tracker state.
+- The daily review stops retrying after twelve failures per period, describes at most 24 retained images (one per context segment) and reports its evidence vault usage. An exhausted built-in AI allowance or a provider timeout is now named in the goal match reason instead of appearing as a generic failure.
+- A daily workflow checks built-in AI availability.
+- Releases are now published from https://github.com/KateNorth7/desktop_buddy. The app accepts updates only from that repository. Installations of 0.49.4 and earlier check the previous repository and will not update automatically; install this release manually once.
+
+Tracking consent, exclusions, lock protection, encrypted evidence retention and the trusted signing keys are unchanged.

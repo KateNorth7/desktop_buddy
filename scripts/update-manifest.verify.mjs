@@ -14,7 +14,7 @@ test("publishes a signed, version-pinned Windows installer URL", () => {
     writeFileSync(join(directory, `${name}.sig`), signature);
     const manifest = createManifest({directory, version:"0.10.0", tag:"v0.10.0"});
     assert.equal(manifest.platforms["windows-x86_64"].signature, signature);
-    assert.equal(manifest.platforms["windows-x86_64"].url, "https://github.com/ArtmarketVM/desktop_buddy/releases/download/v0.10.0/Desktop.Buddy_0.10.0_x64-setup.exe");
+    assert.equal(manifest.platforms["windows-x86_64"].url, "https://github.com/KateNorth7/desktop_buddy/releases/download/v0.10.0/Desktop.Buddy_0.10.0_x64-setup.exe");
     assert.throws(() => createManifest({directory, version:"0.10.0", tag:"v0.9.0"}), /tag/);
     writeFileSync(join(directory, `${name}.sig`), "");
     assert.throws(() => createManifest({directory, version:"0.10.0", tag:"v0.10.0"}), /signature/);

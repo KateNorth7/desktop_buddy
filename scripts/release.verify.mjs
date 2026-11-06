@@ -17,6 +17,8 @@ test("release publication refuses equal, older and malformed version tags", () =
   assert.doesNotThrow(() => assertNewerRelease("v0.24.0", "v0.23.9"));
   assert.doesNotThrow(() => assertNewerRelease("v1.0.0", "v0.99.99"));
   assert.doesNotThrow(() => assertNewerRelease("v0.39.0", "0.38.0"));
+  assert.doesNotThrow(() => assertNewerRelease("v0.50.0", ""));
+  assert.doesNotThrow(() => assertNewerRelease("v0.50.0", " \n"));
   for (const [candidate, latest] of [
     ["v0.23.2", "v0.23.2"],
     ["v0.23.2", "v0.23.3"],
@@ -59,7 +61,7 @@ function fixture() {
     platforms: {
       "windows-x86_64": {
         signature: signer.signature,
-        url: `https://github.com/ArtmarketVM/desktop_buddy/releases/download/v0.13.0/${name}`,
+        url: `https://github.com/KateNorth7/desktop_buddy/releases/download/v0.13.0/${name}`,
       },
     },
   };
