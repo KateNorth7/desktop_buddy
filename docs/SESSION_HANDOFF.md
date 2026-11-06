@@ -1,5 +1,9 @@
 # sumi session handoff
 
+## 0.50.0 published — 6 November 2026
+
+[sumi 0.50.0](https://github.com/KateNorth7/desktop_buddy/releases/tag/v0.50.0) was published from commit 52954dd by [run 42276932027](https://github.com/KateNorth7/desktop_buddy/actions/runs/42276932027) (prepare, both platform validations, visual gate and publish all green; first run on the fork, cold caches). Assets: Windows `sumi_0.50.0_x64-setup.exe` plus signature and three compatibility channels, macOS `sumi_0.50.0_aarch64.{dmg,zip,app.tar.gz}` plus signature, `updates-epoch-3.json`, `updates-macos-epoch-1.json`, `SHA256SUMS.txt`. Verified locally: checksums match, the macOS updater signature verifies against trusted signer `macos` for 0.50.0, the app is signed by the internal identity and reports 0.50.0; it is installed in `/Applications` and collecting. Both channels point at the fork. The five release secrets were added to the fork from the owner's encrypted handoff; the trusted public keys and the signing identity are unchanged.
+
 ## 0.50.0 release preparation — 6 November 2026
 
 Releases now publish from the fork `KateNorth7/desktop_buddy`; the hackathon submission `ArtmarketVM/desktop_buddy` stays frozen at 0.49.4. The repository is one constant on each side: `RELEASE_REPOSITORY` in `scripts/product-branding.mjs` (`releaseDownloadUrl`, `updateChannelUrl`, used by the manifest, version-check, retained-Windows and signer-enrollment scripts) and in `src-tauri/signing_trust.rs` (the updater endpoint and the download-URL check in `updates.rs`). Both Tauri updater endpoints point at the fork; `assertNewerRelease` accepts an empty latest tag, so the workflow's first release in a repository without one passes without a workflow change. Retained Windows bridges in `updates/compatibility.json`, the privacy page on the original Pages site and historic run links are unchanged. Installed 0.49.4 apps check the old endpoint and will not update by themselves.
