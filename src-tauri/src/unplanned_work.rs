@@ -21,6 +21,7 @@ const STABLE: Duration = Duration::from_secs(30);
 const DISMISS_COOLDOWN: Duration = Duration::from_secs(600);
 const OFFER_LIFETIME: Duration = Duration::from_secs(1800);
 const MIN_CONFIDENCE: f64 = 0.85;
+const REASK: Duration = crate::goal_matching::REASK;
 
 /// One stretch of one context that a suggestion covers: the context's intervals within the
 /// bounds. The current window's own presence, plus the earlier trail entries the model names
@@ -77,6 +78,9 @@ pub struct Runtime {
     /// Evidence already asked about: the context plus the visible text it showed. A new ask
     /// needs new evidence, never just elapsed time.
     attempted: Option<String>,
+    /// The context last asked about and when: changing text in the same context is asked
+    /// about again no sooner than `REASK`, so typing cannot spend the hourly budget.
+    attempted_at: Option<(String, Instant)>,
     snoozed_until: Option<Instant>,
     pending: Option<Pending>,
     last_classified: Option<String>,
@@ -230,6 +234,9 @@ fn due_inner(inner: &Inner, now: Instant) -> bool {
         && inner.unplanned_work.pending.is_none()
         && inner.unplanned_work.sample.as_ref().is_some_and(|a| {
             inner.unplanned_work.attempted.as_deref() != Some(evidence_signature(inner, a).as_str())
+                && !inner.unplanned_work.attempted_at.as_ref().is_some_and(|(key, at)| {
+                    *key == context_key(a) && now.saturating_duration_since(*at) < REASK
+                })
         })
         && inner
             .unplanned_work
@@ -396,10 +403,11 @@ pub async fn identify(app: &AppHandle, state: &AppState) -> Result<(), String> {
             return Ok(());
         }
         let candidates = goals(&inner)?;
-        if !crate::observation::reserve(&mut inner) {
+        if !crate::observation::reserve_secondary(&mut inner) {
             return Ok(());
         }
         inner.unplanned_work.attempted = Some(evidence_signature(&inner, &sample));
+        inner.unplanned_work.attempted_at = Some((key.clone(), now));
         let wall = Utc::now().timestamp();
         (
             sample,
@@ -441,7 +449,13 @@ pub async fn identify(app: &AppHandle, state: &AppState) -> Result<(), String> {
         }
         inner.unplanned_work.attempted = Some(evidence_signature(&inner, &sample));
     }
-    let text = crate::vision::enrich(state, &sample, text).await?;
+    // A screenshot description only stands in for missing text; readable windows are
+    // classified on their text alone, as the goal matcher does.
+    let text = if text.chars().count() < 120 {
+        crate::vision::enrich(state, &sample, text).await?
+    } else {
+        text
+    };
     if text.trim().is_empty() {
         return Ok(());
     }

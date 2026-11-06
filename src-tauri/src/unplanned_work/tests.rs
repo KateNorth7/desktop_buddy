@@ -574,6 +574,17 @@ fn unlisted_work_checks_continue_after_hours_and_quiet_discards_pending_offers()
     inner.unplanned_work.stable_since = Some(now - STABLE);
     inner.unplanned_work.last_seen = Some(now);
     assert!(due_inner(&inner, now));
+    // The same context is asked about again only after REASK, however often its text changes.
+    inner.unplanned_work.attempted_at =
+        Some((context_key(&sample()), now - Duration::from_secs(60)));
+    assert!(!due_inner(&inner, now));
+    inner.unplanned_work.attempted_at = Some((context_key(&sample()), now - REASK));
+    assert!(due_inner(&inner, now));
+    let mut other = sample();
+    other.window_title = "Another window".into();
+    inner.unplanned_work.attempted_at = Some((context_key(&other), now));
+    assert!(due_inner(&inner, now), "another context is not debounced");
+    inner.unplanned_work.attempted_at = None;
     // Work that goal matching already assigned is never offered as new work.
     inner.goal_matching.view.goal_id = Some(1);
     assert!(!due_inner(&inner, now));

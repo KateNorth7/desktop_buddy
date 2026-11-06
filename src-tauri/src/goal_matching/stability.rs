@@ -154,6 +154,9 @@ impl Runtime {
         if changed {
             self.context_revision = self.context_revision.wrapping_add(1);
             self.corrected_key = None;
+            // A new window, a gap or missing metadata is new evidence: the re-ask
+            // debounce only holds within one uninterrupted presence in a window.
+            self.asked = None;
             self.view = carried.unwrap_or(MatchView {
                 enabled: true,
                 ..Default::default()

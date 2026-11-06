@@ -969,6 +969,48 @@ fn one_shared_word_or_a_domain_is_a_hint_that_neither_assigns_nor_blocks_the_mat
     assert_eq!(i.goal_matching.view.goal_id, Some(ids[1]));
 }
 #[test]
+fn changing_text_in_the_same_window_is_asked_again_only_after_reask() {
+    let (state, ids) = setup(&["Atlas launch alpha", "Atlas launch beta", "Vega budget"]);
+    let mut i = state.inner.lock().unwrap();
+    let base = Instant::now();
+    let a = sample("Atlas launch beta");
+    feed(&mut i, &a, base, 0, 30);
+    let job = claim(&mut i, base + AI_STABLE).unwrap().unwrap();
+    finish(
+        &mut i,
+        &job,
+        Ok(MatchResult {
+            goal_id: None,
+            confidence: 0.4,
+            reason: "Unclear".into(),
+            same_task_trail: vec![],
+        }),
+        base + Duration::from_secs(40),
+    )
+    .unwrap();
+    observe_text(&mut i, &a, "first draft");
+    feed(&mut i, &a, base, 43, 60);
+    assert!(
+        !due_inner(&i, base + Duration::from_secs(60)),
+        "cached null"
+    );
+    // New text invalidates the cache, but the window was asked about 30 s ago.
+    observe_text(&mut i, &a, "second draft, more content");
+    feed(&mut i, &a, base, 63, 90);
+    assert!(i.goal_matching.cache.is_empty());
+    assert!(!due_inner(&i, base + Duration::from_secs(90)));
+    feed(&mut i, &a, base, 93, 123);
+    assert!(due_inner(&i, base + Duration::from_secs(123)));
+    // Another window is never held back by this one's question.
+    let b = sample("Vega budget review");
+    feed(&mut i, &b, base, 126, 156);
+    assert!(
+        due_inner(&i, base + Duration::from_secs(156))
+            || i.goal_matching.view.goal_id == Some(ids[2])
+    );
+}
+
+#[test]
 fn an_unplanned_day_uses_recently_worked_lanes_as_its_plan() {
     // Today is empty: both lanes were created today, so both stand in for the plan.
     let (state, ids) = setup(&["Atlas launch alpha", "Vega budget"]);
@@ -1190,8 +1232,11 @@ fn a_confident_refresh_corrects_an_automatic_assignment_once_without_double_coun
     observe_text(&mut i, &a, "Budget sheet");
     observe_text(&mut i, &a, "Forecast model assumptions and scenarios");
     assert_eq!(i.goal_matching.view.source.as_deref(), Some("nebius_carry"));
+    // The carried match keeps counting; the refresh waits for REASK since the first question.
     feed(&mut i, &a, base, 63, 93);
-    let job = claim(&mut i, base + Duration::from_secs(93))
+    assert!(!due_inner(&i, base + Duration::from_secs(93)));
+    feed(&mut i, &a, base, 96, 123);
+    let job = claim(&mut i, base + Duration::from_secs(123))
         .unwrap()
         .unwrap();
     finish(
@@ -1203,7 +1248,7 @@ fn a_confident_refresh_corrects_an_automatic_assignment_once_without_double_coun
             reason: "The sheet is the forecast model".into(),
             same_task_trail: vec![],
         }),
-        base + Duration::from_secs(93),
+        base + Duration::from_secs(123),
     )
     .unwrap();
     assert_eq!(i.goal_matching.view.goal_id, Some(ids[1]));
@@ -1220,7 +1265,7 @@ fn a_confident_refresh_corrects_an_automatic_assignment_once_without_double_coun
     // A later answer naming the first goal again does not flip the visit back.
     i.goal_matching.cache.clear();
     i.goal_matching.view.source = Some("nebius_carry".into());
-    let job = claim(&mut i, base + Duration::from_secs(200))
+    let job = claim(&mut i, base + Duration::from_secs(215))
         .unwrap()
         .unwrap();
     finish(
@@ -1232,7 +1277,7 @@ fn a_confident_refresh_corrects_an_automatic_assignment_once_without_double_coun
             reason: "Flip".into(),
             same_task_trail: vec![],
         }),
-        base + Duration::from_secs(200),
+        base + Duration::from_secs(215),
     )
     .unwrap();
     assert_eq!(i.goal_matching.view.goal_id, Some(ids[1]));

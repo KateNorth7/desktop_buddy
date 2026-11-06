@@ -6,12 +6,28 @@ pub(crate) const SAMPLE_INTERVAL: Duration = Duration::from_secs(20);
 /// The one cost ceiling for background model calls. Everything else that used to pace
 /// requests was a cooldown; repeats are now prevented by evidence fingerprints instead.
 pub(crate) const HOURLY_LIMIT: usize = 120;
+/// Shares of the hour, as headroom each consumer must leave for the ones above it. Goal
+/// attribution, outcome verification and the daily review may use the whole budget: they
+/// are how measured time reaches a goal. Routine sampling and image descriptions stop
+/// earlier, so a busy hour of changing text can no longer starve attribution.
+const SECONDARY_HEADROOM: usize = HOURLY_LIMIT / 10;
+const VISION_HEADROOM: usize = HOURLY_LIMIT / 3;
+const OBSERVATION_HEADROOM: usize = HOURLY_LIMIT / 2;
+/// Goal attribution, verification and the daily review.
 pub(crate) fn reserve(inner: &mut Inner) -> bool {
     reserve_with_headroom(inner, 0)
 }
-/// Leave capacity for independent outcome verification instead of spending it on routine sampling.
+/// The unlisted-work classifier: attribution too, but it offers rather than assigns.
+pub(crate) fn reserve_secondary(inner: &mut Inner) -> bool {
+    reserve_with_headroom(inner, SECONDARY_HEADROOM)
+}
+/// A screenshot description enriching a sample whose text is empty.
+pub(crate) fn reserve_vision(inner: &mut Inner) -> bool {
+    reserve_with_headroom(inner, VISION_HEADROOM)
+}
+/// The routine unified observation pass: at most half the hour.
 pub(crate) fn reserve_primary(inner: &mut Inner) -> bool {
-    reserve_with_headroom(inner, 3)
+    reserve_with_headroom(inner, OBSERVATION_HEADROOM)
 }
 fn reserve_with_headroom(inner: &mut Inner, headroom: usize) -> bool {
     let now = Instant::now();
@@ -34,6 +50,43 @@ fn reserve_with_headroom(inner: &mut Inner, headroom: usize) -> bool {
     true
 }
 
+#[cfg(test)]
+mod budget_tests {
+    use super::*;
+    #[test]
+    fn attribution_keeps_budget_that_routine_sampling_and_vision_cannot_spend() {
+        let state = crate::commands::AppState::new(
+            crate::storage::Storage::open(std::path::Path::new(":memory:")).unwrap(),
+        )
+        .unwrap();
+        let mut inner = state.inner.lock().unwrap();
+        let spend = |inner: &mut Inner, f: fn(&mut Inner) -> bool| {
+            let mut n = 0;
+            while f(inner) {
+                n += 1;
+                assert!(n <= HOURLY_LIMIT);
+            }
+            n
+        };
+        assert_eq!(spend(&mut inner, reserve_primary), HOURLY_LIMIT / 2);
+        assert_eq!(
+            spend(&mut inner, reserve_vision),
+            HOURLY_LIMIT / 2 - HOURLY_LIMIT / 3
+        );
+        assert_eq!(
+            spend(&mut inner, reserve_secondary),
+            HOURLY_LIMIT / 3 - HOURLY_LIMIT / 10
+        );
+        assert_eq!(spend(&mut inner, reserve), HOURLY_LIMIT / 10);
+        assert!(!reserve(&mut inner));
+        // An hour later the whole budget is available again.
+        let hour_ago = Instant::now() - Duration::from_secs(3601);
+        for at in inner.companion.observation_calls.iter_mut() {
+            *at = hour_ago;
+        }
+        assert!(reserve_primary(&mut inner));
+    }
+}
 pub(crate) fn personal_context(
     inner: &Inner,
     request: &str,
@@ -110,18 +163,17 @@ mod tests {
         assert_eq!(i.companion.observation_calls.len(), 1);
     }
     #[test]
-    fn primary_sampling_preserves_three_verification_slots_and_hides_goal_diagnostics_without_sharing(
-    ) {
+    fn primary_sampling_stops_at_half_the_hour_and_hides_goal_diagnostics_without_sharing() {
         let state = crate::commands::AppState::new(
             crate::storage::Storage::open(std::path::Path::new(":memory:")).unwrap(),
         )
         .unwrap();
         let mut i = state.inner.lock().unwrap();
-        for _ in 0..HOURLY_LIMIT - 3 {
+        for _ in 0..HOURLY_LIMIT / 2 {
             assert!(reserve_primary(&mut i));
         }
         assert!(!reserve_primary(&mut i));
-        for _ in 0..3 {
+        for _ in 0..HOURLY_LIMIT / 2 {
             assert!(reserve(&mut i));
         }
         assert!(!reserve(&mut i));

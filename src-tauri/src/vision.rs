@@ -274,7 +274,7 @@ pub(crate) async fn enrich(
             .inner
             .lock()
             .map_err(|_| "Application state unavailable")?;
-        if !allowed(&inner, activity, &text) || !crate::observation::reserve(&mut inner) {
+        if !allowed(&inner, activity, &text) || !crate::observation::reserve_vision(&mut inner) {
             return Ok(text);
         }
         inner.last_consent_change

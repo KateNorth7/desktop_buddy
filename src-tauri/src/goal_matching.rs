@@ -27,6 +27,8 @@ pub const LOCAL_STABLE: Duration = Duration::from_secs(30);
 /// wrong confident answer would be carried forward. Nothing is lost by waiting, since the
 /// whole context is counted retroactively once the answer lands.
 pub const AI_STABLE: Duration = Duration::from_secs(30);
+/// Minimum interval between two questions about the same window whose text keeps changing.
+pub const REASK: Duration = Duration::from_secs(90);
 const CACHE_TTL: Duration = Duration::from_secs(300);
 /// The matcher sees the previous windows of the last 20 minutes: app, title, domain and
 /// the goal they were matched to. Never any page text.
@@ -89,6 +91,9 @@ pub struct Runtime {
     unverified_asked: Option<String>,
     /// One correction per visit to a window; a later answer never flips it back.
     corrected_key: Option<String>,
+    /// The window last asked about and when. Changing text in the same window (a chat,
+    /// an editor) is asked about again only after `REASK`, not on every sample.
+    asked: Option<(String, Instant)>,
 }
 impl Runtime {
     fn record_trail(&mut self, sample: &ActivitySnapshot, goal: Option<i64>, now: i64) {
@@ -186,6 +191,7 @@ impl Runtime {
         self.signature = None;
         self.text_fingerprint = None;
         self.pending_suggestion = None;
+        self.asked = None;
     }
     #[cfg(test)]
     pub fn observe(&mut self, sample: &ActivitySnapshot, allowed: bool) {
@@ -701,12 +707,17 @@ fn due_inner(inner: &crate::commands::Inner, now: Instant) -> bool {
                     && now.saturating_duration_since(c.at) < CACHE_TTL
             })
     };
-    // No cooldown: a window is asked about when its evidence is new. The per-window answer
-    // cache, the text fingerprint and the once-per-visit rule for title-only windows are
-    // what prevent repeats; the hourly budget is the cost ceiling.
+    // A window is asked about when its evidence is new. The per-window answer cache, the
+    // text fingerprint and the once-per-visit rule for title-only windows prevent repeats;
+    // a window whose text keeps changing is asked again no sooner than REASK, so a
+    // conversation or editor cannot spend the hourly budget one sample at a time.
+    let debounced = matching.asked.as_ref().is_some_and(|(key, at)| {
+        *key == fingerprint(sample) && now.saturating_duration_since(*at) < REASK
+    });
     cloud_allowed(inner)
         && (inner.status.nebius_configured || inner.status.mock_ai)
         && !matching.in_flight
+        && !debounced
         && ready
 }
 pub fn due(state: &AppState) -> bool {
@@ -869,10 +880,14 @@ fn claim(inner: &mut crate::commands::Inner, now: Instant) -> Result<Option<Job>
         return Ok(None);
     }
     if !inner.status.mock_ai && !crate::observation::reserve(inner) {
+        if inner.goal_matching.view.goal_id.is_none() {
+            inner.goal_matching.view.reason =
+                Some("Goal matching is waiting for the hourly AI budget".into());
+        }
         return Ok(None);
     }
     inner.goal_matching.in_flight = true;
-    let _ = now;
+    inner.goal_matching.asked = Some((fingerprint(&sample), now));
     if metadata_unavailable(&sample) {
         inner.goal_matching.unverified_asked = Some(fingerprint(&sample));
     }
