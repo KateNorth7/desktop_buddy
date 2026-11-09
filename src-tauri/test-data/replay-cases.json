@@ -1,0 +1,216 @@
+[
+  {
+    "id": "payoneer-interview-availability",
+    "note": "Real sequence from 8 November 2026, sanitized. The email asked for interview availability; the reply was drafted in ChatGPT and submitted in Greenhouse. The goal was done after the last Greenhouse visit.",
+    "goals": [
+      {
+        "key": "target",
+        "title": "Указать доступность для интервью Payoneer (Finance Transformation Specialist)"
+      },
+      { "key": "competitors", "title": "Найти конкурентов Sumi" },
+      { "key": "mechanics", "title": "Починить основную механику Sumi" },
+      { "key": "startups", "title": "Погрузиться в Старт-ап мир Израиля" }
+    ],
+    "windows": [
+      {
+        "app": "Google Chrome",
+        "domain": "mail.google.com",
+        "title": "Interview availability - Finance Transformation Specialist: Payoneer",
+        "seconds": 6,
+        "goal": "target"
+      },
+      {
+        "app": "Google Chrome",
+        "domain": "app.greenhouse.io",
+        "title": "Payoneer | Finance Transformation Specialist",
+        "seconds": 125,
+        "goal": "target"
+      },
+      {
+        "app": "Calendar",
+        "title": "Calendar",
+        "seconds": 3,
+        "goal": "target"
+      },
+      {
+        "app": "Google Chrome",
+        "domain": "app.greenhouse.io",
+        "title": "Payoneer | Finance Transformation Specialist",
+        "seconds": 12,
+        "goal": "target"
+      },
+      {
+        "app": "Google Chrome",
+        "domain": "web.whatsapp.com",
+        "title": "WhatsApp",
+        "seconds": 3
+      },
+      {
+        "app": "Google Chrome",
+        "domain": "chatgpt.com",
+        "title": "ChatGPT",
+        "seconds": 6
+      },
+      {
+        "app": "Google Chrome",
+        "domain": "app.greenhouse.io",
+        "title": "Payoneer | Finance Transformation Specialist",
+        "seconds": 27,
+        "goal": "target"
+      },
+      {
+        "app": "Google Chrome",
+        "domain": "www.linkedin.com",
+        "title": "Grow | LinkedIn",
+        "seconds": 33
+      },
+      {
+        "app": "Google Chrome",
+        "domain": "chatgpt.com",
+        "title": "Профессиональный текст доступности",
+        "seconds": 21,
+        "goal": "target"
+      },
+      {
+        "app": "Google Chrome",
+        "domain": "app.greenhouse.io",
+        "title": "Payoneer | Finance Transformation Specialist",
+        "seconds": 18,
+        "goal": "target"
+      },
+      {
+        "app": "Google Chrome",
+        "domain": "chatgpt.com",
+        "title": "Профессиональный текст доступности",
+        "seconds": 9,
+        "goal": "target"
+      },
+      {
+        "app": "Google Chrome",
+        "domain": "mail.google.com",
+        "title": "Interview availability - Finance Transformation Specialist: Payoneer",
+        "seconds": 12,
+        "goal": "target"
+      },
+      {
+        "app": "Google Chrome",
+        "domain": "chatgpt.com",
+        "title": "Профессиональный текст доступности",
+        "seconds": 6,
+        "goal": "target"
+      },
+      {
+        "app": "Google Chrome",
+        "domain": "app.greenhouse.io",
+        "title": "Payoneer | Finance Transformation Specialist",
+        "seconds": 21,
+        "goal": "target",
+        "done": true
+      },
+      {
+        "app": "Google Chrome",
+        "domain": "www.google.com",
+        "title": "Search",
+        "seconds": 18
+      },
+      {
+        "app": "Google Chrome",
+        "domain": "web.whatsapp.com",
+        "title": "WhatsApp",
+        "seconds": 72
+      },
+      { "app": "Telegram", "title": "Telegram", "seconds": 150 }
+    ]
+  },
+  {
+    "id": "life-os-export-and-keyboard-fix",
+    "note": "Real sequence from 8 November 2026, sanitized and shortened. The user built Life OS with ChatGPT and checked it in the Life OS web app; the export and keyboard input fix were finished before switching to an unrelated chat.",
+    "goals": [
+      {
+        "key": "target",
+        "title": "Export updates and fix keyboard input issue in Life OS"
+      },
+      {
+        "key": "payoneer",
+        "title": "Указать доступность для интервью Payoneer (Finance Transformation Specialist)"
+      },
+      { "key": "mechanics", "title": "Починить основную механику Sumi" },
+      { "key": "startups", "title": "Погрузиться в Старт-ап мир Израиля" }
+    ],
+    "windows": [
+      {
+        "app": "ChatGPT",
+        "title": "Создать проект Life OS",
+        "seconds": 300,
+        "goal": "target"
+      },
+      {
+        "app": "ChatGPT",
+        "title": "Создать проект Life OS",
+        "seconds": 240,
+        "goal": "target"
+      },
+      { "app": "Telegram", "title": "Telegram", "seconds": 60 },
+      {
+        "app": "Google Chrome",
+        "domain": "web.whatsapp.com",
+        "title": "WhatsApp",
+        "seconds": 60
+      },
+      { "app": "Web App", "title": "Life OS", "seconds": 27, "goal": "target" },
+      {
+        "app": "ChatGPT",
+        "title": "Создать проект Life OS",
+        "seconds": 6,
+        "goal": "target"
+      },
+      { "app": "Telegram", "title": "Telegram", "seconds": 38 },
+      { "app": "Web App", "title": "Life OS", "seconds": 3, "goal": "target" },
+      {
+        "app": "ChatGPT",
+        "title": "Создать проект Life OS",
+        "seconds": 3,
+        "goal": "target"
+      },
+      { "app": "Web App", "title": "Life OS", "seconds": 47, "goal": "target" },
+      {
+        "app": "ChatGPT",
+        "title": "Создать проект Life OS",
+        "seconds": 3,
+        "goal": "target"
+      },
+      { "app": "Web App", "title": "Life OS", "seconds": 6, "goal": "target" },
+      {
+        "app": "ChatGPT",
+        "title": "Создать проект Life OS",
+        "seconds": 6,
+        "goal": "target"
+      },
+      { "app": "Telegram", "title": "Telegram", "seconds": 9 },
+      {
+        "app": "ChatGPT",
+        "title": "Создать проект Life OS",
+        "seconds": 300,
+        "goal": "target"
+      },
+      {
+        "app": "ChatGPT",
+        "title": "Создать проект Life OS",
+        "seconds": 12,
+        "goal": "target",
+        "done": true
+      },
+      {
+        "app": "ChatGPT",
+        "title": "Excel-платежи: Telegram и Google Drive",
+        "seconds": 15
+      },
+      { "app": "Telegram", "title": "Telegram", "seconds": 30 },
+      {
+        "app": "ChatGPT",
+        "title": "Excel-платежи: Telegram и Google Drive",
+        "seconds": 129
+      }
+    ]
+  }
+]

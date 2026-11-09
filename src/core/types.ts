@@ -47,11 +47,20 @@ interface GoalTime {
   relevant_seconds?: number;
   steps?: Array<{ step_id: string; seconds: number }>;
 }
+/** Recorded activity for a day and how much of it reached a goal. */
+export interface TrackingDay {
+  recorded_seconds: number;
+  attributed_seconds: number;
+  waiting_seconds: number;
+  /** Stable code for the most frequent reason time stayed unassigned. */
+  issue?: string | null;
+}
 export interface DayProgress {
   day: string;
   completed: string[];
   completed_goals?: string[];
   goals: GoalTime[];
+  tracking?: TrackingDay;
 }
 export interface CoreSnapshot {
   onboarding_goal_id?: number | null;

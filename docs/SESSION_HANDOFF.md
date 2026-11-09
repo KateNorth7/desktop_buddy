@@ -1,5 +1,16 @@
 # sumi session handoff
 
+## Unreleased — tracking diagnostics and replay cases, 9 November 2026
+
+Branch `claude/tracking-diagnostics` (from fork `main` at 0.50.0, no version bump yet). Stage 1 of the tracking and completion plan; nothing in the attribution or completion logic changed.
+
+- Audit of the installed 0.50.0 (read-only copy of `buddy.db`): from 1 to 8 November no row reached `goal_relevant_daily`; over 99% of recorded time stayed `pending`. The matcher answered four times in four days. Causes: every background AI task `try_lock`s the shared `companion_request` lane and goal matching is spawned last in `agent_runtime`, losing turns silently; the built-in gateway allows 1000 AI calls per user per day while the client budget allows 120 background calls per hour; Russian goal titles without description never match English window titles locally; explicit focus is zeroed without a keyword match. Outcome checks have never completed a real goal (only the synthetic fixture).
+- **Attempt journal** (`src-tauri/src/tracking_attempts.rs`, table `tracking_attempts`): fixed outcome codes per stage (`goal_matching`, `outcome_check`) with goal ID and confidence, never titles or text. Repeats within five minutes fold into one row; rows older than 14 days are dropped on write; retention and Clear local history purge it. Recorded in `goal_matching` (lane busy, hourly budget, no candidates, context changed, provider errors, assigned / below threshold / no goal) and `semantic_observation` (lane busy when due, budget, provider errors, observed status, not verified, completion applied / proposed / disabled).
+- **My progress**: `DayProgress.tracking` (recorded, attributed, waiting seconds from `review_intervals`, plus the most frequent matching issue on days with waiting time) renders one line under the overview headline.
+- **Replay cases** (`src-tauri/test-data/replay-cases.json`, `goal_matching/replay_tests.rs`): the sanitized Payoneer and Life OS sequences run through the real pipeline with an oracle matcher that always answers correctly. Baseline: Payoneer 135 s of 261 s (52%) reached the goal with three matcher calls; Life OS all of it. The ignored target test requires at least 90% for every case.
+
+Evidence on this branch: `cargo test --locked` 788 passed / 6 ignored; `cargo clippy --locked --all-targets -- -D warnings` and `cargo fmt --check` clean; frontend `npm test` 349 passed, `npm run lint` and `npm run build` clean. `tracking_day` returns zeros while an older database migrates before the review tables exist (two migration tests caught this). `cmake` was installed with Homebrew on this Mac for the whisper build. Not done: Windows build, a live run of the installed app, release.
+
 ## 0.51.0 published — 9 November 2026
 
 [sumi 0.51.0](https://github.com/KateNorth7/desktop_buddy/releases/tag/v0.51.0) was published at `2026-11-09T21:34:20Z` from commit 26c9d8e by [run 42702118226](https://github.com/KateNorth7/desktop_buddy/actions/runs/42702118226). Do not rerun this completed release. Notes: `docs/RELEASE_0.51.0.md`.

@@ -10,6 +10,8 @@ mod cascade_tests;
 mod lanes;
 #[cfg(test)]
 mod metadata_tests;
+#[cfg(test)]
+mod replay_tests;
 mod resolution;
 pub(crate) mod stability;
 use stability::metadata_unavailable;
@@ -46,6 +48,7 @@ const CACHE_TTL: Duration = Duration::from_secs(300);
 /// the goal they were matched to. Never any page text.
 const TRAIL_SECONDS: i64 = 1200;
 const TRAIL_LIMIT: usize = 12;
+const CONTEXT_CHANGED: &str = "Goal matching context changed";
 #[derive(Clone)]
 pub(crate) struct TrailEntry {
     pub(crate) at: i64,
@@ -875,7 +878,7 @@ async fn request(
             &job.goals,
             &job.sample,
         ) {
-            return Err("Goal matching context changed".into());
+            return Err(CONTEXT_CHANGED.into());
         }
         inner.companion.view.preferences.screen_task_detection
     };
@@ -950,6 +953,15 @@ struct Job {
     context_revision: u64,
     mock: bool,
 }
+/// Diagnostics only: a journal write failure must never block attribution itself.
+fn note(inner: &crate::commands::Inner, outcome: &str, goal: Option<i64>, confidence: Option<f64>) {
+    let _ = inner.storage.note_attempt(
+        crate::tracking_attempts::MATCHING,
+        outcome,
+        goal,
+        confidence,
+    );
+}
 fn claim(inner: &mut crate::commands::Inner, now: Instant) -> Result<Option<Job>, String> {
     if !due_inner(inner, now) {
         return Ok(None);
@@ -961,9 +973,11 @@ fn claim(inner: &mut crate::commands::Inner, now: Instant) -> Result<Option<Job>
         .ok_or("No activity to match")?;
     let goals = candidates(inner, &sample)?;
     if goals.as_array().is_none_or(|g| g.is_empty()) {
+        note(inner, "skipped_no_candidates", None, None);
         return Ok(None);
     }
     if !inner.status.mock_ai && !crate::observation::reserve(inner) {
+        note(inner, "skipped_hourly_budget", None, None);
         if inner.goal_matching.view.goal_id.is_none() {
             inner.goal_matching.view.reason =
                 Some("Goal matching is waiting for the hourly AI budget".into());
@@ -1008,7 +1022,34 @@ fn finish(
         &job.goals,
         &job.sample,
     ) {
+        note(inner, "context_changed", None, None);
         return Ok(None);
+    }
+    match &result {
+        Ok(answer) => {
+            let outcome = match answer.goal_id {
+                None => "answered_no_goal",
+                Some(id)
+                    if answer.confidence
+                        >= if in_today(&job.goals, id) {
+                            AUTO_ASSIGN_CONFIDENCE
+                        } else {
+                            OUTSIDE_TODAY_ASSIGN_CONFIDENCE
+                        } =>
+                {
+                    "assigned"
+                }
+                Some(_) => "answered_below_threshold",
+            };
+            note(inner, outcome, answer.goal_id, Some(answer.confidence));
+        }
+        Err(error) if error == CONTEXT_CHANGED => note(inner, "context_changed", None, None),
+        Err(error) => note(
+            inner,
+            crate::tracking_attempts::provider_outcome(error),
+            None,
+            None,
+        ),
     }
     let mut suggestion = None;
     let unverified = metadata_unavailable(&job.sample);
@@ -1147,6 +1188,10 @@ fn finish(
 }
 pub async fn identify(app: &AppHandle, state: &AppState) {
     let Ok(_provider) = state.companion_request.try_lock() else {
+        // Another AI task holds the shared lane; record the lost turn so it can be seen.
+        if let Ok(inner) = state.inner.lock() {
+            note(&inner, "skipped_lane_busy", None, None);
+        }
         return;
     };
     let job = state
@@ -1194,7 +1239,7 @@ pub async fn identify(app: &AppHandle, state: &AppState) {
             )
             .await
         } else {
-            Err("Goal matching context changed".into())
+            Err(CONTEXT_CHANGED.into())
         }
     };
     if let Ok(mut inner) = state.inner.lock() {

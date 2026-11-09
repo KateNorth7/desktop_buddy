@@ -59,6 +59,7 @@ mod skills;
 mod startup;
 mod storage;
 mod tracking;
+mod tracking_attempts;
 mod tray;
 mod unplanned_work;
 mod updates;

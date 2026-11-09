@@ -516,8 +516,21 @@ fn outcome_target(inner: &Inner, signal: &Signal) -> Result<Value, String> {
     }
 }
 
+/// Diagnostics only: a journal write failure must never block an outcome check.
+fn note(inner: &Inner, outcome: &str, goal: Option<i64>, confidence: Option<f64>) {
+    let _ =
+        inner
+            .storage
+            .note_attempt(crate::tracking_attempts::OUTCOME, outcome, goal, confidence);
+}
 pub(crate) async fn run(app: &AppHandle, state: &AppState) -> Result<(), String> {
     let Ok(_lane) = state.companion_request.try_lock() else {
+        // A due check that loses the shared lane is recorded; an idle one is not.
+        if let Ok(inner) = state.inner.lock() {
+            if due(&inner) {
+                note(&inner, "skipped_lane_busy", None, None);
+            }
+        }
         return Ok(());
     };
     let (activity, consent, candidates, model) = {
@@ -580,6 +593,7 @@ pub(crate) async fn run(app: &AppHandle, state: &AppState) -> Result<(), String>
             return Ok(());
         }
         if !crate::observation::reserve_primary(&mut inner) {
+            note(&inner, "skipped_hourly_budget", None, None);
             inner.companion.semantic.status = "waiting";
             inner.companion.semantic.reason = "observation_budget";
             return Ok(());
@@ -662,7 +676,17 @@ pub(crate) async fn run(app: &AppHandle, state: &AppState) -> Result<(), String>
             &check,
         ),
     )
-    .await?;
+    .await
+    .inspect_err(|error| {
+        if let Ok(inner) = state.inner.lock() {
+            note(
+                &inner,
+                crate::tracking_attempts::provider_outcome(error),
+                None,
+                None,
+            );
+        }
+    })?;
     check()?;
     let answer = parse(&response, &candidates, &samples)?;
     {
@@ -687,6 +711,16 @@ pub(crate) async fn run(app: &AppHandle, state: &AppState) -> Result<(), String>
             "proposal_observed"
         };
         inner.companion.semantic.last_goal = answer.matched_goal_id;
+        note(
+            &inner,
+            match answer.status.as_str() {
+                "result" => "observed_result",
+                "in_progress" => "observed_in_progress",
+                _ => "observed_unknown",
+            },
+            answer.matched_goal_id,
+            Some(answer.confidence),
+        );
         inner.storage.classify_review_context(
             &activity,
             answer
@@ -775,6 +809,12 @@ pub(crate) async fn run(app: &AppHandle, state: &AppState) -> Result<(), String>
                     .map_err(|_| "Observation state unavailable")?;
                 inner.companion.semantic.status = "unknown";
                 inner.companion.semantic.reason = "insufficient_outcome_evidence";
+                note(
+                    &inner,
+                    "outcome_not_verified",
+                    signal.goal_id,
+                    Some(signal.confidence),
+                );
                 continue;
             }
             let mut inner = state
@@ -936,6 +976,7 @@ fn apply_result(
             Err(e) => return Err(e),
         };
         inner.companion.semantic.reason = "outcome_verified_and_completed";
+        note(inner, "completion_applied", p.goal_id, Some(p.confidence));
         inner.companion.semantic.status = "completed";
         inner.companion.memory.last_progress = Utc::now().timestamp();
         inner.privacy_revision = inner.privacy_revision.wrapping_add(1);
@@ -977,6 +1018,16 @@ fn apply_result(
         } else {
             "automatic_completion_disabled"
         };
+        note(
+            inner,
+            if inner.companion.view.preferences.automatic_completion {
+                "completion_proposed"
+            } else {
+                "automatic_completion_disabled"
+            },
+            p.goal_id,
+            Some(p.confidence),
+        );
         companion::offer(app, inner, p, Utc::now().timestamp())?;
     }
     Ok(())
