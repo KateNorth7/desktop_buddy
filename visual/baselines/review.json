@@ -1,16 +1,16 @@
 {
   "schemaVersion": 1,
   "applicationBase": "e9f7468a329cbdbb9fe48d24aef6add982797e97",
-  "captureCommit": "8f678cf3df4718fc90e8f4f4bec0df42daaf8a5a",
-  "workflowRun": "https://github.com/KateNorth7/desktop_buddy/actions/runs/42683814151",
+  "captureCommit": "4b3c6feadf21a22410cffded0ae85f0728f13ce4",
+  "workflowRun": "https://github.com/KateNorth7/desktop_buddy/actions/runs/42688898014",
   "approvedOn": "2026-11-09",
   "approvedBy": "Release assistant on the owner's instruction to publish 0.51.0; the owner was shown the wide-light Settings AI and Privacy captures in chat",
-  "approval": "Eight Settings AI/Privacy captures changed only by the requested provider text: Claude replaces Nebius, the Tavily row is removed, web search runs through Claude. The 26 other baselines are unchanged.",
+  "approval": "Settings AI/Privacy captures changed only by the requested provider text: Claude replaces Nebius, the Tavily row is removed, web search runs through Claude, and the Vision model note names the claude-haiku-5-5 default. The 26 other baselines are unchanged.",
   "knownExistingIssues": [
     "The previous narrow Privacy working-hours overflow is superseded by the intentional removal of those controls, included in this approval. Native WebView rendering and physical-device interactions are not established by browser screenshots."
   ],
   "environment": {
-    "commit": "8f678cf3df4718fc90e8f4f4bec0df42daaf8a5a",
+    "commit": "4b3c6feadf21a22410cffded0ae85f0728f13ce4",
     "runner": "Windows",
     "image": "20261022.344.1",
     "node": "v24.22.1",
@@ -38,7 +38,7 @@
       "height": 873
     },
     "narrow-dark/settings-ai.png": {
-      "sha256": "780900a107b87086a92726fc1d0b410c9d138d5f59f6ca204df8318379cba8f0",
+      "sha256": "5429b4fc02af3b87983c7b3008d13c79ace807ac416921b7e57269cfd6c937ad",
       "width": 720,
       "height": 873
     },
@@ -78,7 +78,7 @@
       "height": 873
     },
     "narrow-light/settings-ai.png": {
-      "sha256": "a2e5c6901b0418b0f4040a15008ce38725de43e9f3a9821b467e20bf25f3c248",
+      "sha256": "c4ae8fbd882258176e1e6b4f33548c27b415f428200c78c7d02f1af0fcba72fc",
       "width": 720,
       "height": 873
     },
@@ -123,7 +123,7 @@
       "height": 873
     },
     "wide-dark/settings-ai.png": {
-      "sha256": "418646471e27361aa1b27c04c54c80a9001656e30ae5e2549c6f4a05ee55170b",
+      "sha256": "091daeec9e8b4852997f868a32bc6e40fa390ee30a69854b955e0159f1fb3551",
       "width": 1280,
       "height": 873
     },
@@ -168,7 +168,7 @@
       "height": 873
     },
     "wide-light/settings-ai.png": {
-      "sha256": "3377251e7a40f9036fd466485ede55b46eaa857854b6fff5c63c34cba5067505",
+      "sha256": "256f0f77eef3d9f855433750208ce14976f89301ca09e87a47067ef536b9d543",
       "width": 1280,
       "height": 873
     },
@@ -232,7 +232,7 @@
     }
   ],
   "previousReviewCommit": "7ddd1937067456bf30d6834a2f501dd524ca149d",
-  "changeReason": "Claude replaces Nebius and Tavily in Settings → AI (one Claude row, Vision model note) and in the Privacy data-sharing text.",
+  "changeReason": "Claude replaces Nebius and Tavily in Settings → AI (one Claude row, Vision model note naming claude-haiku-5-5) and in the Privacy data-sharing text.",
   "history": [
     {
       "date": "2026-10-22",
