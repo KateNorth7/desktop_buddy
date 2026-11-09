@@ -140,7 +140,7 @@ it.each([false, true])(
     expect(screen.queryByText("What is shared?")).toBeNull();
     expect(screen.queryByText("Check again")).toBeNull();
     expect(screen.queryByLabelText(/API key/i)).toBeNull();
-    expect(screen.queryByText(/Connect Nebius/i)).toBeNull();
+    expect(screen.queryByText(/Connect Claude/i)).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
     await waitFor(() => expect(complete).toHaveBeenCalledTimes(1));
     expect(setup).toHaveBeenCalledWith(

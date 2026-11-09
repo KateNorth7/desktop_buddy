@@ -1,4 +1,4 @@
-use crate::{collector, http, models::*, nebius, storage::Storage, tavily};
+use crate::{collector, http, models::*, focus, storage::Storage, tavily};
 use std::{
     sync::Mutex,
     time::{Duration, Instant},
@@ -113,7 +113,7 @@ impl AppState {
                     dnd: false,
                     demo,
                     mock_ai: http::enabled("AI_MOCK"),
-                    nebius_configured: http::configured("NEBIUS_API_KEY"),
+                    anthropic_configured: http::configured("ANTHROPIC_API_KEY"),
                     tavily_configured: http::configured("TAVILY_API_KEY"),
                 },
                 last_analysis: None,
@@ -165,7 +165,7 @@ pub fn set_provider_key(
     if key.is_some() {
         inner.storage.connection.execute("UPDATE core_goal_analyses SET state='queued',message=NULL,attempts=0 WHERE state='failed'",[]).map_err(|_| "Could not resume goal suggestions")?;
     }
-    inner.status.nebius_configured = http::configured("NEBIUS_API_KEY");
+    inner.status.anthropic_configured = http::configured("ANTHROPIC_API_KEY");
     inner.status.tavily_configured = http::configured("TAVILY_API_KEY");
     inner.last_error = None;
     crate::frontend_events::changed(
@@ -533,7 +533,7 @@ pub fn collect(state: &AppState) -> Result<(), String> {
                         && attribution.goal_id.as_deref() == Some(goal.id.to_string().as_str())
                         && matches!(
                             inner.goal_matching.view.source.as_deref(),
-                            Some("nebius" | "nebius_carry" | "explicit_focus" | "learned_lane")
+                            Some("model" | "model_carry" | "explicit_focus" | "learned_lane")
                         );
                     if taught {
                         inner.storage.learn_lane_profile(
@@ -578,7 +578,7 @@ async fn analyze(app: &AppHandle, state: &AppState, automatic: bool) -> Result<D
             .lock()
             .map_err(|_| "Application state unavailable")?;
         if !inner.status.ai_enabled {
-            return Err("Enable AI check-ins before sending activity to Nebius".into());
+            return Err("Enable AI check-ins before sending activity to Claude".into());
         }
         if automatic && !inner.status.tracking {
             return Err("Activity tracking is paused".into());
@@ -604,12 +604,12 @@ async fn analyze(app: &AppHandle, state: &AppState, automatic: bool) -> Result<D
         )
     };
     let result = if mock {
-        Ok(nebius::mock(&activity))
+        Ok(focus::mock(&activity))
     } else {
         crate::engine_observability::observe_specialist(
             state,
             "focus_check",
-            nebius::analyze(&state.client, &context, &activity),
+            focus::analyze(&state.client, &context, &activity),
         )
         .await
     };
@@ -755,7 +755,7 @@ mod tests {
             dnd: false,
             demo: false,
             mock_ai: false,
-            nebius_configured: true,
+            anthropic_configured: true,
             tavily_configured: true,
         };
         let mut decision = Decision {
@@ -872,7 +872,7 @@ mod tests {
                 .collect::<Vec<_>>(),
             vec![600, 300, 420]
         );
-        let mut decision = nebius::mock(&activity);
+        let mut decision = focus::mock(&activity);
         assert_eq!(decision.state, FocusState::Drifting);
         storage.decision(goal.id, &mut decision).unwrap();
         storage.feedback(decision.id.unwrap(), true).unwrap();

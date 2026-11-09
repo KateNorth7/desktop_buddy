@@ -176,7 +176,7 @@ pub(crate) async fn run() -> Result<bool, String> {
         if mock {
             "MOCK, not live accuracy"
         } else {
-            "real Nebius"
+            "real Claude"
         }
     );
     let mut rows = Vec::new();

@@ -40,7 +40,7 @@ pub(super) fn setup(names: &[&str]) -> (AppState, Vec<i64>) {
         let mut i = state.inner.lock().unwrap();
         i.status.tracking = true;
         crate::tracking::allow_notifications(&mut i);
-        i.status.nebius_configured = true;
+        i.status.anthropic_configured = true;
         i.status.mock_ai = false;
         i.companion.view.preferences.quiet_start_minute = 0;
         i.companion.view.preferences.quiet_end_minute = 0;
@@ -200,11 +200,11 @@ fn six_lanes_strong_local_match_is_ready_at_thirty_seconds() {
         Some("local_keywords")
     );
     assert!(!due_inner(&i, base + AI_STABLE));
-    assert_eq!(i.goal_matching.metrics.nemotron_calls, 0);
+    assert_eq!(i.goal_matching.metrics.reasoning_calls, 0);
 }
 #[tokio::test]
 async fn ambiguity_reuses_a_match_within_the_evidence_window_then_requires_a_refresh() {
-    use wiremock::{matchers::method, Mock, MockServer, ResponseTemplate};
+    use wiremock::{matchers::method, Mock, MockServer};
     let (state, ids) = setup(&["Atlas launch alpha", "Atlas launch beta", "Vega budget"]);
     let base = Instant::now();
     let a = sample("Atlas launch beta");
@@ -216,7 +216,7 @@ async fn ambiguity_reuses_a_match_within_the_evidence_window_then_requires_a_ref
         claim(&mut i, base + AI_STABLE).unwrap().unwrap()
     };
     let server = MockServer::start().await;
-    Mock::given(method("POST")).respond_with(ResponseTemplate::new(200).set_body_json(json!({"choices":[{"finish_reason":"stop","message":{"content":json!({"goal_id":ids[1],"confidence":0.93,"reason":"The exact beta deliverable matches"}).to_string()}}]}))).expect(1).mount(&server).await;
+    Mock::given(method("POST")).respond_with(crate::claude::test::reply(json!({"choices":[{"finish_reason":"stop","message":{"content":json!({"goal_id":ids[1],"confidence":0.93,"reason":"The exact beta deliverable matches"}).to_string()}}]}))).expect(1).mount(&server).await;
     let result = request_at(
         &state.client,
         &server.uri(),
@@ -235,7 +235,7 @@ async fn ambiguity_reuses_a_match_within_the_evidence_window_then_requires_a_ref
     feed(&mut i, &a, base, 63, 357);
     assert_eq!(i.goal_matching.view.goal_id, Some(ids[1]));
     assert!(!due_inner(&i, base + Duration::from_secs(357)));
-    assert_eq!(i.goal_matching.metrics.nemotron_calls, 1);
+    assert_eq!(i.goal_matching.metrics.reasoning_calls, 1);
     feed(&mut i, &a, base, 360, 363);
     assert!(i.goal_matching.view.goal_id.is_none());
     assert!(due_inner(&i, base + Duration::from_secs(363)));
@@ -375,7 +375,7 @@ fn cloud_null_or_failure_is_cached_and_new_privacy_invalidates_it() {
         finish(&mut i, &job, result, base + AI_STABLE).unwrap();
         feed(&mut i, &a, base, 63, 300);
         assert!(!due_inner(&i, base + Duration::from_secs(300)));
-        assert_eq!(i.goal_matching.metrics.nemotron_calls, 1);
+        assert_eq!(i.goal_matching.metrics.reasoning_calls, 1);
         i.privacy_revision += 1;
         feed(&mut i, &a, base, 603, 696);
         assert!(due_inner(&i, base + Duration::from_secs(696)));
@@ -492,7 +492,7 @@ fn work_state_reports_stuck_and_distraction_without_mutating_memory() {
 }
 #[tokio::test]
 async fn synthetic_switching_benchmark() {
-    use wiremock::{matchers::method, Mock, MockServer, ResponseTemplate};
+    use wiremock::{matchers::method, Mock, MockServer};
     let (state, ids) = setup(&[
         "Orion launch",
         "Vega budget",
@@ -506,7 +506,7 @@ async fn synthetic_switching_benchmark() {
         checkpoint(&mut i, ids[3], "Research", None);
     }
     let server = MockServer::start().await;
-    Mock::given(method("POST")).respond_with(ResponseTemplate::new(200).set_body_json(json!({"choices":[{"finish_reason":"stop","message":{"content":json!({"goal_id":ids[5],"confidence":0.93,"reason":"The beta deliverable is visible"}).to_string()}}]}))).expect(1).mount(&server).await;
+    Mock::given(method("POST")).respond_with(crate::claude::test::reply(json!({"choices":[{"finish_reason":"stop","message":{"content":json!({"goal_id":ids[5],"confidence":0.93,"reason":"The beta deliverable is visible"}).to_string()}}]}))).expect(1).mount(&server).await;
     let base = Instant::now();
     let mut rows = Vec::new();
     let mut previous_key = String::new();
@@ -583,7 +583,7 @@ async fn synthetic_switching_benchmark() {
     }
     let i = state.inner.lock().unwrap();
     assert_eq!(rows.len(), 6);
-    assert_eq!(i.goal_matching.metrics.nemotron_calls, 1);
+    assert_eq!(i.goal_matching.metrics.reasoning_calls, 1);
     assert_eq!(i.goal_matching.metrics.local_resolutions, 5);
     assert_eq!(old_resolutions, 0);
     assert_eq!(old_calls, 0);
@@ -591,7 +591,7 @@ async fn synthetic_switching_benchmark() {
         .iter()
         .all(|r| r["latency_seconds"].as_u64().unwrap() <= 60));
     // Separate stationary reference: old policy first becomes eligible at 600s; new at 60s.
-    let report = json!({"scenario_seconds":564,"active_goals":6,"old":{"stable_threshold_seconds":600,"recognized_segments":old_resolutions,"nemotron_calls":old_calls,"local_only_resolutions":0},"new":{"segments":rows,"nemotron_calls":i.goal_matching.metrics.nemotron_calls,"local_only_resolutions":i.goal_matching.metrics.local_resolutions},"stationary_ambiguous_first_eligibility_seconds":{"old":600,"new":AI_STABLE.as_secs()},"note":"Simulated 3-second collection; actual local HTTP fixture; provider latency excluded; counts cover goal matching only"});
+    let report = json!({"scenario_seconds":564,"active_goals":6,"old":{"stable_threshold_seconds":600,"recognized_segments":old_resolutions,"reasoning_calls":old_calls,"local_only_resolutions":0},"new":{"segments":rows,"reasoning_calls":i.goal_matching.metrics.reasoning_calls,"local_only_resolutions":i.goal_matching.metrics.local_resolutions},"stationary_ambiguous_first_eligibility_seconds":{"old":600,"new":AI_STABLE.as_secs()},"note":"Simulated 3-second collection; actual local HTTP fixture; provider latency excluded; counts cover goal matching only"});
     println!("SWITCHING_BENCHMARK {}", report);
 }
 #[test]
@@ -618,8 +618,8 @@ fn returning_to_a_resolved_lane_reuses_the_scoped_ai_result_after_debounce() {
     assert_eq!(i.goal_matching.view.goal_id, Some(ids[2]));
     feed(&mut i, &ambiguous, base, 96, 126);
     assert_eq!(i.goal_matching.view.goal_id, Some(ids[1]));
-    assert_eq!(i.goal_matching.view.source.as_deref(), Some("nebius"));
-    assert_eq!(i.goal_matching.metrics.nemotron_calls, 1);
+    assert_eq!(i.goal_matching.view.source.as_deref(), Some("model"));
+    assert_eq!(i.goal_matching.metrics.reasoning_calls, 1);
     assert!(!due_inner(&i, base + Duration::from_secs(200)));
 }
 #[test]
@@ -699,7 +699,7 @@ fn an_ai_match_counts_the_whole_stable_context_and_carries_across_titles() {
     b.window_id = Some(7);
     feed(&mut i, &b, base, 63, 90);
     assert_eq!(i.goal_matching.view.goal_id, Some(ids[1]));
-    assert_eq!(i.goal_matching.view.source.as_deref(), Some("nebius_carry"));
+    assert_eq!(i.goal_matching.view.source.as_deref(), Some("model_carry"));
     assert!(attribution(&i, &b).unwrap().confidence >= crate::relevance::THRESHOLD);
     assert!(!due_inner(&i, base + Duration::from_secs(90)));
     feed(&mut i, &b, base, 93, 93);
@@ -749,14 +749,14 @@ fn another_window_or_a_gap_never_inherits_an_ai_match() {
     other.window_id = Some(9);
     observe_inner_at(&mut i, &other, true, base + Duration::from_secs(63)).unwrap();
     assert!(i.goal_matching.view.goal_id.is_none());
-    assert_ne!(i.goal_matching.view.source.as_deref(), Some("nebius_carry"));
+    assert_ne!(i.goal_matching.view.source.as_deref(), Some("model_carry"));
     // Returning to the resolved window reuses its answer after the debounce.
     feed(&mut i, &a, base, 66, 100);
     assert_eq!(i.goal_matching.view.goal_id, Some(ids[1]));
     // A gap longer than a missed sample starts the window over instead of carrying.
     observe_inner_at(&mut i, &a, true, base + Duration::from_secs(120)).unwrap();
     assert!(i.goal_matching.view.goal_id.is_none(), "a gap starts over");
-    assert_ne!(i.goal_matching.view.source.as_deref(), Some("nebius_carry"));
+    assert_ne!(i.goal_matching.view.source.as_deref(), Some("model_carry"));
 }
 #[test]
 fn a_browser_match_carries_only_within_the_same_domain() {
@@ -793,7 +793,7 @@ fn a_browser_match_carries_only_within_the_same_domain() {
         69,
     );
     assert_eq!(i.goal_matching.view.goal_id, Some(ids[1]));
-    assert_eq!(i.goal_matching.view.source.as_deref(), Some("nebius_carry"));
+    assert_eq!(i.goal_matching.view.source.as_deref(), Some("model_carry"));
     feed(
         &mut i,
         &page("Trending - YouTube", "youtube.com"),
@@ -1011,7 +1011,7 @@ fn a_dominant_learned_profile_assigns_locally_without_the_matcher() {
     feed(&mut i, &site, base, 0, 30);
     assert_eq!(i.goal_matching.view.goal_id, Some(ids[0]));
     assert_eq!(i.goal_matching.view.source.as_deref(), Some("learned_lane"));
-    assert_eq!(i.goal_matching.metrics.nemotron_calls, 0);
+    assert_eq!(i.goal_matching.metrics.reasoning_calls, 0);
     assert!(
         !due_inner(&i, base + Duration::from_secs(60)),
         "no cloud question is needed"
@@ -1344,7 +1344,7 @@ fn a_confident_refresh_corrects_an_automatic_assignment_once_without_double_coun
     // Visible text changes, the match is carried and a refresh is requested.
     observe_text(&mut i, &a, "Budget sheet");
     observe_text(&mut i, &a, "Forecast model assumptions and scenarios");
-    assert_eq!(i.goal_matching.view.source.as_deref(), Some("nebius_carry"));
+    assert_eq!(i.goal_matching.view.source.as_deref(), Some("model_carry"));
     // The carried match keeps counting; the refresh waits for REASK since the first question.
     feed(&mut i, &a, base, 63, 93);
     assert!(!due_inner(&i, base + Duration::from_secs(93)));
@@ -1377,7 +1377,7 @@ fn a_confident_refresh_corrects_an_automatic_assignment_once_without_double_coun
     assert_eq!(total, 60_000, "moved, not duplicated");
     // A later answer naming the first goal again does not flip the visit back.
     i.goal_matching.cache.clear();
-    i.goal_matching.view.source = Some("nebius_carry".into());
+    i.goal_matching.view.source = Some("model_carry".into());
     let job = claim(&mut i, base + Duration::from_secs(215))
         .unwrap()
         .unwrap();

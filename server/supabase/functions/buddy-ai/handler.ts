@@ -1,15 +1,16 @@
 // Runtime secrets never leave this function. No content or credentials are logged.
 type Environment = (name: string) => string | undefined;
 type Dependencies = { env: Environment; fetch: typeof fetch };
-const MODELS = new Set([
-  "nvidia/nemotron-3-super-120b-a12b",
-  "moonshotai/Kimi-K3",
-  "nvidia/Nemotron-3.5-Super-VL",
-]);
+// Built-in AI routes one Claude model; personal connections keep their own controls.
+const MODELS = new Set(["claude-opus-5-5"]);
+const ANTHROPIC_VERSION = "2026-10-21";
+// Server-side fallback re-runs a safety refusal on another Claude model in the same call.
+const ANTHROPIC_BETA = "server-side-fallback-2026-07-01";
 const BASE = "/buddy-ai";
 // Match the desktop's existing four-image / 12 MB decoded attachment budget.
 const MAX_BODY = 17000000;
 const MAX_RESPONSE = 2000000;
+const EFFORTS = new Set(["low", "medium", "high", "xhigh", "max"]);
 const reply = (status: number, message: string) =>
   Response.json(
     { error: message },
@@ -50,20 +51,27 @@ async function bounded(
   }
   return new TextDecoder("utf-8", { fatal: true }).decode(joined);
 }
-export function validateChat(body: Record<string, unknown>): number {
+const BASE64 = /^[A-Za-z0-9+/=]+$/;
+function isTextBlock(part: unknown): part is { type: "text"; text: string } {
+  return (
+    !!part &&
+    typeof part === "object" &&
+    (part as { type?: unknown }).type === "text" &&
+    typeof (part as { text?: unknown }).text === "string" &&
+    Object.keys(part).every((k) =>
+      ["type", "text", "cache_control"].includes(k),
+    )
+  );
+}
+/** Validates a Claude Messages request and returns conservative reservation units. */
+export function validateMessages(body: Record<string, unknown>): number {
   const fields = new Set([
     "model",
-    "messages",
-    "temperature",
-    "top_p",
     "max_tokens",
-    "response_format",
-    "chat_template_kwargs",
-    "reasoning_effort",
-    "stop",
-    "seed",
-    "frequency_penalty",
-    "presence_penalty",
+    "messages",
+    "system",
+    "output_config",
+    "fallbacks",
   ]);
   if (
     Object.keys(body).some((k) => !fields.has(k)) ||
@@ -73,17 +81,50 @@ export function validateChat(body: Record<string, unknown>): number {
     body.messages.length > 128 ||
     !Number.isInteger(body.max_tokens) ||
     Number(body.max_tokens) < 1 ||
-    Number(body.max_tokens) > 8192
+    Number(body.max_tokens) > 8192 ||
+    (body.fallbacks !== undefined && body.fallbacks !== "default")
   )
     throw Error("payload");
+  if (body.output_config !== undefined) {
+    const config = body.output_config as Record<string, unknown>;
+    if (
+      !config ||
+      typeof config !== "object" ||
+      Array.isArray(config) ||
+      Object.keys(config).some((k) => !["effort", "format"].includes(k)) ||
+      (config.effort !== undefined && !EFFORTS.has(String(config.effort)))
+    )
+      throw Error("output_config");
+    if (config.format !== undefined) {
+      const format = config.format as Record<string, unknown>;
+      if (
+        !format ||
+        typeof format !== "object" ||
+        format.type !== "json_schema" ||
+        !format.schema ||
+        typeof format.schema !== "object" ||
+        Array.isArray(format.schema) ||
+        Object.keys(format).some((k) => !["type", "schema"].includes(k))
+      )
+        throw Error("format");
+    }
+  }
   let images = 0,
     imageBytes = 0,
     textBytes = 0;
   const encoder = new TextEncoder();
+  if (typeof body.system === "string")
+    textBytes += encoder.encode(body.system).length;
+  else if (Array.isArray(body.system)) {
+    for (const part of body.system) {
+      if (!isTextBlock(part)) throw Error("system");
+      textBytes += encoder.encode(part.text).length;
+    }
+  } else if (body.system !== undefined) throw Error("system");
   for (const message of body.messages) {
     if (
       !message ||
-      !["system", "user", "assistant"].includes(message.role) ||
+      !["user", "assistant"].includes(message.role) ||
       Object.keys(message).some((k) => !["role", "content"].includes(k))
     )
       throw Error("message");
@@ -91,18 +132,23 @@ export function validateChat(body: Record<string, unknown>): number {
       textBytes += encoder.encode(message.content).length;
     else if (Array.isArray(message.content)) {
       for (const part of message.content) {
-        if (part?.type === "text" && typeof part.text === "string")
-          textBytes += encoder.encode(part.text).length;
+        if (isTextBlock(part)) textBytes += encoder.encode(part.text).length;
         else if (
-          part?.type === "image_url" &&
-          typeof part.image_url?.url === "string" &&
-          /^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/.test(
-            part.image_url.url,
+          part?.type === "image" &&
+          Object.keys(part).every((k) => ["type", "source"].includes(k)) &&
+          part.source?.type === "base64" &&
+          ["image/jpeg", "image/png", "image/webp"].includes(
+            part.source.media_type,
           ) &&
-          part.image_url.url.length <= 6000050
+          typeof part.source.data === "string" &&
+          part.source.data.length <= 6000050 &&
+          BASE64.test(part.source.data) &&
+          Object.keys(part.source).every((k) =>
+            ["type", "media_type", "data"].includes(k),
+          )
         ) {
           images++;
-          imageBytes += part.image_url.url.length;
+          imageBytes += part.source.data.length;
         } else throw Error("content");
       }
     } else throw Error("content");
@@ -112,6 +158,40 @@ export function validateChat(body: Record<string, unknown>): number {
   // Conservative reservation units, not a quoted currency price. Timeouts stay charged.
   return textBytes + Number(body.max_tokens) * 8 + images * 16384;
 }
+type Route = { method: string; url: string; secret: string; kind: string };
+function resolveRoute(path: string): Route | undefined {
+  const routes: Record<string, Route> = {
+    [`${BASE}/anthropic/v1/messages`]: {
+      method: "POST",
+      url: "https://api.anthropic.com/v1/messages",
+      secret: "ANTHROPIC_API_KEY",
+      kind: "ai",
+    },
+    [`${BASE}/tavily/search`]: {
+      method: "POST",
+      url: "https://api.tavily.com/search",
+      secret: "TAVILY_API_KEY",
+      kind: "search",
+    },
+    [`${BASE}/tavily/usage`]: {
+      method: "GET",
+      url: "https://api.tavily.com/usage",
+      secret: "TAVILY_API_KEY",
+      kind: "health",
+    },
+  };
+  if (routes[path]) return routes[path];
+  // One model object per health check: a paginated catalog cannot hide the model.
+  const model = path.match(/^\/buddy-ai\/anthropic\/v1\/models\/([A-Za-z0-9._-]{1,80})$/)?.[1];
+  if (model && MODELS.has(model))
+    return {
+      method: "GET",
+      url: `https://api.anthropic.com/v1/models/${model}`,
+      secret: "ANTHROPIC_API_KEY",
+      kind: "health",
+    };
+  return undefined;
+}
 export function createGateway(dependencies: Dependencies) {
   const { env, fetch: request } = dependencies;
   return async (req: Request): Promise<Response> => {
@@ -120,36 +200,7 @@ export function createGateway(dependencies: Dependencies) {
       /^\/functions\/v1(?=\/buddy-ai\/)/,
       "",
     );
-    const routes: Record<
-      string,
-      { method: string; url: string; secret: string; kind: string }
-    > = {
-      [`${BASE}/nebius/v1/chat/completions`]: {
-        method: "POST",
-        url: "https://api.tokenfactory.nebius.com/v1/chat/completions",
-        secret: "NEBIUS_API_KEY",
-        kind: "ai",
-      },
-      [`${BASE}/nebius/v1/models`]: {
-        method: "GET",
-        url: "https://api.tokenfactory.nebius.com/v1/models",
-        secret: "NEBIUS_API_KEY",
-        kind: "health",
-      },
-      [`${BASE}/tavily/search`]: {
-        method: "POST",
-        url: "https://api.tavily.com/search",
-        secret: "TAVILY_API_KEY",
-        kind: "search",
-      },
-      [`${BASE}/tavily/usage`]: {
-        method: "GET",
-        url: "https://api.tavily.com/usage",
-        secret: "TAVILY_API_KEY",
-        kind: "health",
-      },
-    };
-    const route = routes[path];
+    const route = resolveRoute(path);
     if (!route || req.method !== route.method || new URL(req.url).search)
       return reply(404, "Unknown service operation");
     const authorization = req.headers.get("authorization") ?? "";
@@ -196,7 +247,7 @@ export function createGateway(dependencies: Dependencies) {
           payload = JSON.parse(await bounded(req, MAX_BODY));
           if (!payload || Array.isArray(payload) || typeof payload !== "object")
             throw Error("payload");
-          if (route.kind === "ai") units = validateChat(payload!);
+          if (route.kind === "ai") units = validateMessages(payload!);
           else {
             if (
               Object.keys(payload!).some(
@@ -256,12 +307,21 @@ export function createGateway(dependencies: Dependencies) {
           "Built-in AI allowance reached. Try later or use your own API keys.",
         );
       stage = "provider";
+      const headers: Record<string, string> =
+        route.secret === "ANTHROPIC_API_KEY"
+          ? {
+              "x-api-key": upstream,
+              "anthropic-version": ANTHROPIC_VERSION,
+              "anthropic-beta": ANTHROPIC_BETA,
+              "Content-Type": "application/json",
+            }
+          : {
+              Authorization: `Bearer ${upstream}`,
+              "Content-Type": "application/json",
+            };
       const response = await request(route.url, {
         method: route.method,
-        headers: {
-          Authorization: `Bearer ${upstream}`,
-          "Content-Type": "application/json",
-        },
+        headers,
         body: payload ? JSON.stringify(payload) : undefined,
         redirect: "error",
         signal: AbortSignal.any([req.signal, AbortSignal.timeout(60000)]),
@@ -294,14 +354,10 @@ export function createGateway(dependencies: Dependencies) {
             { headers: { "Cache-Control": "no-store" } },
           );
         }
-        if (!Array.isArray(data.data))
+        if (typeof data.id !== "string" || !MODELS.has(data.id))
           return reply(502, "Invalid service model response");
         return Response.json(
-          {
-            data: data.data
-              .filter((m: { id: string }) => MODELS.has(m.id))
-              .map((m: { id: string }) => ({ id: m.id })),
-          },
+          { id: data.id },
           { headers: { "Cache-Control": "no-store" } },
         );
       }

@@ -145,7 +145,7 @@ pub(crate) async fn run_due(_app: &AppHandle, state: &AppState) -> Result<(), St
             let blocks = inner.storage.final_review_blocks(period)?;
             if blocks.is_empty()
                 || !permitted(&inner)
-                || !inner.status.nebius_configured
+                || !inner.status.anthropic_configured
                 || inner.status.mock_ai
             {
                 inner

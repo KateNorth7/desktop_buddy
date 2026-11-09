@@ -130,7 +130,7 @@ pub(crate) async fn run() -> Result<Value, String> {
         rows.push(json!({"name":"explicit_knowledge_through_shared_dialogue","passed":outcome.is_ok()&&!facts.is_empty(),"latency_ms":at.elapsed().as_millis(),"saved_fact_count":facts.len()}));
     }
     Ok(
-        json!({"all_passed":rows.iter().all(|r|r["passed"]==true),"provider":"real_nebius","fixture":"synthetic_only_in_memory","cases":rows,"scope":"No installed goals, chats, screen contents or screenshots were read. Native capture, OS permissions and physical microphone remain separate manual checks."}),
+        json!({"all_passed":rows.iter().all(|r|r["passed"]==true),"provider":"real_claude","fixture":"synthetic_only_in_memory","cases":rows,"scope":"No installed goals, chats, screen contents or screenshots were read. Native capture, OS permissions and physical microphone remain separate manual checks."}),
     )
 }
 

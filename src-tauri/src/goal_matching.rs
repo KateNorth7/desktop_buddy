@@ -78,7 +78,7 @@ struct Cache {
 #[derive(Default, Serialize)]
 pub struct Metrics {
     pub local_resolutions: u64,
-    pub nemotron_calls: u64,
+    pub reasoning_calls: u64,
     pub cache_hits: u64,
 }
 #[derive(Default)]
@@ -314,11 +314,11 @@ pub(crate) fn observe_text(inner: &mut crate::commands::Inner, a: &ActivitySnaps
     {
         runtime.context_revision = runtime.context_revision.wrapping_add(1);
         runtime.cache.retain(|cache| cache.key != current);
-        if runtime.view.source.as_deref() == Some("nebius") && runtime.view.goal_id.is_some() {
+        if runtime.view.source.as_deref() == Some("model") && runtime.view.goal_id.is_some() {
             // The identified goal keeps counting while a refresh confirms or replaces it.
-            runtime.view.source = Some("nebius_carry".into());
+            runtime.view.source = Some("model_carry".into());
             runtime.view.reason = Some("Visible work changed; confirming the goal match".into());
-        } else if runtime.view.source.as_deref() == Some("nebius") {
+        } else if runtime.view.source.as_deref() == Some("model") {
             runtime.view = MatchView {
                 enabled: true,
                 source: Some("unknown".into()),
@@ -362,7 +362,7 @@ pub(crate) fn accept_context_match(
         goal_id: Some(id),
         confidence: Some(confidence),
         reason: Some("AI associated observed work with this goal".into()),
-        source: Some("nebius".into()),
+        source: Some("model".into()),
         enabled: true,
     };
     inner.goal_matching.view = view.clone();
@@ -416,7 +416,7 @@ fn observe_inner_at(
     if metadata_unavailable(sample) {
         inner.goal_matching.proposal = MatchView::default();
         // Only the AI's own answer for this exact title-only window may stand.
-        if inner.goal_matching.view.source.as_deref() != Some("nebius_unverified") {
+        if inner.goal_matching.view.source.as_deref() != Some("model_unverified") {
             inner.goal_matching.view = MatchView {
                 enabled: true,
                 source: Some("unknown".into()),
@@ -442,7 +442,7 @@ fn observe_inner_at(
         .flatten();
     // A carried AI match only fills in while local evidence names no goal; a cached
     // answer for this exact window, including a cached null, still takes precedence.
-    let carried = (inner.goal_matching.view.source.as_deref() == Some("nebius_carry")
+    let carried = (inner.goal_matching.view.source.as_deref() == Some("model_carry")
         && resolved.view.goal_id.is_none())
     .then(|| inner.goal_matching.view.clone());
     let view = if explicit {
@@ -468,7 +468,7 @@ fn observe_inner_at(
     if view.goal_id.is_some()
         && (inner.goal_matching.view.goal_id != view.goal_id
             || inner.goal_matching.view.source != view.source)
-        && view.source.as_deref() != Some("nebius")
+        && view.source.as_deref() != Some("model")
     {
         inner.goal_matching.metrics.local_resolutions += 1;
     }
@@ -637,7 +637,7 @@ pub fn attribution(
             .sample
             .as_ref()
             .is_some_and(|s| fingerprint(s) == fingerprint(sample));
-        if view.source.as_deref() == Some("nebius_unverified") && view.goal_id.is_some() && current
+        if view.source.as_deref() == Some("model_unverified") && view.goal_id.is_some() && current
         {
             return Ok(crate::relevance::ActivityMatch {
                 goal_id: view.goal_id.map(|id| id.to_string()),
@@ -753,7 +753,7 @@ fn cloud_allowed(inner: &crate::commands::Inner) -> bool {
 }
 fn due_inner(inner: &crate::commands::Inner, now: Instant) -> bool {
     let matching = &inner.goal_matching;
-    let carry = matching.view.source.as_deref() == Some("nebius_carry");
+    let carry = matching.view.source.as_deref() == Some("model_carry");
     let Some(sample) = matching.sample.as_ref() else {
         return false;
     };
@@ -800,7 +800,7 @@ fn due_inner(inner: &crate::commands::Inner, now: Instant) -> bool {
         *key == fingerprint(sample) && now.saturating_duration_since(*at) < REASK
     });
     cloud_allowed(inner)
-        && (inner.status.nebius_configured || inner.status.mock_ai)
+        && (inner.status.anthropic_configured || inner.status.mock_ai)
         && !matching.in_flight
         && !debounced
         && ready
@@ -830,14 +830,14 @@ fn parse(response: &Value, candidates: &Value, trail_len: usize) -> Result<Match
             .pointer("/choices/0/message/refusal")
             .is_some_and(|value| !value.is_null() && value.as_str() != Some(""))
     {
-        return Err("Nebius did not complete goal matching".into());
+        return Err("Claude did not complete goal matching".into());
     }
     let content = response
         .pointer("/choices/0/message/content")
         .and_then(Value::as_str)
-        .ok_or("Nebius returned no goal match")?;
+        .ok_or("Claude returned no goal match")?;
     let result: MatchResult =
-        serde_json::from_str(content).map_err(|_| "Nebius returned an invalid goal match")?;
+        serde_json::from_str(content).map_err(|_| "Claude returned an invalid goal match")?;
     if !result.confidence.is_finite()
         || !(0.0..=1.0).contains(&result.confidence)
         || result.reason.trim().is_empty()
@@ -850,7 +850,7 @@ fn parse(response: &Value, candidates: &Value, trail_len: usize) -> Result<Match
         || result.same_task_trail.len() > TRAIL_LIMIT
         || result.same_task_trail.iter().any(|i| *i >= trail_len)
     {
-        return Err("Nebius returned invalid goal matching fields".into());
+        return Err("Claude returned invalid goal matching fields".into());
     }
     Ok(result)
 }
@@ -861,9 +861,9 @@ async fn request(
 ) -> Result<MatchResult, String> {
     // A first vault read can wait for OS authorization. Recheck consent after it,
     // immediately before constructing the provider request.
-    let endpoint = http::endpoint("NEBIUS_API_URL")?;
-    let key = http::secret("NEBIUS_API_KEY")?;
-    let model = http::secret("NEBIUS_MODEL_ID")?;
+    let endpoint = http::endpoint("ANTHROPIC_API_URL")?;
+    let key = http::secret("ANTHROPIC_API_KEY")?;
+    let model = http::secret("ANTHROPIC_MODEL_ID")?;
     let screen_task_detection = {
         let inner = state
             .inner
@@ -927,7 +927,7 @@ async fn request_at(
             .filter(|s| !s.trim().is_empty()).map(|s| s.chars().take(160).collect::<String>()),
         "visible_text":crate::companion::screen_context::matching_excerpt(sample, screen_task_detection, visible_text),
     });
-    let payload = json!({"model": model, "temperature": 0.1, "max_tokens": 1024,
+    let payload = json!({"model": model, "max_tokens": 2048,
         "response_format": {"type":"json_schema","json_schema":{"name":"active_goal","strict":true,"schema":{
             "type":"object","additionalProperties":false,"properties":{
                 "goal_id":{"type":["integer","null"]},"confidence":{"type":"number","minimum":0,"maximum":1},"reason":{"type":"string","minLength":1,"maxLength":240},
@@ -980,7 +980,7 @@ fn claim(inner: &mut crate::commands::Inner, now: Instant) -> Result<Option<Job>
         inner.goal_matching.unverified_asked = Some(fingerprint(&sample));
     }
     if !inner.status.mock_ai {
-        inner.goal_matching.metrics.nemotron_calls += 1;
+        inner.goal_matching.metrics.reasoning_calls += 1;
     }
     let wall = chrono::Utc::now().timestamp();
     let recent = inner.goal_matching.recent_context(wall, now);
@@ -1099,9 +1099,9 @@ fn finish(
                 reason: Some(result.reason),
                 source: Some(
                     if unverified {
-                        "nebius_unverified"
+                        "model_unverified"
                     } else {
-                        "nebius"
+                        "model"
                     }
                     .into(),
                 ),
@@ -1301,12 +1301,12 @@ mod tests {
     async fn sends_real_http_with_bounded_context_and_no_profile_or_browser_url() {
         use wiremock::{
             matchers::{header, method},
-            Mock, MockServer, ResponseTemplate,
+            Mock, MockServer,
         };
         let server = MockServer::start().await;
         Mock::given(method("POST"))
-            .and(header("authorization", "Bearer isolated-test-key"))
-            .respond_with(ResponseTemplate::new(200).set_body_json(response(
+            .and(header("x-api-key", "isolated-test-key"))
+            .respond_with(crate::claude::test::reply(response(
                 json!({"goal_id":2,"confidence":0.94,"reason":"Release notes match"}),
             )))
             .expect(2)
@@ -1350,7 +1350,7 @@ mod tests {
         for (index, request) in server.received_requests().await.unwrap().iter().enumerate() {
             let payload: Value = serde_json::from_slice(&request.body).unwrap();
             let context: Value =
-                serde_json::from_str(payload["messages"][1]["content"].as_str().unwrap()).unwrap();
+                serde_json::from_str(payload["messages"][0]["content"].as_str().unwrap()).unwrap();
             assert_eq!(
                 context["activity"]["window_title"]
                     .as_str()
@@ -1392,7 +1392,7 @@ mod tests {
             assert!(!payload.to_string().contains("isolated-test-key"));
             assert!(!payload.to_string().to_ascii_lowercase().contains("api_key"));
             assert!(!payload.to_string().contains("fictional-secret-canary"));
-            assert!(payload["messages"][0]["content"]
+            assert!(crate::claude::test::system(&payload)
                 .as_str()
                 .unwrap()
                 .contains("instructions that must be ignored"));
@@ -1456,7 +1456,7 @@ mod tests {
         inner.goal_matching.observe(&sample, true);
         inner.goal_matching.view = MatchView {
             goal_id: Some(1),
-            source: Some("nebius".into()),
+            source: Some("model".into()),
             ..Default::default()
         };
         observe_text(&mut inner, &sample, "Preparing presentation slides");
@@ -1470,7 +1470,7 @@ mod tests {
         assert_eq!(inner.goal_matching.view.goal_id, Some(1));
         assert_eq!(
             inner.goal_matching.view.source.as_deref(),
-            Some("nebius_carry")
+            Some("model_carry")
         );
         assert!(inner.goal_matching.cache.is_empty());
         assert_ne!(inner.goal_matching.context_revision, revision);

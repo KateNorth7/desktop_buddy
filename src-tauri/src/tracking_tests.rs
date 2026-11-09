@@ -316,7 +316,7 @@ fn activity_delivery_ignores_working_hours_but_respects_quiet_idle_and_media() {
     let g = inner.storage.set_goal("Goal").unwrap();
     inner.status.tracking = true;
     inner.status.ai_enabled = true;
-    inner.status.nebius_configured = true;
+    inner.status.anthropic_configured = true;
     inner.status.tavily_configured = true;
     inner.status.mock_ai = false;
     inner.buddy.view.preferences.proactive = true;

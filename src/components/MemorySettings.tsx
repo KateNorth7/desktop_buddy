@@ -172,7 +172,7 @@ export function MemorySettings({
       {part === "all" && (
         <p className="helper">
           Personal memory is separate from chat and activity history. It stays
-          on this device. Relevant memories may be sent to Nebius during chat
+          on this device. Relevant memories may be sent to Claude during chat
           only when AI goal-context sharing is enabled. Memory controls do not
           enable tracking or AI sharing. With web research enabled, generated
           Tavily search queries may reflect the shared context.

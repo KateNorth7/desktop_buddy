@@ -77,5 +77,5 @@ export const engineApi = {
     invoke<Array<{ name: string; status: string; latency_ms: number }>>(
       "test_agent_actions",
     ),
-  health: () => invoke<InferenceHealth>("test_nebius_inference"),
+  health: () => invoke<InferenceHealth>("test_claude_inference"),
 };

@@ -75,7 +75,7 @@ fn repeated_short_gaps_exclude_unknown_time_without_starving_local_recognition()
         }
     }
     assert_eq!(inner.goal_matching.view.goal_id, Some(ids[0]));
-    assert_eq!(inner.goal_matching.metrics.nemotron_calls, 0);
+    assert_eq!(inner.goal_matching.metrics.reasoning_calls, 0);
 }
 
 #[test]
@@ -266,7 +266,7 @@ fn title_only_browser_windows_match_through_the_ai_alone_and_are_never_reused() 
     assert_eq!(inner.goal_matching.view.goal_id, Some(ids[1]));
     assert_eq!(
         inner.goal_matching.view.source.as_deref(),
-        Some("nebius_unverified")
+        Some("model_unverified")
     );
     assert!(inner.goal_matching.cache.is_empty());
     assert_eq!(inner.storage.goal().unwrap().unwrap().id, ids[1]);
@@ -308,5 +308,5 @@ fn title_only_browser_windows_match_through_the_ai_alone_and_are_never_reused() 
     feed(&mut inner, &other, base, 156, 400);
     assert!(inner.goal_matching.view.goal_id.is_none());
     assert!(!due_inner(&inner, base + Duration::from_secs(400)));
-    assert_eq!(inner.goal_matching.metrics.nemotron_calls, 2);
+    assert_eq!(inner.goal_matching.metrics.reasoning_calls, 2);
 }

@@ -281,10 +281,10 @@ export function PersonalAiEnginePanel({
             provider. Latency covers instrumented agent, chat, checkpoint and
             research requests, including their retries.
           </p>
-          <section aria-label="Nebius inference health">
+          <section aria-label="Claude inference health">
             <h4>Safe inference health check</h4>
             <p className="helper">
-              Sends one small synthetic request to Nebius with a strict JSON
+              Sends one small synthetic request to Claude with a strict JSON
               Schema. No goals, memory, audio or window contents are sent.
               Provider charges may apply. Manual only, with a 20-second timeout
               and at least 60 seconds between checks.

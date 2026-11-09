@@ -255,7 +255,7 @@ fn enabled(inner: &Inner) -> bool {
         && inner.status.tracking_error.is_none()
         && !inner.status.demo
         && !inner.status.mock_ai
-        && inner.status.nebius_configured
+        && inner.status.anthropic_configured
         && inner.companion.view.preferences.screen_task_detection
         && !inner.companion.view.preferences.paused
         && inner
@@ -730,7 +730,7 @@ pub(crate) async fn run(app: &AppHandle, state: &AppState) -> Result<(), String>
                     inner.companion.semantic.status = "verifying";
                     crate::buddy::sync(app, &mut inner)?;
                 }
-                let model = std::env::var("NEBIUS_OBSERVATION_VERIFIER_MODEL_ID")
+                let model = std::env::var("ANTHROPIC_OBSERVATION_VERIFIER_MODEL_ID")
                     .ok()
                     .filter(|s| !s.trim().is_empty())
                     .unwrap_or_else(|| crate::http::DEFAULT_RESPONSE_MODEL.into());

@@ -83,7 +83,7 @@ pub struct Status {
     pub dnd: bool,
     pub demo: bool,
     pub mock_ai: bool,
-    pub nebius_configured: bool,
+    pub anthropic_configured: bool,
     pub tavily_configured: bool,
 }
 #[derive(Serialize)]

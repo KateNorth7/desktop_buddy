@@ -17,7 +17,7 @@ Use Conventional Commits: `type(scope): imperative summary`. The scope is option
 | `build` | Dependencies, packaging, and build configuration |
 | `chore` | Maintenance that does not fit another type |
 
-Examples: `feat(buddy): add draggable companion`, `fix(nebius): validate structured responses`, `docs: clarify demo setup`.
+Examples: `feat(buddy): add draggable companion`, `fix(claude): validate structured responses`, `docs: clarify demo setup`.
 
 One feature commit may include its code, tests, and documentation. Do not split dependent files merely to use different prefixes. Mark breaking changes with `!` and explain them in a `BREAKING CHANGE:` footer.
 

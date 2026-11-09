@@ -99,7 +99,7 @@ mod tests {
         let server = MockServer::start().await;
         Mock::given(method("POST")).and(header("authorization","Bearer fixture"))
             .and(body_partial_json(json!({"query":"official application workflow","search_depth":"advanced","topic":"general","max_results":5,"include_raw_content":false})))
-            .respond_with(ResponseTemplate::new(200).set_body_json(json!({"results":[{"title":"Official workflow","url":"https://example.com/workflow","content":"x".repeat(5000)}]})))
+            .respond_with(crate::claude::test::reply(json!({"results":[{"title":"Official workflow","url":"https://example.com/workflow","content":"x".repeat(5000)}]})))
             .expect(1).mount(&server).await;
         let results = research_call(
             &reqwest::Client::new(),
@@ -125,7 +125,7 @@ mod tests {
     #[tokio::test]
     async fn searches_and_normalizes_results() {
         let server = MockServer::start().await;
-        Mock::given(method("POST")).and(body_partial_json(json!({"query":"focus"}))).respond_with(ResponseTemplate::new(200).set_body_json(json!({"results":[{"title":"Focus","url":"https://example.com","content":"Useful","score":0.9}]}))).expect(1).mount(&server).await;
+        Mock::given(method("POST")).and(body_partial_json(json!({"query":"focus"}))).respond_with(crate::claude::test::reply(json!({"results":[{"title":"Focus","url":"https://example.com","content":"Useful","score":0.9}]}))).expect(1).mount(&server).await;
         assert_eq!(
             call(&reqwest::Client::new(), &server.uri(), "test", "focus")
                 .await

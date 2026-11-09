@@ -1,13 +1,19 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { createGateway, validateChat } from "./handler.ts";
+import { createGateway, validateMessages } from "./handler.ts";
 
 const jwt = "aaa.bbb.ccc";
 const user = "11111111-1111-4111-8111-111111111111";
 const chat = () => ({
-  model: "moonshotai/Kimi-K3",
+  model: "claude-opus-5-5",
   max_tokens: 1024,
+  system: [{ type: "text", text: "Synthetic instructions", cache_control: { type: "ephemeral" } }],
   messages: [{ role: "user", content: "Summarize the fictional checklist" }],
+  output_config: {
+    effort: "low",
+    format: { type: "json_schema", schema: { type: "object", additionalProperties: false } },
+  },
+  fallbacks: "default",
 });
 function fixture({
   authorized = true,
@@ -19,7 +25,7 @@ function fixture({
     SUPABASE_URL: "https://project.supabase.co",
     SUPABASE_SERVICE_ROLE_KEY: "server-role-fixture",
     SUPABASE_ANON_KEY: "public-anon-fixture",
-    NEBIUS_API_KEY: "private-nebius-fixture",
+    ANTHROPIC_API_KEY: "private-anthropic-fixture",
     TAVILY_API_KEY: "private-tavily-fixture",
   };
   const fetch = async (url, options) => {
@@ -30,26 +36,32 @@ function fixture({
         { status: authorized ? 200 : 401 },
       );
     if (url.includes("/rpc/")) return Response.json(reserved);
-    if (url.endsWith("/models"))
+    if (url.includes("/v1/models/"))
       return Response.json({
-        data: [
-          { id: "moonshotai/Kimi-K3", private: "not returned" },
-          { id: "not-allowed" },
-        ],
+        id: "claude-opus-5-5",
+        display_name: "Claude Opus 5.5",
+        private: "not returned",
       });
     if (url.endsWith("/usage"))
       return Response.json({
         key: { api_key: "must-never-leave-server", usage: 999 },
       });
     return Response.json(
-      { choices: [{ message: { content: "Synthetic answer" } }] },
+      {
+        id: "msg_fixture",
+        type: "message",
+        role: "assistant",
+        model: "claude-opus-5-5",
+        content: [{ type: "text", text: "Synthetic answer" }],
+        stop_reason: "end_turn",
+      },
       { status: providerStatus },
     );
   };
   return { calls, handler: createGateway({ env: (name) => env[name], fetch }) };
 }
 function request(
-  path = "/nebius/v1/chat/completions",
+  path = "/anthropic/v1/messages",
   body = chat(),
   token = jwt,
 ) {
@@ -75,16 +87,16 @@ test("a verified user is billed atomically before a fixed upstream request; prov
     "https://project.supabase.co/rest/v1/rpc/buddy_reserve_ai",
   );
   assert.equal(JSON.parse(calls[1].options.body).p_user, user);
+  assert.equal(calls[2].url, "https://api.anthropic.com/v1/messages");
   assert.equal(
-    calls[2].url,
-    "https://api.tokenfactory.nebius.com/v1/chat/completions",
+    calls[2].options.headers["x-api-key"],
+    "private-anthropic-fixture",
   );
-  assert.equal(
-    calls[2].options.headers.Authorization,
-    "Bearer private-nebius-fixture",
-  );
+  assert.equal(calls[2].options.headers["anthropic-version"], "2026-10-21");
+  assert.equal(calls[2].options.headers.Authorization, undefined);
   const raw = await response.text();
-  assert.ok(!raw.includes("private-nebius-fixture"));
+  assert.ok(!raw.includes("private-anthropic-fixture"));
+  assert.ok(raw.includes("Synthetic answer"));
   assert.equal(response.headers.get("cache-control"), "no-store");
 });
 test("missing or invalid auth never reaches quota or provider", async () => {
@@ -110,7 +122,11 @@ test("arbitrary URLs, unlisted models and expensive unsupported operations are r
     { ...chat(), model: "arbitrary-model" },
     { ...chat(), max_tokens: 999999 },
     { ...chat(), stream: true },
+    { ...chat(), tools: [] },
+    { ...chat(), fallbacks: [{ model: "arbitrary-model" }] },
+    { ...chat(), output_config: { effort: "ultra" } },
     { ...chat(), url: "https://attacker.invalid" },
+    { ...chat(), messages: [{ role: "system", content: "x" }] },
     { ...chat(), messages: [{ role: "tool", content: "x" }] },
   ]) {
     const f = fixture();
@@ -123,18 +139,30 @@ test("arbitrary URLs, unlisted models and expensive unsupported operations are r
     404,
   );
   assert.equal(f.calls.length, 0);
+  assert.equal(
+    (
+      await f.handler(
+        new Request(
+          "https://project.supabase.co/functions/v1/buddy-ai/anthropic/v1/models/not-allowed",
+          { headers: { Authorization: "Bearer " + jwt } },
+        ),
+      )
+    ).status,
+    404,
+  );
+  assert.equal(f.calls.length, 0);
 });
-test("image input permits bounded data images, never provider-side remote image fetches", () => {
+test("image input permits bounded base64 images, never provider-side remote image fetches", () => {
   assert.throws(() =>
-    validateChat({
+    validateMessages({
       ...chat(),
       messages: [
         {
           role: "user",
           content: [
             {
-              type: "image_url",
-              image_url: { url: "https://internal.invalid/private" },
+              type: "image",
+              source: { type: "url", url: "https://internal.invalid/private" },
             },
           ],
         },
@@ -142,15 +170,16 @@ test("image input permits bounded data images, never provider-side remote image 
     }),
   );
   assert.ok(
-    validateChat({
+    validateMessages({
       ...chat(),
       messages: [
         {
           role: "user",
           content: [
+            { type: "text", text: "What is visible?" },
             {
-              type: "image_url",
-              image_url: { url: "data:image/jpeg;base64,YQ==" },
+              type: "image",
+              source: { type: "base64", media_type: "image/jpeg", data: "YQ==" },
             },
           ],
         },
@@ -158,15 +187,18 @@ test("image input permits bounded data images, never provider-side remote image 
     }) > 0,
   );
   assert.throws(() =>
-    validateChat({
+    validateMessages({
       ...chat(),
       messages: [{ role: "user", content: "x".repeat(160001) }],
     }),
   );
+  assert.throws(() =>
+    validateMessages({ ...chat(), system: [{ type: "image", text: "x" }] }),
+  );
 });
 test("health checks actually reach the selected provider but filter account/private fields", async () => {
   for (const [path, expected] of [
-    ["/nebius/v1/models", { data: [{ id: "moonshotai/Kimi-K3" }] }],
+    ["/anthropic/v1/models/claude-opus-5-5", { id: "claude-opus-5-5" }],
     ["/tavily/usage", { key: { configured: true } }],
   ]) {
     const f = fixture();
@@ -179,6 +211,14 @@ test("health checks actually reach the selected provider but filter account/priv
     assert.deepEqual(await response.json(), expected);
     assert.equal(f.calls.length, 3);
   }
+  const f = fixture();
+  await f.handler(
+    new Request(
+      "https://project.supabase.co/functions/v1/buddy-ai/anthropic/v1/models/claude-opus-5-5",
+      { headers: { Authorization: "Bearer " + jwt } },
+    ),
+  );
+  assert.equal(f.calls[2].url, "https://api.anthropic.com/v1/models/claude-opus-5-5");
 });
 test("provider failures are sanitized and are never automatically replayed", async () => {
   const f = fixture({ providerStatus: 503 });
@@ -204,6 +244,10 @@ test("Tavily uses the fixed search endpoint with bounded supported search option
     200,
   );
   assert.equal(f.calls[2].url, "https://api.tavily.com/search");
+  assert.equal(
+    f.calls[2].options.headers.Authorization,
+    "Bearer private-tavily-fixture",
+  );
   const bad = fixture();
   assert.equal(
     (

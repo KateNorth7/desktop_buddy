@@ -1,5 +1,22 @@
 # Changelog
 
+## Unreleased — Claude as the inference provider
+
+- Replace Nebius Token Factory with the Claude Messages API (Anthropic). All
+  reasoning, dialogue, goal matching, screen understanding and image description
+  run on `claude-opus-5-5` by default; `ANTHROPIC_MODEL_ID`,
+  `ANTHROPIC_RESPONSE_MODEL_ID` and `ANTHROPIC_VISION_MODEL_ID` override it for
+  personal connections. The saved provider key is now `ANTHROPIC_API_KEY`; on
+  macOS it occupies the Keychain slot the pinned credential helper already
+  accepts, so a previously saved Nebius key must be replaced in Settings.
+- Translate every request at the HTTP boundary (`claude.rs`): strict JSON output
+  uses Claude structured outputs, system prompts are cached, hidden reasoning runs
+  at low effort for bounded operations and high effort for deliberate planning,
+  and a safety refusal falls back server-side to another Claude model.
+- Route built-in AI through `/anthropic/v1/messages` and check model access with
+  one model object instead of a paginated catalog. The Supabase function needs
+  an `ANTHROPIC_API_KEY` secret and a redeploy.
+
 ## 0.36.11 — grounded research and demo readiness
 
 - Select exact backend-owned source excerpts by ID and validate research citations.

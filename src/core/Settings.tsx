@@ -37,7 +37,7 @@ export function describePrivacy(
 ): string {
   if (!tracking)
     return "Background tracking is paused. No new activity is collected; explicitly requested chat and research can still use the context you permit.";
-  const sharing = `Enabled AI checks may send bounded interface text, window metadata, ${goalTitle ? "this goal" : "relevant goals"} and permitted relevant memories to Nebius. ${screenshots ? "Optional active-window images may also be sent. Review evidence is encrypted locally until the daily summary is saved at the configured Daily summary time." : "Screenshots are off."} This preview does not show the exact next request.`;
+  const sharing = `Enabled AI checks may send bounded interface text, window metadata, ${goalTitle ? "this goal" : "relevant goals"} and permitted relevant memories to Claude. ${screenshots ? "Optional active-window images may also be sent. Review evidence is encrypted locally until the daily summary is saved at the configured Daily summary time." : "Screenshots are off."} This preview does not show the exact next request.`;
   const goal = goalTitle ? `your goal, “${goalTitle}”` : "your current goal";
   let apps: { app: string; seconds: number }[];
   try {
@@ -165,7 +165,7 @@ export function CoreSettings({
     await servicesQuery.refresh();
     await onChanged();
   };
-  const serviceState = (id: "nebius" | "tavily") =>
+  const serviceState = (id: "anthropic" | "tavily") =>
     services?.services.find((item) => item.id === id)?.status;
   useEffect(() => {
     if (section !== "Privacy" || !desktop) return;
@@ -443,7 +443,7 @@ export function CoreSettings({
                 <p>
                   Record foreground apps, window/tab titles and active time on
                   this computer, and send up to 3,000 characters of visible text
-                  with your goal and steps to Nebius for progress checks?
+                  with your goal and steps to Claude for progress checks?
                   Automatic goal matching, when enabled, can also use up to 400
                   characters of the same redacted text to identify your goal.
                   Password and edit controls are skipped. Provider charges may
@@ -643,9 +643,9 @@ export function CoreSettings({
                 </select>
               </label>
               <ProviderRow
-                key={`nebius:${preferences.ai_connection_mode ?? "built_in"}`}
-                provider="nebius"
-                name="Nebius"
+                key={`anthropic:${preferences.ai_connection_mode ?? "built_in"}`}
+                provider="anthropic"
+                name="Claude"
                 managed={
                   (preferences.ai_connection_mode ?? "built_in") === "built_in"
                 }
@@ -654,8 +654,8 @@ export function CoreSettings({
                     ? `runs the AI · ${services.configured_model}`
                     : "runs the AI"
                 }
-                configured={data.status.nebius_configured}
-                checked={serviceState("nebius")}
+                configured={data.status.anthropic_configured}
+                checked={serviceState("anthropic")}
                 onChanged={providerChanged}
               />
               <ProviderRow
@@ -685,13 +685,13 @@ export function CoreSettings({
                         : "Model unavailable")}
                   </small>
                   <Hint
-                    text={`Shares the Nebius key above. Screen understanding: ${services?.configured_vision_model || "unavailable"}. Image descriptions: ${services?.configured_image_description_model || "unavailable"}.`}
+                    text={`Shares the Claude key above. Screen understanding: ${services?.configured_vision_model || "unavailable"}. Image descriptions: ${services?.configured_image_description_model || "unavailable"}.`}
                   />
                 </span>
                 <span className="acts">
                   <span className="tracking-state paused">
                     <i aria-hidden="true" />
-                    Uses Nebius
+                    Uses Claude
                   </span>
                   <button
                     type="button"

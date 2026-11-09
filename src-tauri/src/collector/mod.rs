@@ -160,7 +160,7 @@ impl ActivityCollector for DemoCollector {
     fn collect(&mut self) -> Result<ActivitySnapshot, String> {
         let items = [
             ("POWERPNT.EXE", "Hackathon.pptx — PowerPoint", 600),
-            ("chrome.exe", "Nebius Docs", 300),
+            ("chrome.exe", "Claude Docs", 300),
             ("chrome.exe", "YouTube — Recommended videos", 420),
         ];
         let (process, title, seconds) = items[(self.step / 5).min(2)];

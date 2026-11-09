@@ -193,7 +193,7 @@ pub async fn run(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use wiremock::{matchers::method, Mock, MockServer, Request, ResponseTemplate};
+    use wiremock::{matchers::method, Mock, MockServer, Request};
 
     #[tokio::test]
     async fn live_check_preserves_history_and_requires_real_delete_confirmation() {
@@ -202,8 +202,8 @@ mod tests {
         let server = MockServer::start().await;
         Mock::given(method("POST")).respond_with(|r: &Request| {
             let b: Value = serde_json::from_slice(&r.body).unwrap();
-            let ctx: Value = serde_json::from_str(b["messages"][1]["content"].as_str().unwrap()).unwrap();
-            let name = b["response_format"]["json_schema"]["name"].as_str().unwrap_or("buddy_dialogue_response");
+            let ctx: Value = serde_json::from_str(b["messages"][0]["content"].as_str().unwrap()).unwrap();
+            let name = crate::claude::test::operation(&b).as_str().unwrap_or("buddy_dialogue_response");
             let raw = match name {
                 "buddy_skill_plan" => {
                     let (skill,input)=if ctx["latest_request"]=="Create Interview with two steps" {
@@ -223,7 +223,7 @@ mod tests {
                 "buddy_dialogue_review"=>json!({"review":{"verdict":"approved","request_mode":"change","message":""}}),
                 other=>panic!("Unexpected operation {other}"),
             };
-            ResponseTemplate::new(200).set_body_json(json!({"choices":[{"finish_reason":"stop","message":{"content":raw.to_string()}}]}))
+            crate::claude::test::reply(json!({"choices":[{"finish_reason":"stop","message":{"content":raw.to_string()}}]}))
         }).expect(9).mount(&server).await;
         let service = Service {
             client: &state.client,

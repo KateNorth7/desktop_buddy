@@ -100,7 +100,7 @@ pub(crate) fn activate(mode: ConnectionMode) {
 }
 pub(crate) fn endpoint(provider: &str) -> Result<String, String> {
     let suffix = match provider {
-        "NEBIUS_API_URL" => "/nebius/v1/chat/completions",
+        "ANTHROPIC_API_URL" => "/anthropic/v1/messages",
         "TAVILY_API_URL" => "/tavily/search",
         _ => return Err("Unknown built-in service".into()),
     };
@@ -113,13 +113,22 @@ fn route_allowed(config: &PublicConfig, mode: ConnectionMode, url: &str, key: &s
     }
     key == SHARED_CREDENTIAL
         && [
-            "/nebius/v1/chat/completions",
-            "/nebius/v1/models",
-            "/tavily/search",
-            "/tavily/usage",
+            "/anthropic/v1/messages".to_string(),
+            format!("/anthropic/v1/models/{}", crate::http::DEFAULT_PRIMARY_MODEL),
+            "/tavily/search".to_string(),
+            "/tavily/usage".to_string(),
         ]
         .iter()
         .any(|suffix| url == format!("{root}{suffix}"))
+}
+/// How a personal credential is presented to the provider. Built-in requests
+/// always carry the Supabase session instead; the gateway adds provider headers.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub(crate) enum Auth {
+    /// Claude API: `x-api-key` plus the pinned `anthropic-version`.
+    Claude,
+    /// Tavily and other bearer-token services.
+    Bearer,
 }
 #[derive(Clone, Copy)]
 pub(crate) struct Guard(u64);
@@ -140,6 +149,7 @@ pub(crate) async fn prepare(
     method: Method,
     url: &str,
     key: &str,
+    auth: Auth,
 ) -> Result<(RequestBuilder, Guard), String> {
     let guard = Guard(CONNECTION.load(Ordering::SeqCst));
     let mode = if guard.built_in() {
@@ -158,7 +168,13 @@ pub(crate) async fn prepare(
             .bearer_auth(access_token(client).await?)
             .header("apikey", &config()?.publishable_key)
     } else {
-        request.bearer_auth(key)
+        match auth {
+            Auth::Claude => request
+                .header("x-api-key", key)
+                .header("anthropic-version", crate::claude::API_VERSION)
+                .header("anthropic-beta", crate::claude::BETA_FEATURES),
+            Auth::Bearer => request.bearer_auth(key),
+        }
     };
     guard.check()?;
     Ok((request, guard))
@@ -331,7 +347,7 @@ mod tests {
             .and(path("/auth/v1/signup"))
             .and(header("apikey", "public-client-fixture"))
             .and(body_json(serde_json::json!({"data":{}})))
-            .respond_with(ResponseTemplate::new(200).set_body_json(session_response()))
+            .respond_with(crate::claude::test::reply(session_response()))
             .expect(1)
             .mount(&server)
             .await;
@@ -354,7 +370,7 @@ mod tests {
             .and(body_json(
                 serde_json::json!({"refresh_token":"previous-refresh"}),
             ))
-            .respond_with(ResponseTemplate::new(200).set_body_json(session_response()))
+            .respond_with(crate::claude::test::reply(session_response()))
             .expect(1)
             .mount(&server)
             .await;
@@ -428,7 +444,7 @@ mod tests {
     #[test]
     fn connection_modes_never_mix_credentials_or_allow_arbitrary_shared_destinations() {
         let config = config().unwrap();
-        let url = endpoint("NEBIUS_API_URL").unwrap();
+        let url = endpoint("ANTHROPIC_API_URL").unwrap();
         assert!(route_allowed(
             config,
             ConnectionMode::BuiltIn,
@@ -462,7 +478,7 @@ mod tests {
         assert!(route_allowed(
             config,
             ConnectionMode::Personal,
-            "https://api.tokenfactory.nebius.com/v1/chat/completions",
+            "https://api.anthropic.com/v1/messages",
             "personal-key"
         ));
     }

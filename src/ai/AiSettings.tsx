@@ -38,10 +38,10 @@ export function AiSettings({
       <span className={compact ? "lbl" : undefined}>
         Correct dictated text before editing
         {compact ? (
-          <Hint text="Before the draft appears, send the recognized text to Nebius to fix likely misheard words. Includes up to 12 open goal titles only when goal sharing is on. Audio stays on your device. Nothing is sent as a chat message or changes your goals until Send. On for new profiles; you can switch it off here." />
+          <Hint text="Before the draft appears, send the recognized text to Claude to fix likely misheard words. Includes up to 12 open goal titles only when goal sharing is on. Audio stays on your device. Nothing is sent as a chat message or changes your goals until Send. On for new profiles; you can switch it off here." />
         ) : (
           <small>
-            Before the draft appears, send recognized text to Nebius to fix
+            Before the draft appears, send recognized text to Claude to fix
             likely misheard words. Includes up to 12 open goal titles only when
             goal sharing is on. Audio stays on your device. You review the
             result before Send.
@@ -85,7 +85,7 @@ export function AiSettings({
         <label className="toggle-row">
           <span className="lbl">
             Match my activity to goals
-            <Hint text="Sends your open goals, foreground app, window/page titles and browser domain to Nebius. With on-screen task detection enabled, also sends up to 400 characters of redacted visible text." />
+            <Hint text="Sends your open goals, foreground app, window/page titles and browser domain to Claude. With on-screen task detection enabled, also sends up to 400 characters of redacted visible text." />
           </span>
           <input
             type="checkbox"
@@ -116,7 +116,7 @@ export function AiSettings({
           Allow sumi AI assistance
           <small>
             Automatically analyze new goals; send requests, conversation history
-            and attachments you choose to Nebius. Goal suggestions stay separate
+            and attachments you choose to Claude. Goal suggestions stay separate
             until you accept them. Provider charges may apply.
           </small>
         </span>
@@ -158,7 +158,7 @@ export function AiSettings({
           Allow Tavily web research
           <small>
             sumi searches only when current information or an official workflow
-            is useful. Tavily receives the search query; Nebius receives
+            is useful. Tavily receives the search query; Claude receives
             returned source snippets.
           </small>
         </span>
@@ -179,11 +179,11 @@ export function AiSettings({
       </p>
       <label className="toggle-row">
         <span>
-          Let Nebius identify the active goal
+          Let Claude identify the active goal
           <small>
             With tracking and AI assistance on, send up to 20 open goal titles
             and their next steps, plus the foreground app, available browser
-            domain and window/page titles (up to 160 characters each), to Nebius
+            domain and window/page titles (up to 160 characters each), to Claude
             Token Factory. With on-screen task detection enabled, also send up
             to 400 characters of redacted visible text. A matching attempt
             starts at most once per minute; transient errors may be retried.

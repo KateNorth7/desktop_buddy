@@ -13,7 +13,7 @@ use crate::{
 };
 use wiremock::{matchers::method, Mock, MockServer, Request, ResponseTemplate};
 fn envelope(value: Value) -> ResponseTemplate {
-    ResponseTemplate::new(200).set_body_json(json!({"model":"fixture-reported-model","choices":[{"finish_reason":"stop","message":{"content":value.to_string()}}]}))
+    crate::claude::test::reply(json!({"model":"fixture-reported-model","choices":[{"finish_reason":"stop","message":{"content":value.to_string()}}]}))
 }
 fn target(id: i64) -> Value {
     json!({"goal_id":id,"reference":null})
@@ -152,13 +152,13 @@ async fn hackathon_hero_two_lanes_voice_park_receipt_resume_research_summary_res
     ));
     let state = AppState::new(Storage::open(&path).unwrap()).unwrap();
     state.inner.lock().unwrap().status.mock_ai = false;
-    let nebius = MockServer::start().await;
+    let claude = MockServer::start().await;
     let tavily = MockServer::start().await;
     Mock::given(method("POST")).respond_with(|request:&Request|{
         let body:Value=serde_json::from_slice(&request.body).unwrap();
-        let source:Value=serde_json::from_str(body["messages"][1]["content"].as_str().unwrap()).unwrap();
+        let source:Value=serde_json::from_str(body["messages"][0]["content"].as_str().unwrap()).unwrap();
         assert!(body.get("audio").is_none());assert!(!body.to_string().contains("RAW_ACCESSIBILITY_CANARY"));
-        match body["response_format"]["json_schema"]["name"].as_str().unwrap() {
+        match crate::claude::test::operation(&body).as_str().unwrap() {
             "buddy_skill_plan"=>envelope(plan(&source)),
             "buddy_park_checkpoint"=> {
                 let client=source.to_string().contains("Client");
@@ -181,18 +181,18 @@ async fn hackathon_hero_two_lanes_voice_park_receipt_resume_research_summary_res
             "buddy_contextual_research_result"=>envelope(json!({"summary":"Review the technical documentation checklist.","next_action":"Draft the architecture section using the checklist.","source_indices":[0]})),
             other=>panic!("Unexpected inference operation: {other}"),
         }
-    }).mount(&nebius).await;
+    }).mount(&claude).await;
     Mock::given(method("POST")).respond_with(|request:&Request|{
         let body:Value=serde_json::from_slice(&request.body).unwrap();
         assert_eq!(body["query"],"technical documentation submission checklist");
         assert_eq!(body["include_raw_content"],false);
         assert!(body.get("memories").is_none() && body.get("goal").is_none());
-        ResponseTemplate::new(200).set_body_json(json!({"results":[{"title":"Documentation","url":"https://docs.rs/","content":"Describe the architecture, tests and remaining limitations."}]}))
+        crate::claude::test::reply(json!({"results":[{"title":"Documentation","url":"https://docs.rs/","content":"Describe the architecture, tests and remaining limitations."}]}))
     }).expect(1).mount(&tavily).await;
     {
         let service = Service {
             client: &state.client,
-            endpoint: nebius.uri(),
+            endpoint: claude.uri(),
             key: "fixture".into(),
             model: "fixture".into(),
         };
@@ -320,7 +320,7 @@ async fn hackathon_hero_two_lanes_voice_park_receipt_resume_research_summary_res
         );
         assert!(!summary.contains("CLIENT_PRIVATE_CANARY"));
         println!("Hero fixture grounded summary:\n{summary}");
-        let calls = nebius.received_requests().await.unwrap();
+        let calls = claude.received_requests().await.unwrap();
         assert_eq!(calls.len(), 12); // 7 plans + 2 checkpoints + 3 research calls (including evidence); action receipts are local.
         let panel = view(&state.inner.lock().unwrap()).unwrap();
         assert_eq!(panel["last_skill"], "inspect_continuity");

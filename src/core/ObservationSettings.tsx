@@ -46,7 +46,7 @@ export function ObservationSettings({
         <span>
           Use screenshots
           <small>
-            Optional active-window images are sent to Nebius to help understand
+            Optional active-window images are sent to Claude to help understand
             layouts when text is insufficient. Images and interface-text samples
             are encrypted locally for review until the daily summary is saved at
             the configured Daily summary time, then deleted. Excluded and

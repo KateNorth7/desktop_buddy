@@ -101,7 +101,7 @@ pub fn sync_focus(inner: &mut Inner) -> Result<(), String> {
     {
         return Ok(());
     }
-    // Nebius chooses among all open goals. Do not replace its choice with Today ordering.
+    // Claude chooses among all open goals. Do not replace its choice with Today ordering.
     if inner.storage.ai_preferences()?.automatic_goal_matching {
         return Ok(());
     }

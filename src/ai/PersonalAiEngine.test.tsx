@@ -16,7 +16,7 @@ vi.mock("./engineApi", () => ({
   engineApi: { status: vi.fn(), health: vi.fn(), actions: vi.fn() },
 }));
 const fixture: PersonalAiEngine = {
-  provider: "Nebius Token Factory",
+  provider: "Claude (Anthropic)",
   configured_model: "configured-fixture",
   active_goal: { id: 1, label: "Hackathon" },
   active_step: null,
@@ -139,7 +139,7 @@ it("shows sanitized timeout rather than claiming a configured key passed inferen
     ...fixture.health,
     status: "timeout",
     latency_ms: 10000,
-    error: "Nebius inference timed out after the bounded wait.",
+    error: "Claude inference timed out after the bounded wait.",
   });
   const user = await open();
   await user.click(

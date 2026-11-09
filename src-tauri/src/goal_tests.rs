@@ -164,11 +164,11 @@ fn proposal_parser_rejects_truncation_and_invalid_steps_without_echoing_content(
 async fn refinement_sends_only_explicit_goal_plan_and_does_not_save() {
     use wiremock::{
         matchers::{header, method},
-        Mock, MockServer, ResponseTemplate,
+        Mock, MockServer,
     };
     let server = MockServer::start().await;
-    Mock::given(method("POST")).and(header("authorization","Bearer test-key"))
-        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"choices":[{"finish_reason":"stop","message":{"content":r#"{"title":"Refined","done_when":"Reviewed","steps":["Draft"]}"#}}]}))).expect(1).mount(&server).await;
+    Mock::given(method("POST")).and(header("x-api-key", "test-key"))
+        .respond_with(crate::claude::test::reply(serde_json::json!({"choices":[{"finish_reason":"stop","message":{"content":r#"{"title":"Refined","done_when":"Reviewed","steps":["Draft"]}"#}}]}))).expect(1).mount(&server).await;
     let mut s = store();
     let g = s.set_goal("Original").unwrap();
     let p = s.goal_plan(g.id).unwrap();
@@ -190,7 +190,7 @@ async fn refinement_sends_only_explicit_goal_plan_and_does_not_save() {
     let requests = server.received_requests().await.unwrap();
     let body: serde_json::Value = serde_json::from_slice(&requests[0].body).unwrap();
     let context: serde_json::Value =
-        serde_json::from_str(body["messages"][1]["content"].as_str().unwrap()).unwrap();
+        serde_json::from_str(body["messages"][0]["content"].as_str().unwrap()).unwrap();
     assert_eq!(context.as_object().unwrap().len(), 3);
     assert!(context.get("recent_activity").is_none());
 }

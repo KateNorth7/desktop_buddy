@@ -168,11 +168,11 @@ async fn local_and_ambiguous_requests_do_not_call_tavily_even_if_provider_sugges
 async fn classification_and_suggestions_use_real_http_and_only_explicit_context() {
     let server = MockServer::start().await;
     Mock::given(method("POST"))
-        .and(header("authorization", "Bearer test-key"))
+        .and(header("x-api-key", "test-key"))
         .and(body_partial_json(
-            json!({"response_format":{"json_schema":{"name":"buddy_research_plan"}}}),
+            json!({"output_config":{"format":{"schema":{"description":"buddy_research_plan"}}}}),
         ))
-        .respond_with(ResponseTemplate::new(200).set_body_json(response(
+        .respond_with(crate::claude::test::reply(response(
             json!({"kind":"procedural","query":"passport official application workflow"}),
         )))
         .expect(1)
@@ -180,9 +180,9 @@ async fn classification_and_suggestions_use_real_http_and_only_explicit_context(
         .await;
     Mock::given(method("POST"))
         .and(body_partial_json(
-            json!({"response_format":{"json_schema":{"name":"goal_analysis"}}}),
+            json!({"output_config":{"format":{"schema":{"description":"goal_analysis"}}}}),
         ))
-        .respond_with(ResponseTemplate::new(200).set_body_json(response(answer())))
+        .respond_with(crate::claude::test::reply(response(answer())))
         .expect(1)
         .mount(&server)
         .await;
@@ -215,7 +215,7 @@ async fn classification_and_suggestions_use_real_http_and_only_explicit_context(
         let body: Value = serde_json::from_slice(&request.body).unwrap();
         assert!(!body.to_string().contains("test-key"));
         let shared: Value =
-            serde_json::from_str(body["messages"][1]["content"].as_str().unwrap()).unwrap();
+            serde_json::from_str(body["messages"][0]["content"].as_str().unwrap()).unwrap();
         assert!(shared.get("profile").is_none());
         assert!(shared.get("activity").is_none());
     }
@@ -301,7 +301,7 @@ fn user_errors_never_echo_provider_diagnostics_or_credentials() {
         "HTTP 401: test-secret",
         "Invalid chat fields: private message",
         "HTTP 429: confidential",
-        "NEBIUS_API_KEY=test-secret",
+        "ANTHROPIC_API_KEY=test-secret",
     ] {
         let message = user_error("test", error);
         assert!(
@@ -336,7 +336,7 @@ async fn invalid_structured_answers_get_one_bounded_repair_without_changing_cont
     let captured = counter.clone();
     Mock::given(method("POST")).respond_with(move |_: &wiremock::Request| {
         let invalid=captured.fetch_add(1,std::sync::atomic::Ordering::SeqCst)==0;
-        ResponseTemplate::new(200).set_body_json(response(json!({"message":if invalid { "" } else { "Choose the next small step." },"resources":[]})))
+        crate::claude::test::reply(response(json!({"message":if invalid { "" } else { "Choose the next small step." },"resources":[]})))
     }).expect(2).mount(&server).await;
     let client = reqwest::Client::new();
     let service = Service {
@@ -359,9 +359,9 @@ async fn invalid_structured_answers_get_one_bounded_repair_without_changing_cont
     let requests = server.received_requests().await.unwrap();
     let before: Value = serde_json::from_slice(&requests[0].body).unwrap();
     let after: Value = serde_json::from_slice(&requests[1].body).unwrap();
-    assert_eq!(before["messages"][1], after["messages"][1]);
+    assert_eq!(before["messages"][0], after["messages"][0]);
     assert!(!after.to_string().contains("test-key"));
-    assert!(after["messages"][0]["content"]
+    assert!(crate::claude::test::system(&after)
         .as_str()
         .unwrap()
         .contains("failed validation"));
@@ -407,7 +407,7 @@ async fn coaching_judge_preserves_its_model_and_does_not_retry_unavailable_or_re
         let server = MockServer::start().await;
         Mock::given(method("POST"))
             .and(wiremock::matchers::body_partial_json(
-                json!({"model":http::DEFAULT_PRIMARY_MODEL,"temperature":1.0,"max_tokens":4096,"chat_template_kwargs":{"enable_thinking":true},"response_format":{"type":"json_schema","json_schema":{"name":"buddy_coaching_voice_judge"}}}),
+                json!({"model":http::DEFAULT_PRIMARY_MODEL,"max_tokens":4096,"output_config":{"effort":"high","format":{"type":"json_schema","schema":{"description":"buddy_coaching_voice_judge"}}}}),
             ))
             .respond_with(ResponseTemplate::new(status))
             .expect(1)

@@ -15,7 +15,7 @@ pub(crate) async fn hero_stuck(
         let mut settings = inner.storage.user_settings()?;
         settings.onboarding.completed = true;
         inner.storage.write_setting("user_settings", &settings)?;
-        inner.status.nebius_configured = true;
+        inner.status.anthropic_configured = true;
         inner.status.tracking = true;
         inner.activity_state.state = crate::tracking::ActivityState::Focused;
         inner.companion.view.preferences.screen_task_detection = true;
@@ -66,7 +66,7 @@ pub async fn run() -> Result<Value, String> {
         if inner.status.mock_ai {
             return Err("Real-provider check refuses AI_MOCK".into());
         }
-        inner.status.nebius_configured = true;
+        inner.status.anthropic_configured = true;
         inner.status.tracking = true;
         inner.activity_state.state = crate::tracking::ActivityState::Focused;
         inner.companion.view.preferences.screen_task_detection = true;

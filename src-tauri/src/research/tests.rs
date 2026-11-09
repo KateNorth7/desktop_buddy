@@ -49,15 +49,15 @@ fn service<'a>(state: &'a AppState, server: &MockServer) -> Service<'a> {
     }
 }
 fn response(v: Value) -> ResponseTemplate {
-    ResponseTemplate::new(200).set_body_json(
+    crate::claude::test::reply(
         json!({"choices":[{"finish_reason":"stop","message":{"content":v.to_string()}}]}),
     )
 }
 async fn intent(server: &MockServer, n: u64) {
-    Mock::given(method("POST")).and(body_partial_json(json!({"response_format":{"json_schema":{"name":"buddy_research_evidence"}}})))
+    Mock::given(method("POST")).and(body_partial_json(json!({"output_config":{"format":{"schema":{"description":"buddy_research_evidence"}}}})))
         .respond_with(|r:&wiremock::Request| {
             let request:Value=serde_json::from_slice(&r.body).unwrap();
-            let context:Value=serde_json::from_str(request["messages"][1]["content"].as_str().unwrap()).unwrap();
+            let context:Value=serde_json::from_str(request["messages"][0]["content"].as_str().unwrap()).unwrap();
             let sources=context["sources"].as_array().unwrap().iter().enumerate().map(|(index,s)| {
                 let available = s["excerpts"].as_array().unwrap();
                 json!({"source_index":index,"applicability":if !available.is_empty() {"applicable"}else{"unverified"},"reason":"Synthetic source","excerpt_ids":if !available.is_empty() {vec![0]}else{vec![]}})
@@ -66,7 +66,7 @@ async fn intent(server: &MockServer, n: u64) {
         }).mount(server).await;
     Mock::given(method("POST"))
         .and(body_partial_json(
-            json!({"response_format":{"json_schema":{"name":"buddy_contextual_search_intent"}}}),
+            json!({"output_config":{"format":{"schema":{"description":"buddy_contextual_search_intent"}}}}),
         ))
         .respond_with(response(
             json!({"query":"Rust async lifetime official guide"}),
@@ -76,12 +76,12 @@ async fn intent(server: &MockServer, n: u64) {
         .await;
 }
 async fn synthesis(server: &MockServer, n: u64) {
-    Mock::given(method("POST")).and(body_partial_json(json!({"response_format":{"json_schema":{"name":"buddy_contextual_research_result"}}})))
+    Mock::given(method("POST")).and(body_partial_json(json!({"output_config":{"format":{"schema":{"description":"buddy_contextual_research_result"}}}})))
         .respond_with(response(json!({"summary":"Keep borrowed data alive for the async task.","next_action":"Move an owned value into the task and run the example.","source_indices":[0]}))).expect(n).mount(server).await;
 }
 async fn search(server: &MockServer, results: Value, n: u64) {
     Mock::given(method("POST")).and(body_partial_json(json!({"query":"Rust async lifetime official guide","search_depth":"advanced","include_raw_content":false})))
-        .respond_with(ResponseTemplate::new(200).set_body_json(json!({"results":results}))).expect(n).mount(server).await;
+        .respond_with(crate::claude::test::reply(json!({"results":results}))).expect(n).mount(server).await;
 }
 fn sources() -> Value {
     json!([{"title":"Rust async guide","url":"https://rust-lang.org/async","content":"Owned values can outlive the borrowed scope."}])
@@ -96,17 +96,17 @@ fn authorize(state: &AppState, goal: i64, step: &str) -> i64 {
         .unwrap()
 }
 async fn complete(state: &AppState, goal: i64, step: &str) -> Attachment {
-    let nebius = MockServer::start().await;
+    let claude = MockServer::start().await;
     let tavily = MockServer::start().await;
-    intent(&nebius, 1).await;
-    synthesis(&nebius, 1).await;
+    intent(&claude, 1).await;
+    synthesis(&claude, 1).await;
     search(&tavily, sources(), 1).await;
     let id = authorize(state, goal, step);
     run_with_service(
         state,
         goal,
         id,
-        &service(state, &nebius),
+        &service(state, &claude),
         &tavily.uri(),
         "fixture",
     )
@@ -162,10 +162,10 @@ async fn stuck_without_consent_never_calls_tavily_or_enqueues_network_work() {
 #[tokio::test]
 async fn confirmation_to_tavily_to_work_context_mocked_end_to_end() {
     let (state, goal, step) = state();
-    let nebius = MockServer::start().await;
+    let claude = MockServer::start().await;
     let tavily = MockServer::start().await;
-    intent(&nebius, 1).await;
-    synthesis(&nebius, 1).await;
+    intent(&claude, 1).await;
+    synthesis(&claude, 1).await;
     let mut candidates = sources();
     candidates.as_array_mut().unwrap().push(json!({"title":"Another useful guide","url":"https://rust-lang.org/other","content":"Another approach"}));
     search(&tavily, candidates, 1).await;
@@ -178,7 +178,7 @@ async fn confirmation_to_tavily_to_work_context_mocked_end_to_end() {
         &state,
         goal,
         id,
-        &service(&state, &nebius),
+        &service(&state, &claude),
         &tavily.uri(),
         "fixture",
     )
@@ -216,11 +216,11 @@ async fn confirmation_to_tavily_to_work_context_mocked_end_to_end() {
         .any(|m| m.event_kind == Some(memory::EventKind::ResearchAccepted)));
     println!(
         "RESEARCH_E2E {}",
-        json!({"flow":"stuck -> offer -> explicit consent -> intent -> Tavily -> synthesis -> WorkContext -> helpful feedback","goal_id":goal,"step_id":step,"nebius_calls":3,"tavily_calls":1,"attached_sources":result.sources.len(),"completed_step":false})
+        json!({"flow":"stuck -> offer -> explicit consent -> intent -> Tavily -> synthesis -> WorkContext -> helpful feedback","goal_id":goal,"step_id":step,"claude_calls":3,"tavily_calls":1,"attached_sources":result.sources.len(),"completed_step":false})
     );
 }
 #[tokio::test]
-async fn correct_goal_step_and_only_relevant_memory_reach_nemotron() {
+async fn correct_goal_step_and_only_relevant_memory_reach_claude() {
     let (state, goal, step) = state();
     let other;
     {
@@ -247,28 +247,28 @@ async fn correct_goal_step_and_only_relevant_memory_reach_nemotron() {
             })
             .unwrap();
     }
-    let nebius = MockServer::start().await;
+    let claude = MockServer::start().await;
     let tavily = MockServer::start().await;
-    intent(&nebius, 1).await;
-    synthesis(&nebius, 1).await;
+    intent(&claude, 1).await;
+    synthesis(&claude, 1).await;
     search(&tavily, sources(), 1).await;
     let id = authorize(&state, goal, &step);
     run_with_service(
         &state,
         goal,
         id,
-        &service(&state, &nebius),
+        &service(&state, &claude),
         &tavily.uri(),
         "fixture",
     )
     .await
     .unwrap();
-    let requests = nebius.received_requests().await.unwrap();
+    let requests = claude.received_requests().await.unwrap();
     for r in requests {
         let body: Value = serde_json::from_slice(&r.body).unwrap();
-        let text = body["messages"][1]["content"].as_str().unwrap();
+        let text = body["messages"][0]["content"].as_str().unwrap();
         assert!(!text.contains("payroll"));
-        if body["response_format"]["json_schema"]["name"] == "buddy_research_evidence" {
+        if crate::claude::test::operation(&body) == "buddy_research_evidence" {
             assert!(!text.contains("Use owned Rust values") && !text.contains(&step));
             continue;
         }
@@ -381,7 +381,7 @@ fn invalid_goal_step_and_cross_goal_step_are_rejected() {
 #[tokio::test]
 async fn source_validation_and_duplicate_resources_preserve_real_destinations() {
     let (state, goal, step) = state();
-    let nebius = MockServer::start().await;
+    let claude = MockServer::start().await;
     let tavily = MockServer::start().await;
     state
         .inner
@@ -390,8 +390,8 @@ async fn source_validation_and_duplicate_resources_preserve_real_destinations() 
         .storage
         .save_suggestion(goal, "https://rust-lang.org/old")
         .unwrap();
-    intent(&nebius, 1).await;
-    synthesis(&nebius, 1).await;
+    intent(&claude, 1).await;
+    synthesis(&claude, 1).await;
     search(&tavily,json!([
         {"title":"Old guide","url":"https://rust-lang.org/old?utm_source=mail","content":"old"},
         {"title":"Unsafe","url":"javascript:alert(1)","content":"bad"},
@@ -404,7 +404,7 @@ async fn source_validation_and_duplicate_resources_preserve_real_destinations() 
         &state,
         goal,
         id,
-        &service(&state, &nebius),
+        &service(&state, &claude),
         &tavily.uri(),
         "fixture",
     )
@@ -415,7 +415,7 @@ async fn source_validation_and_duplicate_resources_preserve_real_destinations() 
         result.sources[0].url,
         "https://rust-lang.org/new?id=2&utm_source=web"
     );
-    let req = nebius.received_requests().await.unwrap();
+    let req = claude.received_requests().await.unwrap();
     let final_request = String::from_utf8(req.last().unwrap().body.clone()).unwrap();
     assert!(!final_request.contains("javascript:"));
     assert!(!final_request.contains("Old guide"));
@@ -424,17 +424,17 @@ async fn source_validation_and_duplicate_resources_preserve_real_destinations() 
 async fn duplicate_only_results_do_not_call_synthesis_or_attach() {
     let (state, goal, step) = state();
     let result = complete(&state, goal, &step).await;
-    let nebius = MockServer::start().await;
+    let claude = MockServer::start().await;
     let tavily = MockServer::start().await;
-    intent(&nebius, 1).await;
-    synthesis(&nebius, 0).await;
+    intent(&claude, 1).await;
+    synthesis(&claude, 0).await;
     search(&tavily, sources(), 1).await;
     let id = authorize(&state, goal, &step);
     assert!(run_with_service(
         &state,
         goal,
         id,
-        &service(&state, &nebius),
+        &service(&state, &claude),
         &tavily.uri(),
         "fixture"
     )
@@ -458,10 +458,10 @@ async fn duplicate_only_results_do_not_call_synthesis_or_attach() {
 #[tokio::test]
 async fn tavily_unavailable_has_no_synthesis_or_attached_result() {
     let (state, goal, step) = state();
-    let nebius = MockServer::start().await;
+    let claude = MockServer::start().await;
     let tavily = MockServer::start().await;
-    intent(&nebius, 1).await;
-    synthesis(&nebius, 0).await;
+    intent(&claude, 1).await;
+    synthesis(&claude, 0).await;
     Mock::given(method("POST"))
         .respond_with(ResponseTemplate::new(401).set_body_string("PRIVATE_PROVIDER_BODY"))
         .expect(1)
@@ -472,7 +472,7 @@ async fn tavily_unavailable_has_no_synthesis_or_attached_result() {
         &state,
         goal,
         id,
-        &service(&state, &nebius),
+        &service(&state, &claude),
         &tavily.uri(),
         "fixture",
     )
@@ -493,14 +493,14 @@ async fn tavily_unavailable_has_no_synthesis_or_attached_result() {
     );
 }
 #[tokio::test]
-async fn nemotron_unavailable_prevents_tavily() {
+async fn claude_unavailable_prevents_tavily() {
     let (state, goal, step) = state();
-    let nebius = MockServer::start().await;
+    let claude = MockServer::start().await;
     let tavily = MockServer::start().await;
     Mock::given(method("POST"))
         .respond_with(ResponseTemplate::new(401))
         .expect(1)
-        .mount(&nebius)
+        .mount(&claude)
         .await;
     search(&tavily, sources(), 0).await;
     let id = authorize(&state, goal, &step);
@@ -508,7 +508,7 @@ async fn nemotron_unavailable_prevents_tavily() {
         &state,
         goal,
         id,
-        &service(&state, &nebius),
+        &service(&state, &claude),
         &tavily.uri(),
         "fixture"
     )
@@ -519,27 +519,27 @@ async fn nemotron_unavailable_prevents_tavily() {
 async fn malformed_intent_and_hallucinated_source_indices_never_attach() {
     for bad_intent in [true, false] {
         let (state, goal, step) = state();
-        let nebius = MockServer::start().await;
+        let claude = MockServer::start().await;
         let tavily = MockServer::start().await;
         if bad_intent {
             Mock::given(method("POST"))
                 .respond_with(response(json!({"query":"api_key=must-not-leave"})))
                 .expect(2)
-                .mount(&nebius)
+                .mount(&claude)
                 .await;
             search(&tavily, sources(), 0).await;
         } else {
-            intent(&nebius, 1).await;
+            intent(&claude, 1).await;
             search(&tavily, sources(), 1).await;
-            Mock::given(method("POST")).and(body_partial_json(json!({"response_format":{"json_schema":{"name":"buddy_contextual_research_result"}}})))
-                .respond_with(response(json!({"summary":"A guess","next_action":"Do a thing","source_indices":[99]}))).expect(2).mount(&nebius).await;
+            Mock::given(method("POST")).and(body_partial_json(json!({"output_config":{"format":{"schema":{"description":"buddy_contextual_research_result"}}}})))
+                .respond_with(response(json!({"summary":"A guess","next_action":"Do a thing","source_indices":[99]}))).expect(2).mount(&claude).await;
         }
         let id = authorize(&state, goal, &step);
         assert!(run_with_service(
             &state,
             goal,
             id,
-            &service(&state, &nebius),
+            &service(&state, &claude),
             &tavily.uri(),
             "fixture"
         )
@@ -561,33 +561,35 @@ async fn malformed_intent_and_hallucinated_source_indices_never_attach() {
 #[tokio::test]
 async fn synthesis_repairs_with_source_bounds_without_chat_action_instructions() {
     let (state, goal, step) = state();
-    let nebius = MockServer::start().await;
+    let claude = MockServer::start().await;
     let tavily = MockServer::start().await;
-    intent(&nebius, 1).await;
+    intent(&claude, 1).await;
     search(&tavily, sources(), 1).await;
     let calls = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
     let observed = calls.clone();
     Mock::given(method("POST"))
-        .and(body_partial_json(json!({"response_format":{"json_schema":{"name":"buddy_contextual_research_result"}}})))
+        .and(body_partial_json(json!({"output_config":{"format":{"schema":{"description":"buddy_contextual_research_result"}}}})))
         .respond_with(move |request:&wiremock::Request| {
             let body:Value=serde_json::from_slice(&request.body).unwrap();
-            let context:Value=serde_json::from_str(body["messages"][1]["content"].as_str().unwrap()).unwrap();
+            let context:Value=serde_json::from_str(body["messages"][0]["content"].as_str().unwrap()).unwrap();
             assert_eq!(context["sources"][0]["source_index"],0);
-            assert_eq!(body["response_format"]["json_schema"]["schema"]["properties"]["source_indices"]["items"]["maximum"],0);
+            let items=&body["output_config"]["format"]["schema"]["properties"]["source_indices"]["items"];
+            assert!(items.get("maximum").is_none());
+            assert!(items["description"].as_str().unwrap().contains("\"maximum\":0"));
             let first=observed.fetch_add(1,std::sync::atomic::Ordering::SeqCst)==0;
             if !first {
-                let instructions=body["messages"][0]["content"].as_str().unwrap();
+                let instructions=crate::claude::test::system(&body).as_str().unwrap();
                 assert!(!instructions.contains("Copy instruction verbatim"));
                 assert!(!instructions.contains("Use only registered skills"));
             }
             response(json!({"summary":"Use an owned value for the async task.","next_action":"Try the documented example.","source_indices":[if first {99}else{0}]}))
-        }).expect(2).mount(&nebius).await;
+        }).expect(2).mount(&claude).await;
     let id = authorize(&state, goal, &step);
     let result = run_with_service(
         &state,
         goal,
         id,
-        &service(&state, &nebius),
+        &service(&state, &claude),
         &tavily.uri(),
         "fixture",
     )
@@ -599,7 +601,7 @@ async fn synthesis_repairs_with_source_bounds_without_chat_action_instructions()
 #[tokio::test]
 async fn privacy_revoked_during_intent_cancels_before_tavily() {
     let (state, goal, step) = state();
-    let nebius = MockServer::start().await;
+    let claude = MockServer::start().await;
     let tavily = MockServer::start().await;
     Mock::given(method("POST"))
         .respond_with(
@@ -607,11 +609,11 @@ async fn privacy_revoked_during_intent_cancels_before_tavily() {
                 .set_delay(std::time::Duration::from_millis(600)),
         )
         .expect(1)
-        .mount(&nebius)
+        .mount(&claude)
         .await;
     search(&tavily, sources(), 0).await;
     let id = authorize(&state, goal, &step);
-    let service = service(&state, &nebius);
+    let service = service(&state, &claude);
     let tavily_url = tavily.uri();
     let request = run_with_service(&state, goal, id, &service, &tavily_url, "fixture");
     let revoke = async {

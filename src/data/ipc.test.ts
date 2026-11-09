@@ -46,7 +46,7 @@ it("never records provider-key arguments in Diagnostics", async () => {
   );
   await expect(
     invoke("set_provider_key", {
-      provider: "nebius",
+      provider: "anthropic",
       key: "never-record-this-key",
     }),
   ).rejects.toBeTruthy();

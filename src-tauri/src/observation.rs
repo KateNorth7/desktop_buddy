@@ -123,7 +123,7 @@ pub(crate) fn capabilities(inner: &Inner) -> serde_json::Value {
         "tracking_enabled": inner.status.tracking,
         "tracking_has_error": inner.status.tracking_error.is_some(),
         "ai_enabled": ai.enabled,
-        "provider_key_configured": inner.status.nebius_configured,
+        "provider_key_configured": inner.status.anthropic_configured,
         "observation_enabled": crate::semantic_observation::owns_observation(inner),
         "goal_sharing_enabled": ai.share_goal_context,
         "interface_observation_enabled": p.screen_task_detection,

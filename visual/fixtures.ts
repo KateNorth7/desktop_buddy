@@ -145,7 +145,7 @@ function dashboard(theme: "light" | "dark", buddy: boolean): Dashboard {
       dnd: false,
       demo: false,
       mock_ai: false,
-      nebius_configured: true,
+      anthropic_configured: true,
       tavily_configured: true,
       last_collected_at: NOW,
     },
@@ -217,9 +217,9 @@ export function fixtureReply(
       return {
         connection_mode: "built_in",
         configured_model: null,
-        configured_vision_model: "moonshotai/Kimi-K3",
-        configured_image_description_model: "nvidia/Nemotron-3.5-Super-VL",
-        services: ["nebius", "nvidia", "tavily"].map((id) => ({
+        configured_vision_model: "claude-opus-5-5",
+        configured_image_description_model: "claude-opus-5-5",
+        services: ["anthropic", "model", "tavily"].map((id) => ({
           id,
           status: "not_checked",
           checked_at: null,

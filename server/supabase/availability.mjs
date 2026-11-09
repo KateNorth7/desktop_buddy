@@ -3,11 +3,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
-export const EXPECTED_MODELS = [
-  "nvidia/nemotron-3-super-120b-a12b",
-  "moonshotai/Kimi-K3",
-  "nvidia/Nemotron-3.5-Super-VL",
-];
+export const EXPECTED_MODELS = ["claude-opus-5-5"];
 const LIMIT = 2_000_000;
 class HealthFailure extends Error {
   constructor(stage, status = null) {
@@ -53,9 +49,9 @@ export async function checkAvailability({ config, fetcher = fetch, now = new Dat
   const report = {
     checked_at: now.toISOString(), status: "failed", stage: "configuration",
     public_client_key_expires_at: clientKeyExpiry(config?.publishableKey),
-    checks: { anonymous_auth: false, nebius_catalog: false, tavily_auth: false, session_signout: false },
+    checks: { anonymous_auth: false, claude_model: false, tavily_auth: false, session_signout: false },
     models: Object.fromEntries(EXPECTED_MODELS.map(id => [id, false])),
-    scope: "Authentication and catalog/usage health; no generation, search or desktop observation.",
+    scope: "Authentication and model/usage health; no generation, search or desktop observation.",
   };
   let session, base, headers;
   try {
@@ -76,14 +72,16 @@ export async function checkAvailability({ config, fetcher = fetch, now = new Dat
     report.checks.anonymous_auth = true;
     headers = { apikey: config.publishableKey, Authorization: "Bearer " + session.access_token };
     // Each existing gateway health operation updates database-backed usage counters.
-    // Its upstream provider credentials never return to this process.
-    const catalog = await jsonResponse(fetcher, base + "/functions/v1/buddy-ai/nebius/v1/models", {
-      method: "GET", headers,
-    }, "nebius_catalog");
-    if (!Array.isArray(catalog.data)) throw new HealthFailure("nebius_catalog");
-    for (const id of EXPECTED_MODELS) report.models[id] = catalog.data.some(m => m?.id === id);
-    if (!Object.values(report.models).every(Boolean)) throw new HealthFailure("nebius_models_missing");
-    report.checks.nebius_catalog = true;
+    // Its upstream provider credentials never return to this process. One model
+    // object is read per expected model, so catalog pagination cannot hide it.
+    for (const id of EXPECTED_MODELS) {
+      const model = await jsonResponse(fetcher, base + "/functions/v1/buddy-ai/anthropic/v1/models/" + id, {
+        method: "GET", headers,
+      }, "claude_model");
+      report.models[id] = model?.id === id;
+    }
+    if (!Object.values(report.models).every(Boolean)) throw new HealthFailure("claude_models_missing");
+    report.checks.claude_model = true;
     const tavily = await jsonResponse(fetcher, base + "/functions/v1/buddy-ai/tavily/usage", {
       method: "GET", headers,
     }, "tavily_auth");

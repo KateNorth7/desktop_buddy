@@ -174,7 +174,7 @@ async function command(spec, output) {
   // Normal suites use synthetic fixtures and local HTTP servers; ignored live tests stay ignored.
   for (const name of Object.keys(childEnv)) {
     if (
-      /^(?:NEBIUS|TAVILY|OPENAI|NVIDIA|TAURI_SIGNING)_|^BUDDY_LIVE_DIAGNOSTICS$/.test(
+      /^(?:ANTHROPIC|TAVILY|OPENAI|TAURI_SIGNING)_|^BUDDY_LIVE_DIAGNOSTICS$/.test(
         name,
       )
     )

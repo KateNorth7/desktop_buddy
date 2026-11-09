@@ -234,7 +234,7 @@ struct ConnectionHealth {
 }
 fn provider_index(provider: &str) -> Result<usize, String> {
     match provider {
-        "nebius" => Ok(0),
+        "anthropic" => Ok(0),
         "tavily" => Ok(1),
         _ => Err("Unknown provider".into()),
     }
@@ -274,8 +274,8 @@ pub(crate) fn finish_connection_check(
     // Startup metadata can predate Keychain authorization or a completed app update.
     // A successful current probe proves that a usable runtime credential exists.
     if connected {
-        if provider == "nebius" {
-            inner.status.nebius_configured = true;
+        if provider == "anthropic" {
+            inner.status.anthropic_configured = true;
         } else {
             inner.status.tavily_configured = true;
         }
@@ -289,16 +289,16 @@ pub(crate) fn finish_connection_check(
     });
 }
 fn service_status_view(inner: &Inner) -> Value {
-    let configured_model = http::secret("NEBIUS_MODEL_ID")
+    let configured_model = http::secret("ANTHROPIC_MODEL_ID")
         .ok()
         .as_deref()
         .and_then(model_label);
     let services: Vec<Value> = [
-        ("nebius", 0, inner.status.nebius_configured),
+        ("anthropic", 0, inner.status.anthropic_configured),
         (
-            "nvidia",
+            "model",
             0,
-            inner.status.nebius_configured && configured_model.is_some(),
+            inner.status.anthropic_configured && configured_model.is_some(),
         ),
         ("tavily", 1, inner.status.tavily_configured),
     ]
@@ -317,7 +317,7 @@ fn service_status_view(inner: &Inner) -> Value {
             match check {
                 None => "not_checked",
                 Some(c) if c.checked.elapsed() > Duration::from_secs(15 * 60) => "expired",
-                Some(c) if !c.connected || (id == "nvidia" && c.model_available != Some(true)) => {
+                Some(c) if !c.connected || (id == "model" && c.model_available != Some(true)) => {
                     "unavailable"
                 }
                 Some(_) => "verified",
@@ -329,7 +329,7 @@ fn service_status_view(inner: &Inner) -> Value {
     json!({
         "connection_mode": crate::shared_ai::mode(),
         "configured_model": configured_model,
-        "configured_response_model": http::secret("NEBIUS_MODEL_ID")
+        "configured_response_model": http::secret("ANTHROPIC_MODEL_ID")
             .ok().map(|m| http::response_model(&m)).as_deref().and_then(model_label),
         "configured_vision_model": model_label(&crate::vision::configured_model(inner)),
         "configured_image_description_model": model_label(&crate::vision::image_model()),
@@ -689,8 +689,8 @@ pub(crate) fn view(inner: &Inner) -> Result<Value, String> {
         }
     };
     Ok(
-        json!({"provider":"Nebius Token Factory","configured_model":http::secret("NEBIUS_MODEL_ID").ok().as_deref().and_then(model_label),
-        "configured_reasoning_model":http::secret("NEBIUS_MODEL_ID").ok().map(|m|http::response_model(&m)).as_deref().and_then(model_label),
+        json!({"provider":"Claude (Anthropic)","configured_model":http::secret("ANTHROPIC_MODEL_ID").ok().as_deref().and_then(model_label),
+        "configured_reasoning_model":http::secret("ANTHROPIC_MODEL_ID").ok().map(|m|http::response_model(&m)).as_deref().and_then(model_label),
         "inference_mode":if inner.engine.privacy==inner.privacy_revision {inner.engine.last.as_ref().map(|i|if goal_analysis::deliberate_operation(&i.operation){"deliberate"}else{"fast"})}else{None},
         "active_goal":goal.as_ref().map(|g|json!({"id":g.id,"label":label(&g.text)})),"active_step":step.map(|s|json!({"id":s.id,"label":label(&s.text)})),
         "work_state":crate::work_state::compute(inner)?.state,"retrieval":retrieval,"last_decision":inner.agent.diagnostics.last_decision,
@@ -733,8 +733,7 @@ fn failure(status: &'static str, error: &'static str, start: Instant) -> Health 
 async fn health_call(service: &Service<'_>, timeout: Duration) -> Health {
     let start = Instant::now();
     let schema = json!({"type":"object","additionalProperties":false,"properties":{"ok":{"type":"boolean","const":true}},"required":["ok"]});
-    let payload = json!({"model":service.model,"temperature":0,"max_tokens":1024,
-
+    let payload = json!({"model":service.model,"max_tokens":1024,
         "response_format":{"type":"json_schema","json_schema":{"name":"buddy_safe_inference_health","strict":true,"schema":schema}},
         "messages":[{"role":"system","content":"Return exactly the JSON object {\"ok\":true}. No explanation or user data is needed."},{"role":"user","content":"Check structured inference."}]});
     let result = tokio::time::timeout(timeout, async {
@@ -743,6 +742,7 @@ async fn health_call(service: &Service<'_>, timeout: Duration) -> Health {
             reqwest::Method::POST,
             &service.endpoint,
             &service.key,
+            crate::shared_ai::Auth::Claude,
         )
         .await
         .map_err(|_| {
@@ -752,10 +752,12 @@ async fn health_call(service: &Service<'_>, timeout: Duration) -> Health {
             )
         })?;
         let mut response = request
-            .json(&http::constrained_payload(&payload))
+            .json(&crate::claude::to_request(&http::constrained_payload(
+                &payload,
+            )))
             .send()
             .await
-            .map_err(|_| ("network_error", "Nebius could not be reached."))?;
+            .map_err(|_| ("network_error", "Claude could not be reached."))?;
         guard
             .check()
             .map_err(|_| ("cancelled", "AI connection changed."))?;
@@ -767,7 +769,7 @@ async fn health_call(service: &Service<'_>, timeout: Duration) -> Health {
                 ),
                 402 => ("billing_required", "Provider credits are required."),
                 429 => ("rate_limited", "Provider rate limit reached."),
-                500..=599 => ("unavailable", "Nebius is temporarily unavailable."),
+                500..=599 => ("unavailable", "Claude is temporarily unavailable."),
                 _ => (
                     "request_rejected",
                     "Check the configured model and endpoint.",
@@ -778,37 +780,39 @@ async fn health_call(service: &Service<'_>, timeout: Duration) -> Health {
         while let Some(chunk) = response
             .chunk()
             .await
-            .map_err(|_| ("network_error", "Nebius response could not be read."))?
+            .map_err(|_| ("network_error", "Claude response could not be read."))?
         {
             if bytes.len() + chunk.len() > 16384 {
                 return Err((
                     "invalid_response",
-                    "Nebius health response exceeded the size limit.",
+                    "Claude health response exceeded the size limit.",
                 ));
             }
             bytes.extend_from_slice(&chunk);
         }
         let value: Value = serde_json::from_slice(&bytes)
-            .map_err(|_| ("invalid_json", "Nebius returned invalid JSON."))?;
+            .map_err(|_| ("invalid_json", "Claude returned invalid JSON."))?;
+        let value = crate::claude::from_response(value)
+            .map_err(|_| ("invalid_response", "Claude returned an unexpected response."))?;
         guard
             .check()
             .map_err(|_| ("cancelled", "AI connection changed."))?;
         let text = goal_analysis::response_text(&value).map_err(|_| {
             (
                 "invalid_response",
-                "Nebius did not complete the structured response.",
+                "Claude did not complete the structured response.",
             )
         })?;
         let probe: Probe = serde_json::from_str(text).map_err(|_| {
             (
                 "invalid_schema",
-                "Nebius did not return the required JSON Schema.",
+                "Claude did not return the required JSON Schema.",
             )
         })?;
         if !probe.ok {
             return Err((
                 "invalid_schema",
-                "Nebius did not return the required JSON Schema.",
+                "Claude did not return the required JSON Schema.",
             ));
         }
         Ok(value["model"].as_str().and_then(model_label))
@@ -825,7 +829,7 @@ async fn health_call(service: &Service<'_>, timeout: Duration) -> Health {
         Ok(Err((status, error))) => failure(status, error, start),
         Err(_) => failure(
             "timeout",
-            "Nebius inference timed out after the bounded wait.",
+            "Claude inference timed out after the bounded wait.",
             start,
         ),
     }
@@ -866,7 +870,7 @@ fn claim_health(inner: &mut Inner, now: Instant) -> Result<u64, String> {
     Ok(inner.privacy_revision)
 }
 #[tauri::command(async)]
-pub async fn test_nebius_inference(
+pub async fn test_claude_inference(
     window: WebviewWindow,
     state: State<'_, AppState>,
 ) -> Result<Health, String> {
@@ -883,7 +887,7 @@ pub async fn test_nebius_inference(
         Ok(service) => health_call(&service, Duration::from_secs(20)).await,
         Err(_) => failure(
             "not_configured",
-            "Configure Nebius before testing inference.",
+            "Configure Claude before testing inference.",
             Instant::now(),
         ),
     };

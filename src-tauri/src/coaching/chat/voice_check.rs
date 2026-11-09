@@ -331,7 +331,7 @@ pub(crate) async fn run() -> Result<bool, String> {
         if mock {
             "MOCK, not live quality"
         } else {
-            "real Nebius"
+            "real Claude"
         }
     );
     println!("Fixed judge model: {JUDGE_MODEL} (no model fallback)");
@@ -419,8 +419,8 @@ mod tests {
         wiremock::Mock::given(wiremock::matchers::method("POST"))
             .respond_with(|request: &wiremock::Request| {
                 let body: Value = serde_json::from_slice(&request.body).unwrap();
-                let name = body["response_format"]["json_schema"]["name"].as_str().unwrap();
-                let context: Value = serde_json::from_str(body["messages"][1]["content"].as_str().unwrap()).unwrap();
+                let name = crate::claude::test::operation(&body).as_str().unwrap();
+                let context: Value = serde_json::from_str(body["messages"][0]["content"].as_str().unwrap()).unwrap();
                 let value = if name == "buddy_coaching_response" {
                     assert!(context["context"]["history"].is_array());
                     assert!(context["context"]["target"]["goal_id"].is_i64());
@@ -432,7 +432,7 @@ mod tests {
                     assert!(matches!(first.as_str(),"reply"|"rubric"));
                     json!({"score":4,"criteria":[true,false,true,true,true],"reason":"Local HTTP fixture"})
                 };
-                wiremock::ResponseTemplate::new(200).set_body_json(output::envelope(value))
+                crate::claude::test::reply(output::envelope(value))
             }).expect(3).mount(&server).await;
         let client = reqwest::Client::new();
         let service = Service {

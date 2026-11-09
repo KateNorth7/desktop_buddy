@@ -24,27 +24,29 @@ async fn manual_health_is_one_real_bounded_schema_request_without_user_context()
             let body: Value = serde_json::from_slice(&req.body).unwrap();
             assert_eq!(body["model"], "configured-fixture");
             assert_eq!(body["max_tokens"], 1024);
-            assert_eq!(body["response_format"]["json_schema"]["strict"], true);
+            assert_eq!(body["output_config"]["format"]["type"], "json_schema");
+            assert!(body.get("temperature").is_none());
             assert_eq!(
-                body["response_format"]["json_schema"]["schema"]["additionalProperties"],
+                body["output_config"]["format"]["schema"]["additionalProperties"],
                 false
             );
             assert_eq!(
-                body["response_format"]["json_schema"]["schema"]["properties"]["ok"]["const"],
+                body["output_config"]["format"]["schema"]["properties"]["ok"]["const"],
                 true
             );
             assert_eq!(
-                body["messages"][1]["content"],
+                body["messages"][0]["content"],
                 "Check structured inference."
             );
-            assert_eq!(body["messages"].as_array().unwrap().len(), 2);
+            assert_eq!(body["messages"].as_array().unwrap().len(), 1);
+            assert!(crate::claude::test::system(&body).as_str().unwrap().contains("Return exactly the JSON object"));
             assert!(!body.to_string().contains("fixture-secret"));
             assert!(
                 body.get("memory").is_none()
                     && body.get("audio").is_none()
                     && body.get("goal").is_none()
             );
-            ResponseTemplate::new(200).set_body_json(response("{\"ok\":true}"))
+            crate::claude::test::reply(response("{\"ok\":true}"))
         })
         .expect(1)
         .mount(&server)
@@ -80,7 +82,7 @@ async fn health_rejects_malformed_json_schema_refusal_and_truncation() {
         let state = state();
         let server = MockServer::start().await;
         Mock::given(method("POST"))
-            .respond_with(ResponseTemplate::new(200).set_body_json(body))
+            .respond_with(crate::claude::test::reply(body))
             .expect(1)
             .mount(&server)
             .await;
@@ -123,8 +125,7 @@ async fn health_handles_timeout_invalid_envelope_and_size_limit() {
     let state = state();
     for (template, status, timeout) in [
         (
-            ResponseTemplate::new(200)
-                .set_body_json(response("{\"ok\":true}"))
+            crate::claude::test::reply(response("{\"ok\":true}"))
                 .set_delay(Duration::from_millis(100)),
             "timeout",
             Duration::from_millis(10),
@@ -268,14 +269,14 @@ fn request_cancellation_newest_request_and_privacy_staleness_are_observable() {
     stale.finish("success", None);
     assert!(view(&state.inner.lock().unwrap()).unwrap()["last_inference"].is_null());
     assert!(model_label("model\nsecret=token").is_none());
-    assert!(model_label("nvidia/nemotron-3-super-120b-a12b").is_some());
+    assert!(model_label("claude-opus-5-5").is_some());
 }
 #[tokio::test]
 async fn instrumented_request_uses_existing_validation_and_records_metadata_only() {
     let state = state();
     let server = MockServer::start().await;
     Mock::given(method("POST"))
-        .respond_with(ResponseTemplate::new(200).set_body_json(response("{\"ok\":true}")))
+        .respond_with(crate::claude::test::reply(response("{\"ok\":true}")))
         .expect(1)
         .mount(&server)
         .await;
@@ -304,7 +305,7 @@ async fn instrumented_request_uses_existing_validation_and_records_metadata_only
 fn sidebar_status_is_content_free_and_configuration_does_not_claim_connectivity() {
     let state = state();
     let mut inner = state.inner.lock().unwrap();
-    inner.status.nebius_configured = true;
+    inner.status.anthropic_configured = true;
     inner.status.tavily_configured = true;
     let status = service_status_view(&inner);
     assert_eq!(status["services"][0]["status"], "not_checked");
@@ -353,20 +354,20 @@ fn sidebar_status_is_content_free_and_configuration_does_not_claim_connectivity(
 fn sidebar_distinguishes_provider_access_from_model_access_and_expires_checks() {
     let state = state();
     let mut inner = state.inner.lock().unwrap();
-    inner.status.nebius_configured = true;
+    inner.status.anthropic_configured = true;
     inner.status.tavily_configured = true;
-    begin_connection_check(&mut inner, "nebius").unwrap();
-    assert!(begin_connection_check(&mut inner, "nebius").is_err());
+    begin_connection_check(&mut inner, "anthropic").unwrap();
+    assert!(begin_connection_check(&mut inner, "anthropic").is_err());
     assert_eq!(
         service_status_view(&inner)["services"][0]["status"],
         "checking"
     );
     let revision = inner.privacy_revision;
-    finish_connection_check(&mut inner, "nebius", revision, true, Some(false));
+    finish_connection_check(&mut inner, "anthropic", revision, true, Some(false));
     let status = service_status_view(&inner);
     assert_eq!(status["services"][0]["status"], "verified");
     assert_eq!(status["services"][1]["status"], "unavailable");
-    assert!(begin_connection_check(&mut inner, "nebius").is_err());
+    assert!(begin_connection_check(&mut inner, "anthropic").is_err());
     finish_connection_check(&mut inner, "tavily", revision, false, None);
     assert_eq!(
         service_status_view(&inner)["services"][2]["status"],
@@ -387,9 +388,9 @@ fn sidebar_distinguishes_provider_access_from_model_access_and_expires_checks() 
 fn sidebar_invalidates_checks_and_discards_results_when_credentials_or_privacy_change() {
     let state = state();
     let mut inner = state.inner.lock().unwrap();
-    inner.status.nebius_configured = true;
+    inner.status.anthropic_configured = true;
     let revision = inner.privacy_revision;
-    finish_connection_check(&mut inner, "nebius", revision, true, Some(true));
+    finish_connection_check(&mut inner, "anthropic", revision, true, Some(true));
     assert_eq!(
         service_status_view(&inner)["services"][1]["status"],
         "verified"
@@ -399,15 +400,15 @@ fn sidebar_invalidates_checks_and_discards_results_when_credentials_or_privacy_c
         service_status_view(&inner)["services"][1]["status"],
         "not_checked"
     );
-    begin_connection_check(&mut inner, "nebius").unwrap();
-    finish_connection_check(&mut inner, "nebius", revision, true, Some(true));
+    begin_connection_check(&mut inner, "anthropic").unwrap();
+    finish_connection_check(&mut inner, "anthropic", revision, true, Some(true));
     // A stale completion must not clear the newer connection check.
     assert_eq!(
         service_status_view(&inner)["services"][0]["status"],
         "checking"
     );
     let current_revision = inner.privacy_revision;
-    finish_connection_check(&mut inner, "nebius", current_revision, true, Some(true));
+    finish_connection_check(&mut inner, "anthropic", current_revision, true, Some(true));
     assert_eq!(
         service_status_view(&inner)["services"][0]["status"],
         "verified"
@@ -421,12 +422,12 @@ fn successful_probe_refreshes_stale_startup_configuration_flags() {
     let state = state();
     let mut inner = state.inner.lock().unwrap();
     inner.status.mock_ai = false;
-    inner.status.nebius_configured = false;
+    inner.status.anthropic_configured = false;
     inner.status.tavily_configured = false;
     let revision = inner.privacy_revision;
-    finish_connection_check(&mut inner, "nebius", revision, true, Some(true));
+    finish_connection_check(&mut inner, "anthropic", revision, true, Some(true));
     finish_connection_check(&mut inner, "tavily", revision, true, None);
-    assert!(inner.status.nebius_configured && inner.status.tavily_configured);
+    assert!(inner.status.anthropic_configured && inner.status.tavily_configured);
     for service in service_status_view(&inner)["services"].as_array().unwrap() {
         assert_eq!(service["status"], "verified");
     }
@@ -437,13 +438,13 @@ fn failed_or_stale_probe_cannot_restore_removed_credential_status() {
     let state = state();
     let mut inner = state.inner.lock().unwrap();
     inner.status.mock_ai = false;
-    inner.status.nebius_configured = false;
+    inner.status.anthropic_configured = false;
     inner.status.tavily_configured = false;
     let revision = inner.privacy_revision;
-    finish_connection_check(&mut inner, "nebius", revision, false, None);
+    finish_connection_check(&mut inner, "anthropic", revision, false, None);
     inner.mark_consent_change();
     finish_connection_check(&mut inner, "tavily", revision, true, None);
-    assert!(!inner.status.nebius_configured && !inner.status.tavily_configured);
+    assert!(!inner.status.anthropic_configured && !inner.status.tavily_configured);
     assert_eq!(
         service_status_view(&inner)["services"][2]["status"],
         "not_configured"
@@ -455,11 +456,11 @@ fn a_probe_from_the_previous_connection_cannot_clear_the_new_connections_check()
     let state = state();
     let mut inner = state.inner.lock().unwrap();
     let old = inner.last_consent_change;
-    begin_connection_check(&mut inner, "nebius").unwrap();
+    begin_connection_check(&mut inner, "anthropic").unwrap();
     inner.mark_consent_change();
     invalidate_connections(&mut inner);
-    begin_connection_check(&mut inner, "nebius").unwrap();
-    finish_connection_check(&mut inner, "nebius", old, true, Some(true));
+    begin_connection_check(&mut inner, "anthropic").unwrap();
+    finish_connection_check(&mut inner, "anthropic", old, true, Some(true));
     assert!(inner.engine.checking_connections[0]);
     assert!(inner.engine.connections[0].is_none());
 }
@@ -468,10 +469,10 @@ fn a_probe_from_the_previous_connection_cannot_clear_the_new_connections_check()
 fn goal_edits_do_not_invalidate_provider_authentication_or_in_flight_checks() {
     let state = state();
     let mut inner = state.inner.lock().unwrap();
-    inner.status.nebius_configured = true;
+    inner.status.anthropic_configured = true;
     inner.status.tavily_configured = true;
     let revision = inner.last_consent_change;
-    finish_connection_check(&mut inner, "nebius", revision, true, Some(true));
+    finish_connection_check(&mut inner, "anthropic", revision, true, Some(true));
     begin_connection_check(&mut inner, "tavily").unwrap();
     // Goal and chat edits advance the domain revision, without changing consent.
     inner.privacy_revision += 1;
@@ -489,16 +490,16 @@ fn goal_edits_do_not_invalidate_provider_authentication_or_in_flight_checks() {
 fn privacy_change_releases_old_probe_without_waiting_for_its_response() {
     let state = state();
     let mut inner = state.inner.lock().unwrap();
-    inner.status.nebius_configured = true;
-    begin_connection_check(&mut inner, "nebius").unwrap();
+    inner.status.anthropic_configured = true;
+    begin_connection_check(&mut inner, "anthropic").unwrap();
     let old = inner.privacy_revision;
     inner.mark_consent_change();
     assert_eq!(
         service_status_view(&inner)["services"][0]["status"],
         "not_checked"
     );
-    begin_connection_check(&mut inner, "nebius").unwrap();
-    finish_connection_check(&mut inner, "nebius", old, true, Some(true));
+    begin_connection_check(&mut inner, "anthropic").unwrap();
+    finish_connection_check(&mut inner, "anthropic", old, true, Some(true));
     assert_eq!(
         service_status_view(&inner)["services"][0]["status"],
         "checking"

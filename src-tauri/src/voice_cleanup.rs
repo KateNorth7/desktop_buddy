@@ -505,9 +505,9 @@ mod tests {
                 .respond_with(move |r: &Request| {
                     let payload: Value = serde_json::from_slice(&r.body).unwrap();
                     assert_eq!(payload["max_tokens"], 1536);
-                    assert_eq!(payload["messages"].as_array().unwrap().len(), 2);
+                    assert_eq!(payload["messages"].as_array().unwrap().len(), 1);
                     let context: Value =
-                        serde_json::from_str(payload["messages"][1]["content"].as_str().unwrap())
+                        serde_json::from_str(payload["messages"][0]["content"].as_str().unwrap())
                             .unwrap();
                     assert_eq!(context.as_object().unwrap().len(), 3);
                     assert_eq!(context["transcript"], "Fix Sumiap");
@@ -519,7 +519,7 @@ mod tests {
                     if !share {
                         assert!(!payload.to_string().contains("PRIVATE goal title"));
                     }
-                    ResponseTemplate::new(200).set_body_json(envelope(
+                    crate::claude::test::reply(envelope(
                         json!({"edits":[{"before":"Sumiap","after":"sumi app"}]}),
                     ))
                 })
@@ -545,7 +545,7 @@ mod tests {
     async fn invalid_provider_output_and_failure_keep_the_original_draft() {
         for template in [
             ResponseTemplate::new(500),
-            ResponseTemplate::new(200).set_body_json(envelope(
+            crate::claude::test::reply(envelope(
                 json!({"edits":[{"before":"not fix","after":"fix"}]}),
             )),
         ] {
@@ -577,7 +577,7 @@ mod tests {
         Mock::given(method("POST"))
             .respond_with(move |_: &Request| {
                 changed.inner.lock().unwrap().mark_consent_change();
-                ResponseTemplate::new(200).set_body_json(envelope(
+                crate::claude::test::reply(envelope(
                     json!({"edits":[{"before":"Sumiap","after":"sumi app"}]}),
                 ))
             })

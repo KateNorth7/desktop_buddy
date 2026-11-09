@@ -21,9 +21,9 @@ describe("provider settings commands", () => {
     expect(invoke).toHaveBeenLastCalledWith("set_dnd", { enabled: false });
   });
   it("saves an explicit provider key through the native boundary", async () => {
-    await api.providerKey("nebius", "test-key");
+    await api.providerKey("anthropic", "test-key");
     expect(invoke).toHaveBeenLastCalledWith("set_provider_key", {
-      provider: "nebius",
+      provider: "anthropic",
       key: "test-key",
     });
   });

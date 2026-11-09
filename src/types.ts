@@ -56,7 +56,7 @@ interface Status {
   dnd: boolean;
   demo: boolean;
   mock_ai: boolean;
-  nebius_configured: boolean;
+  anthropic_configured: boolean;
   tavily_configured: boolean;
 }
 interface PersonalWorkState {

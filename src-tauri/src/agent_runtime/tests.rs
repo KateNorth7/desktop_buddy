@@ -43,7 +43,7 @@ fn state() -> (AppState, i64) {
         crate::tracking::allow_notifications(&mut inner);
         inner.companion.view.preferences.screen_task_detection = true;
         inner.status.mock_ai = false;
-        inner.status.nebius_configured = true;
+        inner.status.anthropic_configured = true;
         inner.companion.view.preferences.quiet_start_minute = 0;
         inner.companion.view.preferences.quiet_end_minute = 0;
         inner.activity_state.state = crate::tracking::ActivityState::Focused;
@@ -60,7 +60,7 @@ fn event(kind: EventKind, id: i64) -> Event {
     Event::new(kind, Some(id), Utc::now().timestamp() - 10)
 }
 fn response(value: Value) -> ResponseTemplate {
-    ResponseTemplate::new(200).set_body_json(
+    crate::claude::test::reply(
         json!({"choices":[{"finish_reason":"stop","message":{"content":value.to_string()}}]}),
     )
 }
@@ -80,11 +80,11 @@ async fn mount_silent(server: &MockServer, n: u64) {
         .respond_with(|request: &Request| {
             let body: Value = serde_json::from_slice(&request.body).unwrap();
             assert_eq!(
-                body["response_format"]["json_schema"]["name"],
+                crate::claude::test::operation(&body),
                 "buddy_agent_reasoning"
             );
             let source: Value =
-                serde_json::from_str(body["messages"][1]["content"].as_str().unwrap()).unwrap();
+                serde_json::from_str(body["messages"][0]["content"].as_str().unwrap()).unwrap();
             response(reasoning(&source, "stay_silent"))
         })
         .expect(n)
@@ -237,7 +237,7 @@ async fn scoped_retrieval_precedes_reasoning_and_excludes_other_projects_and_scr
         .respond_with(|request: &Request| {
             let body: Value = serde_json::from_slice(&request.body).unwrap();
             let source: Value =
-                serde_json::from_str(body["messages"][1]["content"].as_str().unwrap()).unwrap();
+                serde_json::from_str(body["messages"][0]["content"].as_str().unwrap()).unwrap();
             let text = source.to_string();
             assert!(text.contains("Relevant confirmed fact"));
             assert!(!text.contains("UNRELATED"));
@@ -719,7 +719,7 @@ async fn background_repairs_malformed_output_without_explicit_chat_instructions(
         .respond_with(move |request: &Request| {
             let body: Value = serde_json::from_slice(&request.body).unwrap();
             let decisions =
-                &body["response_format"]["json_schema"]["schema"]["properties"]["decision"]["enum"];
+                &body["output_config"]["format"]["schema"]["properties"]["decision"]["enum"];
             assert!(!decisions
                 .as_array()
                 .unwrap()
@@ -727,11 +727,11 @@ async fn background_repairs_malformed_output_without_explicit_chat_instructions(
             if attempts.fetch_add(1, Ordering::SeqCst) == 0 {
                 return response(json!({"invalid":true}));
             }
-            let instructions = body["messages"][0]["content"].as_str().unwrap();
+            let instructions = crate::claude::test::system(&body).as_str().unwrap();
             assert!(instructions.contains("background validation (reasoning_json_invalid)"));
             assert!(!instructions.contains("Copy instruction verbatim from latest_request"));
             let source: Value =
-                serde_json::from_str(body["messages"][1]["content"].as_str().unwrap()).unwrap();
+                serde_json::from_str(body["messages"][0]["content"].as_str().unwrap()).unwrap();
             response(reasoning(&source, "stay_silent"))
         })
         .expect(2)

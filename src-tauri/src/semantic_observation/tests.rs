@@ -48,7 +48,7 @@ fn observation_rechecks_at_twenty_seconds_and_preserves_pause_and_consent_gates(
     inner.status.tracking = true;
     inner.status.demo = false;
     inner.status.mock_ai = false;
-    inner.status.nebius_configured = true;
+    inner.status.anthropic_configured = true;
     inner.companion.view.preferences.paused = false;
     inner.companion.view.preferences.screen_task_detection = true;
     inner.buddy.foreground = Some(ActivitySnapshot {
@@ -292,16 +292,16 @@ fn completing_an_observed_nonfocused_goal_preserves_other_work_and_durable_undo(
 async fn multimodal_payload_preserves_pixels_goal_context_and_strict_schema() {
     use wiremock::{
         matchers::{body_partial_json, method, path},
-        Mock, MockServer, ResponseTemplate,
+        Mock, MockServer,
     };
     let server = MockServer::start().await;
-    Mock::given(method("POST")).and(path("/v1/chat/completions"))
-        .and(body_partial_json(json!({"model":"synthetic-vision","response_format":{"type":"json_schema","json_schema":{"name":"semantic_goal_observation"}}})))
-        .respond_with(ResponseTemplate::new(200).set_body_json(answer(result()))).expect(1).mount(&server).await;
+    Mock::given(method("POST")).and(path("/v1/messages"))
+        .and(body_partial_json(json!({"model":"synthetic-vision","output_config":{"format":{"type":"json_schema","schema":{"description":"semantic_goal_observation"}}}})))
+        .respond_with(crate::claude::test::reply(answer(result()))).expect(1).mount(&server).await;
     let client = reqwest::Client::new();
     let service = Service {
         client: &client,
-        endpoint: format!("{}/v1/chat/completions", server.uri()),
+        endpoint: format!("{}/v1/messages", server.uri()),
         key: "synthetic-unused".into(),
         model: "synthetic-text".into(),
     };
@@ -320,8 +320,8 @@ async fn multimodal_payload_preserves_pixels_goal_context_and_strict_schema() {
     let requests = server.received_requests().await.unwrap();
     let payload: Value = serde_json::from_slice(&requests[0].body).unwrap();
     assert_eq!(
-        payload["messages"][1]["content"][1]["image_url"]["url"],
-        "data:image/jpeg;base64,synthetic-image"
+        payload["messages"][0]["content"][1]["source"]["data"],
+        "synthetic-image"
     );
 }
 
@@ -332,7 +332,7 @@ fn changed_goal_foreground_consent_and_sharing_reject_an_inflight_observation() 
     inner.status.tracking = true;
     inner.status.demo = false;
     inner.status.mock_ai = false;
-    inner.status.nebius_configured = true;
+    inner.status.anthropic_configured = true;
     inner.companion.view.preferences.paused = false;
     inner.companion.view.preferences.screen_task_detection = true;
     let activity = ActivitySnapshot {
@@ -376,7 +376,7 @@ fn captured_results_survive_safe_switches_but_never_privacy_boundaries_or_edits(
     inner.status.tracking = true;
     inner.status.demo = false;
     inner.status.mock_ai = false;
-    inner.status.nebius_configured = true;
+    inner.status.anthropic_configured = true;
     inner.companion.view.preferences.paused = false;
     inner.companion.view.preferences.screen_task_detection = true;
     let captured = ActivitySnapshot {

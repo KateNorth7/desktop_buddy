@@ -89,13 +89,13 @@ export const api = {
   privacyPreview: () => invoke<unknown>("get_privacy_preview"),
   retention: (days: number) => invoke<void>("set_retention", { days }),
   clearHistory: () => invoke<void>("clear_local_history", { confirmed: true }),
-  testConnection: (provider: "nebius" | "tavily") =>
+  testConnection: (provider: "anthropic" | "tavily") =>
     invoke<string>("test_provider_connection", { provider }),
   quit: () => invoke<void>("quit_app"),
   buddyPreferences: (preferences: BuddyPreferences) =>
     invoke<void>("set_buddy_preferences", { preferences }),
   openWorkspace: () => invoke<void>("open_workspace"),
-  providerKey: (provider: "nebius" | "tavily", key: string | null) =>
+  providerKey: (provider: "anthropic" | "tavily", key: string | null) =>
     invoke<void>("set_provider_key", { provider, key }),
   dashboard: () => invoke<Dashboard>("get_dashboard"),
   setGoal: (text: string) => invoke("set_goal", { text }),

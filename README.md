@@ -1,6 +1,6 @@
 # sumi
 
-A local-first desktop companion that helps you keep track of goals, return to unfinished work, and take the next useful step. Built with **Tauri 2, Rust, React/TypeScript and SQLite**, with cloud AI through **Nebius Token Factory** and web research through **Tavily**.
+A local-first desktop companion that helps you keep track of goals, return to unfinished work, and take the next useful step. Built with **Tauri 2, Rust, React/TypeScript and SQLite**, with cloud AI through the **Claude API (Anthropic)** and web research through **Tavily**.
 
 [MIT licensed](LICENSE).
 
@@ -36,7 +36,7 @@ The Mac application uses the project's stable internal code-signing identity. Th
 - **Optional active-window vision:** enabled for new profiles and switchable in Settings, with separate system permission, bounded encrypted review evidence, private/excluded-window gates and text fallback. Vision descriptions alone cannot close tasks.
 - **Daily continuity:** summarize saved priorities, waiting items, parked work and confirmed completions across goals, without inventing completed work or assigning a productivity score.
 - **Coaching:** one executable **Tiny Habits** workflow helps turn a goal barrier into a small feasible action and an anchor. It is not a collection of 16 implemented coaching workflows, and finishing a coaching micro-action does not automatically complete its parent goal.
-- **Local voice input:** turn supported local speech recognition into a transcript that enters the same chat/action pipeline as typed text. Raw audio is not sent to Nebius or Tavily.
+- **Local voice input:** turn supported local speech recognition into a transcript that enters the same chat/action pipeline as typed text. Raw audio is not sent to Claude or Tavily.
 
 These capabilities have different prerequisites. The companion can remain visible while tracking is paused; visibility does not mean background observation or AI calls are enabled.
 
@@ -44,17 +44,17 @@ These capabilities have different prerequisites. The companion can remain visibl
 
 | Component                 | Default configuration                              | Role                                                                                                           |
 | ------------------------- | -------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
-| Nebius Token Factory      | Hosted chat-completions API                        | Runs the configured language models; it is the inference provider                                              |
-| NVIDIA Nemotron           | `nvidia/nemotron-3-super-120b-a12b`                | Background reasoning, goal matching, completion analysis and auxiliary operations                              |
-| Kimi K3                   | `moonshotai/Kimi-K3`, through Nebius               | Interactive dialogue planning, action authorization/review, answers, research synthesis and checkpoint wording |
-| Goal-aware foreground observation | `moonshotai/Kimi-K3` through Nebius; first-pass vision model is configurable | Combines goals, permitted interface text, recent context and optional actual pixels; independently checks observable outcomes before opt-in completion |
-| Retrospective scene captioning | `nvidia/Nemotron-3.5-Super-VL` through Nebius | Bounded visual context for daily review; a caption alone is not completion evidence |
+| Claude API (Anthropic)    | Messages API, `https://api.anthropic.com/v1/messages` | Runs the configured Claude model; it is the inference provider                                              |
+| Primary model             | `claude-opus-5-5`                                  | Background reasoning, goal matching, completion analysis and auxiliary operations at low effort                |
+| Response model            | `claude-opus-5-5` (override with `ANTHROPIC_RESPONSE_MODEL_ID`) | Interactive dialogue planning, action authorization/review, answers, research synthesis and checkpoint wording |
+| Goal-aware foreground observation | `claude-opus-5-5`; the vision model is configurable | Combines goals, permitted interface text, recent context and optional actual pixels; independently checks observable outcomes before opt-in completion |
+| Retrospective scene captioning | `claude-opus-5-5` | Bounded visual context for daily review; a caption alone is not completion evidence |
 | Tavily                    | Search API                                         | Retrieves web sources; it is not a dialogue model                                                              |
 | Local speech recognition | Whisper large-v3-turbo via `whisper-rs`; Metal on Apple Silicon, CPU on Windows | Converts microphone audio to an editable transcript locally; the first use downloads verified public model weights |
 
 The language models run in the cloud. An NVIDIA GPU is not required on the user's computer. The developer panel distinguishes the **configured model** from a provider-reported model ID when one is available.
 
-**Built-in AI** uses the server-allowed model routing. In **Use my API keys**, runtime overrides can change the personal connection: setting `NEBIUS_MODEL_ID` without `NEBIUS_REASONING_MODEL_ID` makes the interactive role use that explicitly selected primary model too. The checked-in `.env.example` includes a primary override, so copying it unchanged does **not** retain the default Nemotron/Kimi split in personal-key mode. Remove that model override or set both role overrides intentionally. Environment keys alone do not switch the app out of Built-in AI.
+**Built-in AI** uses the server-allowed model routing. In **Use my API keys**, runtime overrides can change the personal connection: `ANTHROPIC_MODEL_ID` selects the primary model and, unless `ANTHROPIC_RESPONSE_MODEL_ID` is set, the interactive role too. Every request leaves the app through `src-tauri/src/claude.rs`, which translates the internal chat request into a Claude Messages API call: strict JSON schemas become structured outputs, system prompts are cached, bounded operations run at low effort and deliberate planning at high effort, and a safety refusal falls back server-side to another Claude model. Environment keys alone do not switch the app out of Built-in AI.
 
 See [Personal AI observation](docs/PERSONAL_AI_OBSERVATION.md) for consent, evidence, journal, personalization and limits.
 
@@ -73,7 +73,7 @@ flowchart TD
     Runtime --> Connection
     Connection --> Gateway[Built-in AI: authenticated Supabase gateway]
     Connection --> Personal[Personal keys: direct provider requests]
-    Gateway --> Providers[Nebius models and authorized Tavily search]
+    Gateway --> Providers[Claude API and authorized Tavily search]
     Personal --> Providers
     Providers --> Validate[Rust validation and freshness checks]
     Validate --> Offers[Goal or step proposal requires acceptance]
@@ -106,20 +106,20 @@ Research uses the relevant goal, step and checkpoint to form a limited query. Ta
 ## First run and privacy
 
 1. Install the appropriate release and complete setup. **With tracking** is preselected; continuing enables observation after the required system access is granted. Choose **Without tracking** for manual use. New profiles enable AI assistance, goal context, research, activity matching, dictation text correction, memory, screenshots and verified automatic completion; each can be disabled in Settings.
-2. **Built-in AI** is selected by default: no account, invitation or API-key entry is required. To use personal provider accounts, choose **Settings → AI → Services → AI connection → Use my API keys**, then save your Nebius and Tavily keys in the existing rows.
+2. **Built-in AI** is selected by default: no account, invitation or API-key entry is required. To use personal provider accounts, choose **Settings → AI → Services → AI connection → Use my API keys**, then save your Claude (Anthropic) and Tavily keys in the existing rows.
 3. Choose tracking, AI context-sharing, visible-text assistance, memory and interruption preferences. On macOS, grant the relevant Accessibility permission for supported observation features.
 4. For voice, grant microphone access. The first microphone action downloads the verified multilingual Whisper model (about 548 MiB); allow it to finish before recording. OS Dictation language packs are not used by this path. Recognition quality still depends on the recording and language. See [local voice](docs/LOCAL_VOICE.md).
 5. Select a focus goal and inspect Progress and the **Personal AI Engine** panel to verify actual behavior.
 
 Tracking startup follows saved onboarding consent and the saved tracking request; it does not universally reset to paused. OS permissions and privacy gates still apply. Quiet Mode/DND, quiet hours or days, companion pause/snooze, excluded/private apps and detected meeting/away/fullscreen states can suppress background interruptions. Legacy working-hours fields are not a mascot delivery schedule; see [mascot message policy](docs/MASCOT_NOTIFICATIONS.md).
 
-Goals, conversations, activity and memory are stored in the user's local SQLite database. The application does **not** encrypt that database itself. Foreground app names and bounded window titles can be retained as activity data. When screenshot assistance is enabled, permitted active-window images and bounded interface-text samples can be retained as encrypted local review evidence until the corresponding Daily summary is successfully saved, then deleted. A failed or missed summary can retain this evidence across restarts; clearing local history deletes it. This evidence is separate from permanent Personal Memory and the unencrypted activity database. Enabled AI features can send permitted images and bounded, filtered visible text to Nebius. See [Daily activity review](docs/DAILY_ACTIVITY_REVIEW.md) for the storage and cleanup lifecycle.
+Goals, conversations, activity and memory are stored in the user's local SQLite database. The application does **not** encrypt that database itself. Foreground app names and bounded window titles can be retained as activity data. When screenshot assistance is enabled, permitted active-window images and bounded interface-text samples can be retained as encrypted local review evidence until the corresponding Daily summary is successfully saved, then deleted. A failed or missed summary can retain this evidence across restarts; clearing local history deletes it. This evidence is separate from permanent Personal Memory and the unencrypted activity database. Enabled AI features can send permitted images and bounded, filtered visible text to the Claude API. See [Daily activity review](docs/DAILY_ACTIVITY_REVIEW.md) for the storage and cleanup lifecycle.
 
-Built-in AI relays permitted requests through an authenticated Supabase Edge Function. Nebius and Tavily keys remain server-side; only the public Supabase client configuration ships in the app. A technical anonymous session starts automatically and is retained in a private local file; it cannot read service tables or retrieve provider secrets. Atomic server limits apply uniformly, with no account tiers or invitations. See [Shared AI deployment](docs/SUPABASE_GATEWAY.md).
+Built-in AI relays permitted requests through an authenticated Supabase Edge Function. Claude and Tavily keys remain server-side; only the public Supabase client configuration ships in the app. A technical anonymous session starts automatically and is retained in a private local file; it cannot read service tables or retrieve provider secrets. Atomic server limits apply uniformly, with no account tiers or invitations. See [Shared AI deployment](docs/SUPABASE_GATEWAY.md).
 
-In **Use my API keys**, provider keys remain runtime-only: Windows uses Credential Manager; macOS uses Keychain through the unchanged pinned credential helper. Saved keys take precedence over environment keys. Removing a saved key does not revoke it at the provider and can expose an existing environment fallback. Switching connections preserves saved keys and never silently falls back to a different account.
+In **Use my API keys**, provider keys remain runtime-only: Windows uses Credential Manager; macOS uses Keychain through the unchanged pinned credential helper, which only accepts its original account names, so the Claude key occupies the slot that previously held the Nebius key and a previously saved Nebius key must be replaced in Settings. Saved keys take precedence over environment keys. Removing a saved key does not revoke it at the provider and can expose an existing environment fallback. Switching connections preserves saved keys and never silently falls back to a different account.
 
-“Local-first” does not mean entirely offline: enabled cloud features send permitted text/context to Nebius and authorized search queries to Tavily. Memory OFF stops memory use/writes through its controls; it is separate from deleting chat history, goals or activity. Review the individual data controls before sharing sensitive work.
+“Local-first” does not mean entirely offline: enabled cloud features send permitted text/context to the Claude API and authorized search queries to Tavily. Memory OFF stops memory use/writes through its controls; it is separate from deleting chat history, goals or activity. Review the individual data controls before sharing sensitive work.
 
 ## Developer setup
 
@@ -138,10 +138,11 @@ For optional personal-provider credentials, select **Use my API keys**, then cop
 
 | Variable                    | Meaning                                                                                           |
 | --------------------------- | ------------------------------------------------------------------------------------------------- |
-| `NEBIUS_API_KEY`            | Runtime Nebius key, used when no saved key takes precedence                                       |
-| `NEBIUS_API_URL`            | Full chat-completions endpoint; default `https://api.tokenfactory.nebius.com/v1/chat/completions` |
-| `NEBIUS_MODEL_ID`           | Optional primary model override; also used for interactive responses unless separately overridden |
-| `NEBIUS_REASONING_MODEL_ID` | Optional interactive response/planning model override; the variable retains its historical name   |
+| `ANTHROPIC_API_KEY`         | Runtime Claude API key, used when no saved key takes precedence                                   |
+| `ANTHROPIC_API_URL`         | Full Messages API endpoint; default `https://api.anthropic.com/v1/messages`                       |
+| `ANTHROPIC_MODEL_ID`        | Optional primary model override; also used for interactive responses unless separately overridden |
+| `ANTHROPIC_RESPONSE_MODEL_ID` | Optional interactive response/planning model override                                           |
+| `ANTHROPIC_VISION_MODEL_ID` | Optional screen-understanding model override; Claude models accept images                         |
 | `TAVILY_API_KEY`            | Runtime Tavily key, used when no saved key takes precedence                                       |
 | `TAVILY_API_URL`            | Search endpoint; default `https://api.tavily.com/search`                                          |
 | `DEMO_MODE`                 | `true` simulates activity; it does not enable mock provider responses                             |

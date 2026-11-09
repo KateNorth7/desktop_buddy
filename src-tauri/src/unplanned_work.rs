@@ -249,7 +249,7 @@ fn due_inner(inner: &Inner, now: Instant) -> bool {
     opted_in(inner)
         // Only work that goal matching left unassigned is offered as new work.
         && inner.goal_matching.view.goal_id.is_none()
-        && inner.status.nebius_configured
+        && inner.status.anthropic_configured
         && !crate::companion::quiet_mode(inner)
         && inner.unplanned_work.pending.is_none()
         && inner.unplanned_work.sample.as_ref().is_some_and(|a| {

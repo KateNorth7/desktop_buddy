@@ -72,14 +72,14 @@ async fn audit_regression_repairs_wrong_operation_and_missing_quote_without_mode
         atomic::{AtomicUsize, Ordering},
         Arc,
     };
-    use wiremock::{matchers::method, Mock, MockServer, Request, ResponseTemplate};
+    use wiremock::{matchers::method, Mock, MockServer, Request};
     let server = MockServer::start().await;
     let renamed = Arc::new(AtomicUsize::new(0));
     let attempt = renamed.clone();
     Mock::given(method("POST")).respond_with(move |r:&Request| {
         let body:Value=serde_json::from_slice(&r.body).unwrap();
-        assert_eq!(body["response_format"]["json_schema"]["name"],"buddy_skill_plan");
-        let context:Value=serde_json::from_str(body["messages"][1]["content"].as_str().unwrap()).unwrap();
+        assert_eq!(crate::claude::test::operation(&body),"buddy_skill_plan");
+        let context:Value=serde_json::from_str(body["messages"][0]["content"].as_str().unwrap()).unwrap();
         let latest=context["latest_request"].as_str().unwrap();
         let goal=json!({"goal_id":context["state"]["goals"][0]["goal_id"],"reference":null});
         let (name,input)=match latest {
@@ -90,7 +90,7 @@ async fn audit_regression_repairs_wrong_operation_and_missing_quote_without_mode
             _=>panic!("Unexpected synthetic request"),
         };
         let plan=json!({"kind":"actions","actions":[{"name":name,"input":input,"instruction":null}],"state_version":context["state"]["state_version"],"clarification":null});
-        ResponseTemplate::new(200).set_body_json(json!({"choices":[{"finish_reason":"stop","message":{"content":crate::agent_runtime::reasoning::fixture_plan(plan).to_string()}}]}))
+        crate::claude::test::reply(json!({"choices":[{"finish_reason":"stop","message":{"content":crate::agent_runtime::reasoning::fixture_plan(plan).to_string()}}]}))
     }).expect(4).mount(&server).await;
     let s = AppState::new(store()).unwrap();
     let service = Service {
@@ -136,12 +136,12 @@ async fn audit_regression_repairs_wrong_operation_and_missing_quote_without_mode
 
 #[tokio::test]
 async fn structured_skill_orchestration_uses_real_backend_result_for_reply() {
-    use wiremock::{matchers::method, Mock, MockServer, Request, ResponseTemplate};
+    use wiremock::{matchers::method, Mock, MockServer, Request};
     let server = MockServer::start().await;
     Mock::given(method("POST")).respond_with(|request:&Request| {
         let body:Value=serde_json::from_slice(&request.body).unwrap();
-        let context:Value=serde_json::from_str(body["messages"][1]["content"].as_str().unwrap()).unwrap();
-        let output=if body["response_format"]["json_schema"]["name"]=="buddy_skill_plan" {
+        let context:Value=serde_json::from_str(body["messages"][0]["content"].as_str().unwrap()).unwrap();
+        let output=if crate::claude::test::operation(&body)=="buddy_skill_plan" {
             assert_eq!(context["registry"].as_array().unwrap().len(),crate::skills::registry().len());
             json!({"kind":"actions","state_version":context["state"]["state_version"],"actions":[{"name":"create_goal","input":{"title":"Prepare for interview","steps":[]},"instruction":"Create an interview goal"}],"clarification":null})
         } else {
@@ -149,7 +149,7 @@ async fn structured_skill_orchestration_uses_real_backend_result_for_reply() {
             assert!(context["result"]["results"][0]["goal_id"].as_i64().unwrap()>0);
             json!({"message":"Created your interview goal."})
         };
-        ResponseTemplate::new(200).set_body_json(json!({"choices":[{"finish_reason":"stop","message":{"content":crate::agent_runtime::reasoning::fixture_plan(output).to_string()}}]}))
+        crate::claude::test::reply(json!({"choices":[{"finish_reason":"stop","message":{"content":crate::agent_runtime::reasoning::fixture_plan(output).to_string()}}]}))
     }).expect(1).mount(&server).await;
     let storage = store();
     let conversation = storage.current_conversation().unwrap();
@@ -193,7 +193,7 @@ async fn structured_skill_orchestration_uses_real_backend_result_for_reply() {
 
 #[tokio::test]
 async fn structured_skill_orchestration_discards_plan_when_privacy_changes() {
-    use wiremock::{matchers::method, Mock, MockServer, Request, ResponseTemplate};
+    use wiremock::{matchers::method, Mock, MockServer, Request};
     let storage = store();
     let conversation = storage.current_conversation().unwrap();
     let state = std::sync::Arc::new(AppState::new(storage).unwrap());
@@ -201,10 +201,10 @@ async fn structured_skill_orchestration_discards_plan_when_privacy_changes() {
     let captured = state.clone();
     Mock::given(method("POST")).respond_with(move |request:&Request| {
         let body:Value=serde_json::from_slice(&request.body).unwrap();
-        let context:Value=serde_json::from_str(body["messages"][1]["content"].as_str().unwrap()).unwrap();
+        let context:Value=serde_json::from_str(body["messages"][0]["content"].as_str().unwrap()).unwrap();
         captured.inner.lock().unwrap().privacy_revision+=1;
         let plan=json!({"kind":"actions","state_version":context["state"]["state_version"],"actions":[{"name":"create_goal","input":{"title":"Must not be created","steps":[]},"instruction":"Create a goal"}],"clarification":null});
-        ResponseTemplate::new(200).set_body_json(json!({"choices":[{"finish_reason":"stop","message":{"content":crate::agent_runtime::reasoning::fixture_plan(plan).to_string()}}]}))
+        crate::claude::test::reply(json!({"choices":[{"finish_reason":"stop","message":{"content":crate::agent_runtime::reasoning::fixture_plan(plan).to_string()}}]}))
     }).expect(1).mount(&server).await;
     let service = Service {
         client: &state.client,
@@ -235,13 +235,13 @@ async fn structured_skill_orchestration_discards_plan_when_privacy_changes() {
 
 #[tokio::test]
 async fn structured_skill_orchestration_returns_clarification_without_executing() {
-    use wiremock::{matchers::method, Mock, MockServer, Request, ResponseTemplate};
+    use wiremock::{matchers::method, Mock, MockServer, Request};
     let server = MockServer::start().await;
     Mock::given(method("POST")).respond_with(|request:&Request| {
         let body:Value=serde_json::from_slice(&request.body).unwrap();
-        let context:Value=serde_json::from_str(body["messages"][1]["content"].as_str().unwrap()).unwrap();
+        let context:Value=serde_json::from_str(body["messages"][0]["content"].as_str().unwrap()).unwrap();
         let plan=json!({"kind":"clarification","state_version":context["state"]["state_version"],"actions":[],"clarification":"Which interview goal do you mean?"});
-        ResponseTemplate::new(200).set_body_json(json!({"choices":[{"finish_reason":"stop","message":{"content":crate::agent_runtime::reasoning::fixture_plan(plan).to_string()}}]}))
+        crate::claude::test::reply(json!({"choices":[{"finish_reason":"stop","message":{"content":crate::agent_runtime::reasoning::fixture_plan(plan).to_string()}}]}))
     }).expect(1).mount(&server).await;
     let mut storage = store();
     goal(&mut storage, "Interview", "one");
@@ -280,7 +280,7 @@ async fn structured_skill_orchestration_returns_clarification_without_executing(
 
 #[tokio::test]
 async fn committed_action_keeps_authoritative_receipt_when_reply_sharing_changes() {
-    use wiremock::{matchers::method, Mock, MockServer, Request, ResponseTemplate};
+    use wiremock::{matchers::method, Mock, MockServer, Request};
     let storage = store();
     let conversation = storage.current_conversation().unwrap();
     let state = std::sync::Arc::new(AppState::new(storage).unwrap());
@@ -288,14 +288,14 @@ async fn committed_action_keeps_authoritative_receipt_when_reply_sharing_changes
     let captured = state.clone();
     Mock::given(method("POST")).respond_with(move |request:&Request| {
         let body:Value=serde_json::from_slice(&request.body).unwrap();
-        let context:Value=serde_json::from_str(body["messages"][1]["content"].as_str().unwrap()).unwrap();
-        let response=if body["response_format"]["json_schema"]["name"]=="buddy_skill_plan" {
+        let context:Value=serde_json::from_str(body["messages"][0]["content"].as_str().unwrap()).unwrap();
+        let response=if crate::claude::test::operation(&body)=="buddy_skill_plan" {
             json!({"kind":"actions","state_version":context["state"]["state_version"],"actions":[{"name":"create_goal","input":{"title":"Interview","steps":[]},"instruction":"Create a goal"}],"clarification":null})
         } else {
             captured.inner.lock().unwrap().privacy_revision+=1;
             json!({"message":"This stale wording must be discarded"})
         };
-        ResponseTemplate::new(200).set_body_json(json!({"choices":[{"finish_reason":"stop","message":{"content":crate::agent_runtime::reasoning::fixture_plan(response).to_string()}}]}))
+        crate::claude::test::reply(json!({"choices":[{"finish_reason":"stop","message":{"content":crate::agent_runtime::reasoning::fixture_plan(response).to_string()}}]}))
     }).expect(1).mount(&server).await;
     let service = Service {
         client: &state.client,
@@ -677,7 +677,7 @@ fn tracking_requires_both_persistent_request_and_consent_and_keeps_pause_after_g
 }
 
 #[tokio::test]
-#[ignore = "Uses configured Nebius/Tavily accounts with synthetic data; provider charges may apply"]
+#[ignore = "Uses configured Claude/Tavily accounts with synthetic data; provider charges may apply"]
 async fn live_ai_goal_and_chat_smoke() {
     std::env::set_var("BUDDY_LIVE_DIAGNOSTICS", "true");
     let _ = dotenvy::from_path(std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../.env"));
@@ -1508,7 +1508,7 @@ fn chat_parser_accepts_a_structured_memory_proposal_without_storing_it() {
 }
 #[tokio::test]
 async fn inspect_skill_uses_validated_goal_id_to_retrieve_checkpoint_for_memory_question() {
-    use wiremock::{matchers::method, Mock, MockServer, Request, ResponseTemplate};
+    use wiremock::{matchers::method, Mock, MockServer, Request};
     let mut storage = store();
     let goal_id = goal(&mut storage, "Хакатон", "memory-inspect");
     let other = goal(&mut storage, "Other project", "memory-other");
@@ -1537,8 +1537,8 @@ async fn inspect_skill_uses_validated_goal_id_to_retrieve_checkpoint_for_memory_
     let server = MockServer::start().await;
     Mock::given(method("POST")).respond_with(move |request:&Request|{
         let body:Value=serde_json::from_slice(&request.body).unwrap();
-        let context:Value=serde_json::from_str(body["messages"][1]["content"].as_str().unwrap()).unwrap();
-        let output=if body["response_format"]["json_schema"]["name"]=="buddy_skill_plan"{
+        let context:Value=serde_json::from_str(body["messages"][0]["content"].as_str().unwrap()).unwrap();
+        let output=if crate::claude::test::operation(&body)=="buddy_skill_plan"{
             json!({"kind":"actions","state_version":context["state"]["state_version"],"actions":[{"name":"inspect_goal","input":{"goal":{"goal_id":goal_id,"reference":null}},"instruction":"Где я остановился с хакатоном?"}],"clarification":null})
         } else {
             assert_eq!(context["personal_memory"]["work_context"]["summary"],"Outline finished");
@@ -1546,7 +1546,7 @@ async fn inspect_skill_uses_validated_goal_id_to_retrieve_checkpoint_for_memory_
             assert!(!context["personal_memory"].to_string().contains("Other confidential"));
             json!({"message":"The outline is finished. Next: write the pitch."})
         };
-        ResponseTemplate::new(200).set_body_json(json!({"choices":[{"finish_reason":"stop","message":{"content":crate::agent_runtime::reasoning::fixture_plan(output).to_string()}}]}))
+        crate::claude::test::reply(json!({"choices":[{"finish_reason":"stop","message":{"content":crate::agent_runtime::reasoning::fixture_plan(output).to_string()}}]}))
     }).expect(1).mount(&server).await;
     let conversation = storage.current_conversation().unwrap();
     let state = AppState::new(storage).unwrap();
@@ -1574,7 +1574,7 @@ async fn inspect_skill_uses_validated_goal_id_to_retrieve_checkpoint_for_memory_
 
 #[tokio::test]
 async fn park_chat_commands_generate_then_validate_then_save_checkpoint() {
-    use wiremock::{matchers::method, Mock, MockServer, Request, ResponseTemplate};
+    use wiremock::{matchers::method, Mock, MockServer, Request};
     for phrase in [
         "Park this",
         "Сохрани, где я остановился",
@@ -1589,8 +1589,8 @@ async fn park_chat_commands_generate_then_validate_then_save_checkpoint() {
         let instruction = phrase.to_string();
         Mock::given(method("POST")).respond_with(move |request: &Request| {
             let body:Value = serde_json::from_slice(&request.body).unwrap();
-            let context:Value = serde_json::from_str(body["messages"][1]["content"].as_str().unwrap()).unwrap();
-            let output = match body["response_format"]["json_schema"]["name"].as_str().unwrap() {
+            let context:Value = serde_json::from_str(body["messages"][0]["content"].as_str().unwrap()).unwrap();
+            let output = match crate::claude::test::operation(&body).as_str().unwrap() {
                 "buddy_skill_plan" => {
                     assert_eq!(context["state"]["focused_goal_id"], id);
                     json!({"kind":"actions","state_version":context["state"]["state_version"],"actions":[{"name":"park_context","input":{"goal":{"goal_id":null,"reference":"active_goal"},"checkpoint":null,"current_app":null},"instruction":instruction}],"clarification":null})
@@ -1609,7 +1609,7 @@ async fn park_chat_commands_generate_then_validate_then_save_checkpoint() {
                 },
                 _ => panic!("Unexpected provider operation"),
             };
-            ResponseTemplate::new(200).set_body_json(json!({"choices":[{"finish_reason":"stop","message":{"content":crate::agent_runtime::reasoning::fixture_plan(output).to_string()}}]}))
+            crate::claude::test::reply(json!({"choices":[{"finish_reason":"stop","message":{"content":crate::agent_runtime::reasoning::fixture_plan(output).to_string()}}]}))
         }).expect(2).mount(&server).await;
         let service = Service {
             client: &state.client,
@@ -1642,7 +1642,7 @@ async fn park_chat_commands_generate_then_validate_then_save_checkpoint() {
 
 #[tokio::test]
 async fn resume_and_inspect_chat_use_exact_context_and_never_other_lanes() {
-    use wiremock::{matchers::method, Mock, MockServer, Request, ResponseTemplate};
+    use wiremock::{matchers::method, Mock, MockServer, Request};
     for (phrase, name, focuses) in [
         ("Верни меня к хакатону", "resume_context", true),
         ("Продолжим Deloitte", "resume_context", true),
@@ -1684,8 +1684,8 @@ async fn resume_and_inspect_chat_use_exact_context_and_never_other_lanes() {
         let instruction = phrase.to_string();
         Mock::given(method("POST")).respond_with(move |request: &Request| {
             let body:Value = serde_json::from_slice(&request.body).unwrap();
-            let context:Value = serde_json::from_str(body["messages"][1]["content"].as_str().unwrap()).unwrap();
-            let output = if body["response_format"]["json_schema"]["name"] == "buddy_skill_plan" {
+            let context:Value = serde_json::from_str(body["messages"][0]["content"].as_str().unwrap()).unwrap();
+            let output = if crate::claude::test::operation(&body) == "buddy_skill_plan" {
                 let mut input=json!({"goal":{"goal_id":id,"reference":null}});
                 if name=="resume_context" {input["set_focus"]=json!(true);}
                 json!({"kind":"actions","state_version":context["state"]["state_version"],"actions":[{"name":name,"input":input,"instruction":instruction}],"clarification":null})
@@ -1695,7 +1695,7 @@ async fn resume_and_inspect_chat_use_exact_context_and_never_other_lanes() {
                 assert!(context["personal_memory"].is_object());
                 json!({"message":"Outline saved. Next: review requirements. Waiting for team feedback."})
             };
-            ResponseTemplate::new(200).set_body_json(json!({"choices":[{"finish_reason":"stop","message":{"content":crate::agent_runtime::reasoning::fixture_plan(output).to_string()}}]}))
+            crate::claude::test::reply(json!({"choices":[{"finish_reason":"stop","message":{"content":crate::agent_runtime::reasoning::fixture_plan(output).to_string()}}]}))
         }).expect(1).mount(&server).await;
         let service = Service {
             client: &state.client,
@@ -1733,7 +1733,7 @@ async fn resume_and_inspect_chat_use_exact_context_and_never_other_lanes() {
 
 #[tokio::test]
 async fn invalid_or_stale_generated_checkpoint_never_parks_the_goal() {
-    use wiremock::{matchers::method, Mock, MockServer, Request, ResponseTemplate};
+    use wiremock::{matchers::method, Mock, MockServer, Request};
     for stale in [false, true] {
         let mut storage = store();
         let id = goal(&mut storage, "Hackathon", "invalid-park");
@@ -1744,8 +1744,8 @@ async fn invalid_or_stale_generated_checkpoint_never_parks_the_goal() {
         let server = MockServer::start().await;
         Mock::given(method("POST")).respond_with(move |request:&Request| {
             let body:Value=serde_json::from_slice(&request.body).unwrap();
-            let context:Value=serde_json::from_str(body["messages"][1]["content"].as_str().unwrap()).unwrap();
-            let output=if body["response_format"]["json_schema"]["name"]=="buddy_skill_plan" {
+            let context:Value=serde_json::from_str(body["messages"][0]["content"].as_str().unwrap()).unwrap();
+            let output=if crate::claude::test::operation(&body)=="buddy_skill_plan" {
                 json!({"kind":"actions","state_version":context["state"]["state_version"],"actions":[{"name":"park_context","input":{"goal":{"goal_id":id,"reference":null},"checkpoint":null,"current_app":null},"instruction":"Park this"}],"clarification":null})
             } else if stale {
                 captured.inner.lock().unwrap().privacy_revision+=1;
@@ -1753,7 +1753,7 @@ async fn invalid_or_stale_generated_checkpoint_never_parks_the_goal() {
             } else {
                 json!({"summary":"Unsafe","next_action":"Continue","waiting_for":null,"raw_accessibility_text":"MUST NOT STORE"})
             };
-            ResponseTemplate::new(200).set_body_json(json!({"choices":[{"finish_reason":"stop","message":{"content":crate::agent_runtime::reasoning::fixture_plan(output).to_string()}}]}))
+            crate::claude::test::reply(json!({"choices":[{"finish_reason":"stop","message":{"content":crate::agent_runtime::reasoning::fixture_plan(output).to_string()}}]}))
         }).mount(&server).await;
         let service = Service {
             client: &state.client,
@@ -1795,7 +1795,7 @@ mod voice_agent {
         .unwrap()
     }
     fn answer(value: Value) -> ResponseTemplate {
-        ResponseTemplate::new(200).set_body_json(
+        crate::claude::test::reply(
             json!({"choices":[{"finish_reason":"stop","message":{"content":value.to_string()}}]}),
         )
     }
@@ -1807,8 +1807,8 @@ mod voice_agent {
             let serialized = body.to_string();
             assert!(!serialized.contains("RAW_AUDIO_SENTINEL"));
             assert!(!serialized.contains("input_audio"));
-            let context: Value = serde_json::from_str(body["messages"][1]["content"].as_str().unwrap()).unwrap();
-            match body["response_format"]["json_schema"]["name"].as_str().unwrap() {
+            let context: Value = serde_json::from_str(body["messages"][0]["content"].as_str().unwrap()).unwrap();
+            match crate::claude::test::operation(&body).as_str().unwrap() {
                 "buddy_skill_plan" => {
                     assert!(["user_message","voice_message"].contains(&context["event_type"].as_str().unwrap()));
                     answer(json!({"situation":"Handle the explicit command","decision":decision,
@@ -2212,16 +2212,16 @@ mod voice_agent {
 
 #[tokio::test]
 async fn continuity_chat_uses_grounded_backend_summary_without_freeform_regeneration() {
-    use wiremock::{matchers::method, Mock, MockServer, Request, ResponseTemplate};
+    use wiremock::{matchers::method, Mock, MockServer, Request};
     let mut storage = store();
     let id = goal(&mut storage, "Hackathon fixture", "continuity-chat");
     let server = MockServer::start().await;
     Mock::given(method("POST")).respond_with(move |request:&Request| {
         let body:Value=serde_json::from_slice(&request.body).unwrap();
-        assert_eq!(body["response_format"]["json_schema"]["name"],"buddy_skill_plan");
-        let ctx:Value=serde_json::from_str(body["messages"][1]["content"].as_str().unwrap()).unwrap();
+        assert_eq!(crate::claude::test::operation(&body),"buddy_skill_plan");
+        let ctx:Value=serde_json::from_str(body["messages"][0]["content"].as_str().unwrap()).unwrap();
         let plan=json!({"kind":"actions","state_version":ctx["state"]["state_version"],"actions":[{"name":"inspect_continuity","input":{"view":"remaining","goal":{"goal_id":id,"reference":null}},"instruction":null}],"clarification":null});
-        ResponseTemplate::new(200).set_body_json(json!({"choices":[{"finish_reason":"stop","message":{"content":crate::agent_runtime::reasoning::fixture_plan(plan).to_string()}}]}))
+        crate::claude::test::reply(json!({"choices":[{"finish_reason":"stop","message":{"content":crate::agent_runtime::reasoning::fixture_plan(plan).to_string()}}]}))
     }).expect(1).mount(&server).await;
     let conversation = storage.current_conversation().unwrap();
     let state = AppState::new(storage).unwrap();

@@ -1,23 +1,16 @@
 use serde_json::Value;
 use std::time::Duration;
 
-pub const DEFAULT_PRIMARY_MODEL: &str = "nvidia/nemotron-3-super-120b-a12b";
-pub const DEFAULT_RESPONSE_MODEL: &str = "moonshotai/Kimi-K3";
+/// Background reasoning, matching and auxiliary operations.
+pub const DEFAULT_PRIMARY_MODEL: &str = crate::claude::DEFAULT_MODEL;
+/// Interactive dialogue, authorization/review and natural replies. Both roles use
+/// the same Claude model unless `ANTHROPIC_RESPONSE_MODEL_ID` selects another one.
+pub const DEFAULT_RESPONSE_MODEL: &str = crate::claude::DEFAULT_MODEL;
 pub(crate) type Preflight<'a> = &'a (dyn Fn() -> Result<(), String> + Send + Sync);
-fn resolve_response_model(
-    primary: &str,
-    primary_override: Option<&str>,
-    response_override: Option<&str>,
-) -> String {
+fn resolve_response_model(primary: &str, response_override: Option<&str>) -> String {
     response_override
         .filter(|m| !m.trim().is_empty())
-        .unwrap_or_else(|| {
-            if primary == DEFAULT_PRIMARY_MODEL && primary_override.is_none() {
-                DEFAULT_RESPONSE_MODEL
-            } else {
-                primary
-            }
-        })
+        .unwrap_or(primary)
         .into()
 }
 pub fn response_model(primary: &str) -> String {
@@ -26,8 +19,7 @@ pub fn response_model(primary: &str) -> String {
     }
     resolve_response_model(
         primary,
-        std::env::var("NEBIUS_MODEL_ID").ok().as_deref(),
-        std::env::var("NEBIUS_REASONING_MODEL_ID").ok().as_deref(),
+        std::env::var("ANTHROPIC_RESPONSE_MODEL_ID").ok().as_deref(),
     )
 }
 
@@ -159,8 +151,6 @@ pub(crate) async fn post_default_interactive_json(
     }
     let mut fallback = payload.clone();
     fallback["model"] = serde_json::json!(DEFAULT_PRIMARY_MODEL);
-    fallback["chat_template_kwargs"] = serde_json::json!({"enable_thinking":true});
-    fallback.as_object_mut().unwrap().remove("reasoning_effort");
     tokio::time::timeout(
         fallback_budget,
         post_json_with_timeout(client, url, key, &fallback, fallback_budget, false, false),
@@ -181,6 +171,14 @@ async fn post_json_with_timeout(
     retry_transient: bool,
 ) -> Result<Value, String> {
     let payload = constrained_payload(payload);
+    // Chat requests leave this process in the Claude wire format; search payloads
+    // are sent as built. Responses come back in the crate's internal envelope.
+    let chat = crate::claude::is_chat(&payload);
+    let (body, auth) = if chat {
+        (crate::claude::to_request(&payload), crate::shared_ai::Auth::Claude)
+    } else {
+        (payload, crate::shared_ai::Auth::Bearer)
+    };
     let mut last = "Service unavailable".to_string();
     let attempts = if retry_transient && key != crate::shared_ai::SHARED_CREDENTIAL {
         3
@@ -189,9 +187,9 @@ async fn post_json_with_timeout(
     };
     for attempt in 0..attempts {
         let (request, guard) =
-            crate::shared_ai::prepare(client, reqwest::Method::POST, url, key).await?;
+            crate::shared_ai::prepare(client, reqwest::Method::POST, url, key, auth).await?;
         guard.check()?;
-        let response = request.json(&payload).timeout(timeout).send().await;
+        let response = request.json(&body).timeout(timeout).send().await;
         guard.check()?;
         match response {
             Ok(response) if response.status().is_success() => {
@@ -204,7 +202,11 @@ async fn post_json_with_timeout(
                     }
                 });
                 guard.check()?;
-                return result;
+                return if chat {
+                    result.and_then(crate::claude::from_response)
+                } else {
+                    result
+                };
             }
             Ok(response) => {
                 let status = response.status();
@@ -227,22 +229,13 @@ async fn post_json_with_timeout(
     }
     Err(last)
 }
-/// Keep interactive output within its budget using verified model-specific controls.
+/// Keep interactive output within its budget: structured requests that do not ask
+/// for deliberate reasoning run at low effort so hidden reasoning cannot consume
+/// the action budget. Search payloads pass through unchanged.
 pub(crate) fn constrained_payload(payload: &Value) -> Value {
     let mut result = payload.clone();
-    if payload["model"]
-        .as_str()
-        .is_some_and(|m| m.to_ascii_lowercase().contains("nemotron"))
+    if crate::claude::is_chat(payload)
         && payload["response_format"]["type"] == "json_schema"
-        && payload["chat_template_kwargs"]["enable_thinking"].is_null()
-    {
-        result["chat_template_kwargs"] = serde_json::json!({"enable_thinking":false});
-    }
-    // Kimi K3 always reasons and defaults to maximum effort. Its supported
-    // top-level control is reasoning_effort, not a boolean thinking template flag.
-    if payload["model"]
-        .as_str()
-        .is_some_and(|m| m.eq_ignore_ascii_case("moonshotai/Kimi-K3"))
         && payload["reasoning_effort"].is_null()
     {
         result["reasoning_effort"] = serde_json::json!("low");
@@ -262,17 +255,17 @@ pub fn endpoint(name: &str) -> Result<String, String> {
 pub fn secret(name: &str) -> Result<String, String> {
     if crate::shared_ai::mode() == crate::shared_ai::ConnectionMode::BuiltIn {
         match name {
-            "NEBIUS_API_KEY" | "TAVILY_API_KEY" => {
+            "ANTHROPIC_API_KEY" | "TAVILY_API_KEY" => {
                 return Ok(crate::shared_ai::SHARED_CREDENTIAL.into())
             }
-            "NEBIUS_API_URL" | "TAVILY_API_URL" => return crate::shared_ai::endpoint(name),
-            "NEBIUS_MODEL_ID" => return Ok(DEFAULT_PRIMARY_MODEL.into()),
-            "NEBIUS_VISION_MODEL_ID" => return Ok(DEFAULT_RESPONSE_MODEL.into()),
+            "ANTHROPIC_API_URL" | "TAVILY_API_URL" => return crate::shared_ai::endpoint(name),
+            "ANTHROPIC_MODEL_ID" => return Ok(DEFAULT_PRIMARY_MODEL.into()),
+            "ANTHROPIC_VISION_MODEL_ID" => return Ok(DEFAULT_RESPONSE_MODEL.into()),
             _ => {}
         }
     }
     // Test providers use synthetic environment keys, never the user's vault.
-    if !cfg!(test) && matches!(name, "NEBIUS_API_KEY" | "TAVILY_API_KEY") {
+    if !cfg!(test) && matches!(name, "ANTHROPIC_API_KEY" | "TAVILY_API_KEY") {
         if let Some(key) = crate::credentials::read(name)? {
             return Ok(key);
         }
@@ -281,10 +274,8 @@ pub fn secret(name: &str) -> Result<String, String> {
         .ok()
         .filter(|s| !s.trim().is_empty())
         .or_else(|| match name {
-            "NEBIUS_API_URL" => {
-                Some("https://api.tokenfactory.nebius.com/v1/chat/completions".into())
-            }
-            "NEBIUS_MODEL_ID" => Some(DEFAULT_PRIMARY_MODEL.into()),
+            "ANTHROPIC_API_URL" => Some(crate::claude::API_URL.into()),
+            "ANTHROPIC_MODEL_ID" => Some(DEFAULT_PRIMARY_MODEL.into()),
             "TAVILY_API_URL" => Some("https://api.tavily.com/search".into()),
             _ => None,
         })
@@ -292,11 +283,11 @@ pub fn secret(name: &str) -> Result<String, String> {
 }
 pub fn configured(name: &str) -> bool {
     if crate::shared_ai::mode() == crate::shared_ai::ConnectionMode::BuiltIn
-        && matches!(name, "NEBIUS_API_KEY" | "TAVILY_API_KEY")
+        && matches!(name, "ANTHROPIC_API_KEY" | "TAVILY_API_KEY")
     {
         return crate::shared_ai::configured();
     }
-    if !cfg!(test) && matches!(name, "NEBIUS_API_KEY" | "TAVILY_API_KEY") {
+    if !cfg!(test) && matches!(name, "ANTHROPIC_API_KEY" | "TAVILY_API_KEY") {
         return std::env::var(name)
             .map(|s| !s.trim().is_empty())
             .unwrap_or(false)
@@ -333,37 +324,46 @@ pub(crate) async fn post_guarded_json(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc,
+    };
+    use wiremock::{
+        matchers::{header, method, path},
+        Mock, MockServer, Request, ResponseTemplate,
+    };
+    fn chat(model: &str) -> Value {
+        serde_json::json!({"model":model,"max_tokens":8192,
+            "messages":[{"role":"system","content":"Existing instructions"},{"role":"user","content":"Synthetic request"}],
+            "response_format":{"type":"json_schema","json_schema":{"name":"synthetic_operation","strict":true,"schema":{"type":"object","additionalProperties":false,"properties":{"ok":{"type":"boolean"}},"required":["ok"]}}}})
+    }
+    fn envelope(content: &str) -> Value {
+        serde_json::json!({"model":"claude-reported","choices":[{"finish_reason":"stop","message":{"content":content}}]})
+    }
     #[test]
-    fn constrained_nemotron_does_not_spend_action_budget_on_hidden_reasoning() {
-        let payload = serde_json::json!({"model":"nvidia/nemotron-3-super-120b-a12b","response_format":{"type":"json_schema"},"max_tokens":1024});
-        assert_eq!(
-            constrained_payload(&payload)["chat_template_kwargs"]["enable_thinking"],
-            false
-        );
-        let other = serde_json::json!({"model":"other","response_format":{"type":"json_schema"}});
-        assert_eq!(constrained_payload(&other), other);
+    fn constrained_structured_requests_do_not_spend_action_budget_on_hidden_reasoning() {
+        let payload = chat("claude-opus-5-5");
+        assert_eq!(constrained_payload(&payload)["reasoning_effort"], "low");
+        let mut explicit = payload.clone();
+        explicit["reasoning_effort"] = serde_json::json!("high");
+        assert_eq!(constrained_payload(&explicit), explicit);
+        let prose = serde_json::json!({"model":"claude-opus-5-5","messages":[{"role":"user","content":"Write"}]});
+        assert_eq!(constrained_payload(&prose), prose);
         let search = serde_json::json!({"query":"public docs"});
         assert_eq!(constrained_payload(&search), search);
     }
     #[test]
     fn response_model_defaults_and_explicit_overrides_are_predictable() {
         assert_eq!(
-            resolve_response_model(DEFAULT_PRIMARY_MODEL, None, None),
+            resolve_response_model(DEFAULT_PRIMARY_MODEL, None),
             DEFAULT_RESPONSE_MODEL
         );
+        assert_eq!(resolve_response_model("custom", None), "custom");
+        assert_eq!(resolve_response_model("custom", Some("")), "custom");
         assert_eq!(
-            resolve_response_model(DEFAULT_PRIMARY_MODEL, Some(DEFAULT_PRIMARY_MODEL), None),
-            DEFAULT_PRIMARY_MODEL
+            resolve_response_model("custom", Some("claude-sonnet-5-5")),
+            "claude-sonnet-5-5"
         );
-        assert_eq!(
-            resolve_response_model("custom", Some("custom"), None),
-            "custom"
-        );
-        assert_eq!(
-            resolve_response_model("custom", Some("custom"), Some(DEFAULT_RESPONSE_MODEL)),
-            DEFAULT_RESPONSE_MODEL
-        );
-        assert_eq!(resolve_response_model("custom", None, Some("")), "custom");
         assert!(crate::goal_analysis::response_operation("buddy_skill_plan"));
         assert!(crate::goal_analysis::response_operation(
             "buddy_coaching_interpretation"
@@ -390,10 +390,64 @@ mod tests {
             "buddy_dialogue_review"
         ));
     }
-    use wiremock::{
-        matchers::{method, path},
-        Mock, MockServer, ResponseTemplate,
-    };
+    #[tokio::test]
+    async fn chat_requests_use_the_claude_wire_format_and_return_the_internal_envelope() {
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/v1/messages"))
+            .and(header("x-api-key", "synthetic-key"))
+            .and(header("anthropic-version", crate::claude::API_VERSION))
+            .respond_with(|request: &Request| {
+                let body: Value = serde_json::from_slice(&request.body).unwrap();
+                assert!(request.headers.get("authorization").is_none());
+                assert_eq!(body["model"], "claude-opus-5-5");
+                assert_eq!(body["system"][0]["text"], "Existing instructions");
+                assert_eq!(body["messages"][0]["content"], "Synthetic request");
+                assert_eq!(body["output_config"]["effort"], "low");
+                assert_eq!(body["output_config"]["format"]["type"], "json_schema");
+                assert_eq!(
+                    body["output_config"]["format"]["schema"]["description"],
+                    "synthetic_operation"
+                );
+                assert!(body.get("response_format").is_none());
+                assert!(body.get("temperature").is_none());
+                crate::claude::test::reply(envelope("{\"ok\":true}"))
+            })
+            .expect(1)
+            .mount(&server)
+            .await;
+        let result = post_json(
+            &reqwest::Client::new(),
+            &format!("{}/v1/messages", server.uri()),
+            "synthetic-key",
+            &chat("claude-opus-5-5"),
+        )
+        .await
+        .unwrap();
+        assert_eq!(result["choices"][0]["finish_reason"], "stop");
+        assert_eq!(result["choices"][0]["message"]["content"], "{\"ok\":true}");
+        assert_eq!(result["model"], "claude-reported");
+    }
+    #[tokio::test]
+    async fn unexpected_chat_responses_are_rejected_without_retry() {
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"ok":true})))
+            .expect(1)
+            .mount(&server)
+            .await;
+        assert_eq!(
+            post_json(
+                &reqwest::Client::new(),
+                &server.uri(),
+                "synthetic-key",
+                &chat("claude-opus-5-5"),
+            )
+            .await
+            .unwrap_err(),
+            "Service returned an unexpected response"
+        );
+    }
     #[tokio::test]
     async fn reasoning_request_can_outlast_the_clients_background_timeout() {
         let server = MockServer::start().await;
@@ -419,32 +473,6 @@ mod tests {
         .await
         .unwrap();
         assert_eq!(response["ok"], true);
-    }
-    #[tokio::test]
-    async fn kimi_requests_send_supported_low_effort_without_overriding_explicit_effort() {
-        let server = MockServer::start().await;
-        Mock::given(method("POST"))
-            .respond_with(|request: &wiremock::Request| {
-                let payload: Value = serde_json::from_slice(&request.body).unwrap();
-                assert_eq!(payload["reasoning_effort"], "low");
-                assert!(payload["chat_template_kwargs"].is_null());
-                ResponseTemplate::new(200).set_body_json(serde_json::json!({"ok":true}))
-            })
-            .expect(1)
-            .mount(&server)
-            .await;
-        post_reasoning_json(
-            &reqwest::Client::new(),
-            &server.uri(),
-            "synthetic-key",
-            &serde_json::json!({"model":"moonshotai/Kimi-K3","max_tokens":8192}),
-        )
-        .await
-        .unwrap();
-        let explicit = serde_json::json!({"model":"moonshotai/Kimi-K3","reasoning_effort":"high"});
-        assert_eq!(constrained_payload(&explicit), explicit);
-        let other = serde_json::json!({"model":"moonshotai/Kimi-K2.6"});
-        assert_eq!(constrained_payload(&other), other);
     }
     #[tokio::test]
     async fn timed_out_reasoning_is_not_resubmitted_or_reported_as_a_bad_key() {
@@ -512,50 +540,41 @@ mod tests {
         );
     }
     #[tokio::test]
-    async fn stalled_default_planning_uses_one_fast_model_with_identical_schema_and_messages() {
-        use wiremock::matchers::body_partial_json;
+    async fn stalled_default_planning_retries_once_with_identical_schema_and_messages() {
         let server = MockServer::start().await;
+        let calls = Arc::new(AtomicUsize::new(0));
+        let seen = calls.clone();
         Mock::given(method("POST"))
-            .and(body_partial_json(
-                serde_json::json!({"model":DEFAULT_RESPONSE_MODEL}),
-            ))
-            .respond_with(
-                ResponseTemplate::new(200)
-                    .set_delay(Duration::from_secs(5))
-                    .set_body_json(serde_json::json!({"late":true})),
-            )
-            .expect(1)
-            .mount(&server)
-            .await;
-        let payload = serde_json::json!({"model":DEFAULT_RESPONSE_MODEL,"max_tokens":8192,"messages":[{"role":"system","content":"Existing instructions"},{"role":"user","content":"Synthetic request"}],"response_format":{"type":"json_schema","json_schema":{"strict":true,"schema":{"type":"object"}}}});
-        let expected = payload.clone();
-        Mock::given(method("POST"))
-            .and(body_partial_json(
-                serde_json::json!({"model":DEFAULT_PRIMARY_MODEL}),
-            ))
-            .respond_with(move |request: &wiremock::Request| {
+            .respond_with(move |request: &Request| {
                 let body: Value = serde_json::from_slice(&request.body).unwrap();
-                assert_eq!(body["messages"], expected["messages"]);
-                assert_eq!(body["response_format"], expected["response_format"]);
-                assert_eq!(body["chat_template_kwargs"]["enable_thinking"], true);
-                ResponseTemplate::new(200)
-                    .set_body_json(serde_json::json!({"model":DEFAULT_PRIMARY_MODEL,"ok":true}))
+                assert_eq!(body["messages"][0]["content"], "Synthetic request");
+                assert_eq!(body["system"][0]["text"], "Existing instructions");
+                assert_eq!(body["output_config"]["format"]["type"], "json_schema");
+                if seen.fetch_add(1, Ordering::SeqCst) == 0 {
+                    ResponseTemplate::new(200)
+                        .set_delay(Duration::from_secs(5))
+                        .set_body_json(serde_json::json!({"late":true}))
+                } else {
+                    assert_eq!(body["model"], DEFAULT_PRIMARY_MODEL);
+                    crate::claude::test::reply(envelope("{\"ok\":true}"))
+                }
             })
-            .expect(1)
+            .expect(2)
             .mount(&server)
             .await;
         let result = post_default_interactive_json(
             &reqwest::Client::new(),
             &server.uri(),
             "fixture",
-            &payload,
+            &chat(DEFAULT_RESPONSE_MODEL),
             Duration::from_millis(300),
             Duration::from_millis(300),
             None,
         )
         .await
         .unwrap();
-        assert_eq!(result["model"], DEFAULT_PRIMARY_MODEL);
+        assert_eq!(result["choices"][0]["message"]["content"], "{\"ok\":true}");
+        assert_eq!(calls.load(Ordering::SeqCst), 2);
     }
     #[tokio::test]
     async fn planning_does_not_fail_over_rejected_keys_quota_or_invalid_responses() {
@@ -582,7 +601,7 @@ mod tests {
         }
     }
     #[tokio::test]
-    async fn planning_fallback_stops_after_two_models_and_rejects_invalid_json_without_retry() {
+    async fn planning_fallback_stops_after_two_attempts_and_rejects_invalid_json_without_retry() {
         let server = MockServer::start().await;
         Mock::given(method("POST"))
             .respond_with(
@@ -628,7 +647,6 @@ mod tests {
     }
     #[tokio::test]
     async fn interactive_fallback_rechecks_consent_before_another_disclosure() {
-        use std::sync::atomic::{AtomicUsize, Ordering};
         let server = MockServer::start().await;
         Mock::given(method("POST"))
             .respond_with(
@@ -663,47 +681,38 @@ mod tests {
         assert_eq!(server.received_requests().await.unwrap().len(), 1);
     }
     #[tokio::test]
-    async fn reasoning_fallback_has_a_separate_budget_and_keeps_thinking_enabled() {
-        use wiremock::{
-            matchers::{body_partial_json, method},
-            Mock, MockServer, ResponseTemplate,
-        };
+    async fn reasoning_fallback_has_a_separate_budget_and_keeps_the_requested_effort() {
         let server = MockServer::start().await;
+        let calls = Arc::new(AtomicUsize::new(0));
+        let seen = calls.clone();
         Mock::given(method("POST"))
-            .and(body_partial_json(
-                serde_json::json!({"model":DEFAULT_RESPONSE_MODEL}),
-            ))
-            .respond_with(ResponseTemplate::new(503))
-            .expect(1)
-            .mount(&server)
-            .await;
-        Mock::given(method("POST"))
-            .and(body_partial_json(
-                serde_json::json!({"model":DEFAULT_PRIMARY_MODEL}),
-            ))
-            .respond_with(|request: &wiremock::Request| {
+            .respond_with(move |request: &Request| {
                 let body: Value = serde_json::from_slice(&request.body).unwrap();
-                assert_eq!(body["chat_template_kwargs"]["enable_thinking"], true);
-                assert!(body.get("reasoning_effort").is_none());
-                ResponseTemplate::new(200)
-                    .set_body_json(serde_json::json!({"ok":true}))
-                    .set_delay(Duration::from_millis(80))
+                assert_eq!(body["output_config"]["effort"], "low");
+                if seen.fetch_add(1, Ordering::SeqCst) == 0 {
+                    ResponseTemplate::new(503)
+                } else {
+                    crate::claude::test::reply(envelope("{\"ok\":true}"))
+                        .set_delay(Duration::from_millis(80))
+                }
             })
-            .expect(1)
+            .expect(2)
             .mount(&server)
             .await;
+        let mut payload = chat(DEFAULT_RESPONSE_MODEL);
+        payload["reasoning_effort"] = serde_json::json!("low");
         let result = post_default_interactive_json(
             &reqwest::Client::new(),
             &server.uri(),
             "fixture",
-            &serde_json::json!({"model":DEFAULT_RESPONSE_MODEL,"reasoning_effort":"low"}),
+            &payload,
             Duration::from_millis(20),
             Duration::from_millis(300),
             None,
         )
         .await
         .unwrap();
-        assert_eq!(result["ok"], true);
+        assert_eq!(result["choices"][0]["finish_reason"], "stop");
         assert_eq!(server.received_requests().await.unwrap().len(), 2);
     }
 }

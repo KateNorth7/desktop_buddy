@@ -414,9 +414,9 @@ impl<'a> Service<'a> {
     pub fn configured(client: &'a reqwest::Client) -> Result<Self, String> {
         Ok(Self {
             client,
-            endpoint: http::endpoint("NEBIUS_API_URL")?,
-            key: http::secret("NEBIUS_API_KEY")?,
-            model: http::secret("NEBIUS_MODEL_ID")?,
+            endpoint: http::endpoint("ANTHROPIC_API_URL")?,
+            key: http::secret("ANTHROPIC_API_KEY")?,
+            model: http::secret("ANTHROPIC_MODEL_ID")?,
         })
     }
     pub async fn request(
@@ -513,7 +513,14 @@ impl<'a> Service<'a> {
         } else {
             self.model.clone()
         };
-        let mut payload = json!({"model":model,"temperature":if deliberate && model.to_ascii_lowercase().contains("nemotron") {1.0}else{0.2},"max_tokens":if deliberate {8192}else{6144},"messages":messages});
+        // Deliberate planning and the coaching judge reason at high effort; bounded
+        // background operations stay at low effort so thinking never eats the budget.
+        let effort = if deliberate || name == "buddy_coaching_voice_judge" {
+            "high"
+        } else {
+            "low"
+        };
+        let mut payload = json!({"model":model,"max_tokens":if deliberate {8192}else{6144},"reasoning_effort":effort,"messages":messages});
         if name == "voice_draft_cleanup" {
             payload["max_tokens"] = json!(1536);
         }
@@ -521,27 +528,19 @@ impl<'a> Service<'a> {
             payload["max_tokens"] = json!(4096);
         }
         if matches!(name, "verify_work_receipt" | "companion_task_signal") {
-            payload["max_tokens"] = json!(1024);
+            payload["max_tokens"] = json!(2048);
         }
         if name == "buddy_coaching_voice_judge" {
-            payload["temperature"] = json!(1.0);
             payload["max_tokens"] = json!(4096);
         }
         if let Some(schema) = schema {
             payload["response_format"] = json!({"type":"json_schema","json_schema":{"name":name,"strict":true,"schema":schema}});
         }
-        if model.to_ascii_lowercase().contains("nemotron") {
-            payload["chat_template_kwargs"] =
-                json!({"enable_thinking":deliberate || name == "buddy_coaching_voice_judge"});
-            if deliberate {
-                payload["top_p"] = json!(0.95);
-            }
-        }
         let default_interactive = default_interactive_fallback(
             name,
             &self.model,
             &model,
-            std::env::var("NEBIUS_REASONING_MODEL_ID").ok().as_deref(),
+            std::env::var("ANTHROPIC_RESPONSE_MODEL_ID").ok().as_deref(),
         );
         if let Some(check) = preflight {
             check()?;
@@ -735,7 +734,7 @@ pub async fn analyze_goal(
             ],
             warnings: vec![Warning {
                 title: "Mock AI response".into(),
-                detail: "AI_MOCK is enabled. No Nebius or Tavily request was sent.".into(),
+                detail: "AI_MOCK is enabled. No Claude or Tavily request was sent.".into(),
                 source_url: None,
             }],
             ..Default::default()

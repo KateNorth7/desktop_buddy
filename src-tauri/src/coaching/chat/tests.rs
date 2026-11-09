@@ -2,7 +2,7 @@ use super::*;
 use crate::core::GoalDraft;
 use wiremock::{
     matchers::{body_partial_json, method},
-    Mock, MockServer, ResponseTemplate,
+    Mock, MockServer,
 };
 
 #[tokio::test]
@@ -36,10 +36,10 @@ async fn coaching_response_receives_only_its_bounded_prior_chat_history() {
     Mock::given(method("POST")).respond_with(|request: &wiremock::Request| {
         let body:Value=serde_json::from_slice(&request.body).unwrap();
         assert!(!body.to_string().contains("FOREIGN-CHAT-CANARY"));
-        let content = if body["response_format"]["json_schema"]["name"]=="buddy_coaching_response" {
-            assert!(body["messages"][0]["content"].as_str().unwrap().contains("Sound like a calm colleague, not a coach."));
-            assert!(body["messages"][0]["content"].as_str().unwrap().contains(super::super::voice::VOICE_EXAMPLES));
-            let source:Value=serde_json::from_str(body["messages"][1]["content"].as_str().unwrap()).unwrap();
+        let content = if crate::claude::test::operation(&body)=="buddy_coaching_response" {
+            assert!(crate::claude::test::system(&body).as_str().unwrap().contains("Sound like a calm colleague, not a coach."));
+            assert!(crate::claude::test::system(&body).as_str().unwrap().contains(super::super::voice::VOICE_EXAMPLES));
+            let source:Value=serde_json::from_str(body["messages"][0]["content"].as_str().unwrap()).unwrap();
             let history=&source["context"]["history"];
             assert!(history.as_array().unwrap().len()<=12);
             assert!(history.to_string().len()<=6000);
@@ -48,7 +48,7 @@ async fn coaching_response_receives_only_its_bounded_prior_chat_history() {
             assert_eq!(source["context"]["latest_message"],"CURRENT-ONLY");
             json!({"message":"Use your last note to choose a heading."})
         } else { json!({"reply":null,"evidence":null,"action":null}) };
-        ResponseTemplate::new(200).set_body_json(json!({"choices":[{"finish_reason":"stop","message":{"content":content.to_string()}}]}))
+        crate::claude::test::reply(json!({"choices":[{"finish_reason":"stop","message":{"content":content.to_string()}}]}))
     }).expect(2).mount(&server).await;
     let result = handle(
         &state,
@@ -140,18 +140,18 @@ fn service<'a>(state: &'a AppState, server: &MockServer) -> Service<'a> {
 async fn provider(server: &MockServer, interpretation: Value) {
     Mock::given(method("POST"))
         .and(body_partial_json(
-            json!({"response_format":{"json_schema":{"name":"buddy_coaching_interpretation"}}}),
+            json!({"output_config":{"format":{"schema":{"description":"buddy_coaching_interpretation"}}}}),
         ))
         .respond_with(
-            ResponseTemplate::new(200).set_body_json(
+            crate::claude::test::reply(
                 json!({"choices":[{"finish_reason":"stop","message":{"content":interpretation.to_string()}}]}),
             ),
         )
         .mount(server)
         .await;
     Mock::given(method("POST"))
-        .and(body_partial_json(json!({"response_format":{"json_schema":{"name":"buddy_coaching_response"}}})))
-        .respond_with(ResponseTemplate::new(200).set_body_json(json!({"choices":[{"finish_reason":"stop","message":{"content":"{\"message\":\"What would help with this goal?\"}"}}]})))
+        .and(body_partial_json(json!({"output_config":{"format":{"schema":{"description":"buddy_coaching_response"}}}})))
+        .respond_with(crate::claude::test::reply(json!({"choices":[{"finish_reason":"stop","message":{"content":"{\"message\":\"What would help with this goal?\"}"}}]})))
         .mount(server).await;
 }
 async fn turn(
@@ -471,7 +471,7 @@ async fn privacy_target_pause_exit_and_forget_during_http_discard_the_pending_tr
     for change in ["privacy", "target", "pause", "exit", "forget"] {
         let (state, s) = fixture();
         let server = MockServer::start().await;
-        Mock::given(method("POST")).respond_with(ResponseTemplate::new(200).set_delay(std::time::Duration::from_millis(150)).set_body_json(json!({"choices":[{"finish_reason":"stop","message":{"content":json!({"reply":{"type":"barrier","barrier":"external_dependency"},"evidence":"Waiting for approval","action":null}).to_string()}}]}))).expect(1).mount(&server).await;
+        Mock::given(method("POST")).respond_with(crate::claude::test::reply(json!({"choices":[{"finish_reason":"stop","message":{"content":json!({"reply":{"type":"barrier","barrier":"external_dependency"},"evidence":"Waiting for approval","action":null}).to_string()}}]})).set_delay(std::time::Duration::from_millis(150))).expect(1).mount(&server).await;
         let service = service(&state, &server);
         let request = handle(
             &state,

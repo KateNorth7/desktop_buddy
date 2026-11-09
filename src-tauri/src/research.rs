@@ -505,7 +505,7 @@ pub(crate) async fn run_authorized(
             return Err("Web research is unavailable while AI_MOCK is enabled".into());
         }
         let service =
-            Service::configured(&state.client).map_err(|_| "Configure Nebius before searching")?;
+            Service::configured(&state.client).map_err(|_| "Configure Claude before searching")?;
         let url = crate::http::endpoint("TAVILY_API_URL")
             .map_err(|_| "Configure Tavily before searching")?;
         let key = crate::http::secret("TAVILY_API_KEY")

@@ -79,8 +79,8 @@ async fn real_http_proposal_completes_only_the_confirmed_micro_action() {
     let (state, initial) = fixture();
     let server = MockServer::start().await;
     Mock::given(method("POST"))
-        .and(header("authorization", "Bearer synthetic-test-key"))
-        .respond_with(ResponseTemplate::new(200).set_body_json(response(
+        .and(header("x-api-key", "synthetic-test-key"))
+        .respond_with(crate::claude::test::reply(response(
             json!({"title":"Open the proposal and type its heading","estimated_seconds":20}),
         )))
         .expect(1)
@@ -123,11 +123,11 @@ async fn real_http_proposal_completes_only_the_confirmed_micro_action() {
     let requests = server.received_requests().await.unwrap();
     let payload: Value = requests[0].body_json().unwrap();
     assert_eq!(
-        payload["response_format"]["json_schema"]["name"],
+        crate::claude::test::operation(&payload),
         "buddy_coaching_proposal"
     );
     assert!(payload.to_string().contains("Draft project proposal"));
-    let system = payload["messages"][0]["content"].as_str().unwrap();
+    let system = crate::claude::test::system(&payload).as_str().unwrap();
     assert!(system.contains("Sound like a calm colleague, not a coach."));
     assert!(system.contains("Write the title in the language of the goal text"));
     assert!(!system.contains(super::super::voice::VOICE_EXAMPLES));
@@ -139,7 +139,7 @@ async fn malformed_proposals_have_one_repair_and_preserve_the_session() {
     let (state, initial) = fixture();
     let server = MockServer::start().await;
     Mock::given(method("POST"))
-        .respond_with(ResponseTemplate::new(200).set_body_json(response(
+        .respond_with(crate::claude::test::reply(response(
             json!({"title":"Pretend complete","estimated_seconds":20,"next_state":"completed"}),
         )))
         .expect(2)
@@ -168,7 +168,7 @@ async fn malformed_proposals_have_one_repair_and_preserve_the_session() {
     );
     let requests = server.received_requests().await.unwrap();
     let payload: Value = requests[1].body_json().unwrap();
-    let system = payload["messages"][0]["content"].as_str().unwrap();
+    let system = crate::claude::test::system(&payload).as_str().unwrap();
     assert!(system.contains("last proposal failed"));
     assert!(!system.contains("Copy instruction"));
 }
@@ -213,11 +213,8 @@ async fn in_flight_privacy_target_and_pause_changes_discard_provider_output() {
         let server = MockServer::start().await;
         Mock::given(method("POST"))
             .respond_with(
-                ResponseTemplate::new(200)
-                    .set_delay(Duration::from_millis(250))
-                    .set_body_json(response(
-                        json!({"title":"Open the proposal","estimated_seconds":10}),
-                    )),
+                crate::claude::test::reply(response(json!({"title":"Open the proposal","estimated_seconds":10})))
+                    .set_delay(Duration::from_millis(250)),
             )
             .expect(1)
             .mount(&server)
@@ -366,11 +363,8 @@ async fn privacy_revoked_during_an_invalid_reply_prevents_a_repair_request() {
     let server = MockServer::start().await;
     Mock::given(method("POST"))
         .respond_with(
-            ResponseTemplate::new(200)
-                .set_delay(Duration::from_millis(250))
-                .set_body_json(response(
-                    json!({"title":"Open proposal","estimated_seconds":1}),
-                )),
+            crate::claude::test::reply(response(json!({"title":"Open proposal","estimated_seconds":1})))
+                .set_delay(Duration::from_millis(250)),
         )
         .expect(1)
         .mount(&server)

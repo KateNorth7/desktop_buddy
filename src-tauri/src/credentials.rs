@@ -1,7 +1,7 @@
 //! Runtime-only provider secrets. Never return saved credentials to the webview.
 pub fn provider_name(provider: &str) -> Result<&'static str, String> {
     match provider {
-        "nebius" => Ok("NEBIUS_API_KEY"),
+        "anthropic" => Ok("ANTHROPIC_API_KEY"),
         "tavily" => Ok("TAVILY_API_KEY"),
         _ => Err("Unknown provider".into()),
     }
@@ -91,12 +91,25 @@ mod vault {
 }
 #[cfg(target_os = "macos")]
 mod vault {
-    pub use crate::macos::has_key as exists;
     use std::{
         collections::HashMap,
         sync::{Mutex, OnceLock},
     };
     type Entry = Result<Option<String>, String>;
+    /// The pinned, immutable credential helper accepts only its two original
+    /// Keychain account names. The Claude key therefore occupies the slot that
+    /// previously held the Nebius key; renaming it requires a reviewed helper
+    /// rebuild (see `native/credential-helper/README.md`).
+    fn account(name: &str) -> &str {
+        if name == "ANTHROPIC_API_KEY" {
+            "NEBIUS_API_KEY"
+        } else {
+            name
+        }
+    }
+    pub fn exists(name: &str) -> Result<bool, String> {
+        crate::macos::has_key(account(name))
+    }
     fn cache() -> &'static Mutex<HashMap<String, Entry>> {
         static CACHE: OnceLock<Mutex<HashMap<String, Entry>>> = OnceLock::new();
         CACHE.get_or_init(|| Mutex::new(HashMap::new()))
@@ -109,7 +122,7 @@ mod vault {
         if let Some(result) = cache.get(name) {
             return result.clone();
         }
-        let result = crate::macos::read_key(name);
+        let result = crate::macos::read_key(account(name));
         cache.insert(name.into(), result.clone());
         result
     }
@@ -124,7 +137,7 @@ mod vault {
         let mut cache = cache()
             .lock()
             .map_err(|_| "Credential access unavailable")?;
-        crate::macos::write_key(name, key)?;
+        crate::macos::write_key(account(name), key)?;
         cache.insert(name.into(), Ok(key.map(str::to_string)));
         Ok(())
     }
@@ -154,7 +167,7 @@ mod tests {
     use super::*;
     #[test]
     fn accepts_only_known_providers() {
-        assert_eq!(provider_name("nebius").unwrap(), "NEBIUS_API_KEY");
+        assert_eq!(provider_name("anthropic").unwrap(), "ANTHROPIC_API_KEY");
         assert_eq!(provider_name("tavily").unwrap(), "TAVILY_API_KEY");
         assert!(provider_name("arbitrary-secret").is_err());
     }

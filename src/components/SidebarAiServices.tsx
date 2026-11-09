@@ -13,18 +13,18 @@ import { useDismissiblePopover } from "./useDismissiblePopover";
 
 const services = [
   {
-    id: "nebius",
-    name: "Nebius",
+    id: "anthropic",
+    name: "Claude",
     icon: Cloud,
     description:
-      "Hosts sumi's AI requests in the cloud and provides access to the configured language model.",
+      "Anthropic's Claude API runs sumi's AI requests in the cloud with the configured Claude model.",
   },
   {
-    id: "nvidia",
+    id: "model",
     name: "AI model",
     icon: Sparkles,
     description:
-      "Plans and validates goal actions and interprets background activity. The response model writes natural replies and checkpoints. Runs through Nebius, not on this computer.",
+      "Plans and validates goal actions and interprets background activity. The response model writes natural replies and checkpoints. Runs through Claude, not on this computer.",
   },
   {
     id: "tavily",
@@ -57,7 +57,7 @@ export function SidebarAiServices({
   const [offline, setOffline] = useState(
     () => typeof navigator !== "undefined" && !navigator.onLine,
   );
-  const [active, setActive] = useState<ServiceId>("nebius");
+  const [active, setActive] = useState<ServiceId>("anthropic");
   const [position, setPosition] = useState({ left: 0, top: 0 });
   const [receipt, setReceipt] = useState("");
   const mounted = useRef(false);
@@ -79,7 +79,7 @@ export function SidebarAiServices({
     if (!desktop || !allowed.current || !navigator.onLine)
       return Promise.resolve();
     setBusy(true);
-    setChecking(["nebius", "nvidia", "tavily"]);
+    setChecking(["anthropic", "model", "tavily"]);
     setReceipt("");
     const work = async () => {
       try {
@@ -87,7 +87,7 @@ export function SidebarAiServices({
         if (!allowed.current || !mounted.current || !navigator.onLine) return;
         if (initial?.services.some((item) => item.status === "mock")) return;
         await Promise.allSettled(
-          (["nebius", "tavily"] as const).map(async (provider) => {
+          (["anthropic", "tavily"] as const).map(async (provider) => {
             try {
               await api.testConnection(provider);
             } finally {
@@ -95,7 +95,7 @@ export function SidebarAiServices({
               if (mounted.current)
                 setChecking((pending) =>
                   pending.filter((id) =>
-                    provider === "nebius" ? id === "tavily" : id !== "tavily",
+                    provider === "anthropic" ? id === "tavily" : id !== "tavily",
                   ),
                 );
             }
@@ -181,13 +181,11 @@ export function SidebarAiServices({
     );
   }
   function name(service: ServiceId) {
-    if (service !== "nvidia")
+    if (service !== "model")
       return services.find((item) => item.id === service)!.name;
-    if (snapshot?.configured_model?.startsWith("nvidia/"))
-      return /nemotron/i.test(snapshot.configured_model)
-        ? "NVIDIA Nemotron"
-        : "NVIDIA model";
-    return "AI model";
+    return snapshot?.configured_model?.startsWith("claude-")
+      ? "Claude model"
+      : "AI model";
   }
   const item = services.find((service) => service.id === active)!;
   const checkedAt = snapshot?.services.find(

@@ -1,5 +1,5 @@
 import { invoke } from "../data/ipc";
-export type ServiceId = "nebius" | "nvidia" | "tavily";
+export type ServiceId = "anthropic" | "model" | "tavily";
 export type ServiceState =
   | "verified"
   | "unavailable"
@@ -27,7 +27,7 @@ export const serviceStatusApi = {
 export function serviceStateLabel(id: ServiceId, state: ServiceState): string {
   switch (state) {
     case "verified":
-      return id === "nvidia" ? "Model listed" : "Connected";
+      return id === "model" ? "Model available" : "Connected";
     case "unavailable":
       return "Could not verify access";
     case "not_configured":

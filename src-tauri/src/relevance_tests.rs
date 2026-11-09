@@ -43,7 +43,7 @@ fn cloud_attribution_reaches_progress_without_local_keyword_evidence() {
             Some(ActivityMatch {
                 goal_id: Some(id.to_string()),
                 confidence: 0.94,
-                reason: "Nebius identified the current goal".into(),
+                reason: "Claude identified the current goal".into(),
             }),
         )
         .unwrap();

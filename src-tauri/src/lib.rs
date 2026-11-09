@@ -40,7 +40,8 @@ mod macos;
 mod memory;
 mod mixed_action_check;
 mod models;
-mod nebius;
+mod claude;
+mod focus;
 mod observation;
 mod observation_check;
 mod onboarding_goal;
@@ -666,7 +667,7 @@ pub fn run() {
             privacy::test_provider_connection,
             engine_observability::get_personal_ai_engine,
             engine_observability::get_ai_service_status,
-            engine_observability::test_nebius_inference,
+            engine_observability::test_claude_inference,
             engine_observability::test_agent_actions,
             commands::set_provider_key,
             commands::set_goal,

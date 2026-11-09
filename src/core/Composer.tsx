@@ -286,7 +286,7 @@ export function Composer({
         </label>
       )}
       <p className="helper">
-        Ask sumi sends this draft to Nebius when AI assistance is enabled in
+        Ask sumi sends this draft to Claude when AI assistance is enabled in
         Settings. Review attachments before asking; suggestions need your
         acceptance.
         {mock ? " AI_MOCK is enabled: no provider request is sent." : ""}

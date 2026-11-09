@@ -9,20 +9,22 @@ use wiremock::{
 fn endpoints_and_retention_are_validated() {
     assert_eq!(
         test_url(
-            "https://api.tokenfactory.nebius.com/v1/chat/completions",
-            "nebius"
+            "https://api.anthropic.com/v1/messages",
+            "anthropic",
+            Some("claude-opus-5-5")
         )
         .unwrap()
         .as_str(),
-        "https://api.tokenfactory.nebius.com/v1/models"
+        "https://api.anthropic.com/v1/models/claude-opus-5-5"
     );
     assert_eq!(
-        test_url("https://api.tavily.com/search", "tavily")
+        test_url("https://api.tavily.com/search", "tavily", None)
             .unwrap()
             .as_str(),
         "https://api.tavily.com/usage"
     );
-    assert!(test_url("https://example.com/unknown", "nebius").is_err());
+    assert!(test_url("https://example.com/unknown", "anthropic", Some("claude-opus-5-5")).is_err());
+    assert!(test_url("https://api.anthropic.com/v1/messages", "anthropic", Some("../secret")).is_err());
     for days in [0, 7, 30, 90] {
         assert!(validate_retention(days).is_ok());
     }
@@ -124,7 +126,7 @@ fn preview_context_uses_the_same_minimization_as_provider_requests() {
             ..Default::default()
         })
         .collect();
-    let focus = nebius::focus_context("Goal", &items);
+    let focus = focus::focus_context("Goal", &items);
     assert_eq!(focus["recent_activity"].as_array().unwrap().len(), 10);
     assert_eq!(focus["recent_activity"][0]["app"], "app5");
     assert_eq!(
@@ -132,7 +134,7 @@ fn preview_context_uses_the_same_minimization_as_provider_requests() {
         160
     );
     assert_eq!(
-        nebius::search_context("Goal", &items)["recent_window_titles"]
+        focus::search_context("Goal", &items)["recent_window_titles"]
             .as_array()
             .unwrap()
             .len(),
@@ -143,9 +145,9 @@ fn preview_context_uses_the_same_minimization_as_provider_requests() {
 async fn connection_checks_use_get_without_private_context() {
     let server = MockServer::start().await;
     Mock::given(method("GET"))
-        .and(header("authorization", "Bearer test-key"))
+        .and(header("x-api-key", "test-key"))
         .respond_with(
-            ResponseTemplate::new(200).set_body_json(json!({"data":[{"id":"test-model"}]})),
+            crate::claude::test::reply(json!({"id":"test-model","display_name":"Test"})),
         )
         .expect(1)
         .mount(&server)
@@ -154,7 +156,7 @@ async fn connection_checks_use_get_without_private_context() {
         &reqwest::Client::new(),
         &server.uri(),
         "test-key",
-        "nebius",
+        "anthropic",
         Some("test-model")
     )
     .await
@@ -184,11 +186,11 @@ async fn connection_errors_do_not_echo_provider_bodies() {
 }
 
 #[tokio::test]
-async fn model_list_probe_reports_missing_model_without_claiming_inference() {
+async fn model_probe_reports_missing_model_without_claiming_inference() {
     let server = MockServer::start().await;
     Mock::given(method("GET"))
         .respond_with(
-            ResponseTemplate::new(200).set_body_json(json!({"data":[{"id":"other-model"}]})),
+            crate::claude::test::reply(json!({"id":"other-model"})),
         )
         .expect(1)
         .mount(&server)
@@ -197,13 +199,13 @@ async fn model_list_probe_reports_missing_model_without_claiming_inference() {
         &reqwest::Client::new(),
         &server.uri(),
         "fixture-key",
-        "nebius",
+        "anthropic",
         Some("configured-model"),
     )
     .await
     .unwrap();
     assert_eq!(result.model_available, Some(false));
-    assert!(result.message.contains("not listed"));
+    assert!(result.message.contains("not available"));
     assert!(server.received_requests().await.unwrap()[0].body.is_empty());
 }
 
@@ -211,7 +213,7 @@ async fn model_list_probe_reports_missing_model_without_claiming_inference() {
 async fn tavily_probe_verifies_usage_without_sending_a_search_query() {
     let server = MockServer::start().await;
     Mock::given(method("GET"))
-        .respond_with(ResponseTemplate::new(200).set_body_json(json!({"key":{"usage":3}})))
+        .respond_with(crate::claude::test::reply(json!({"key":{"usage":3}})))
         .expect(1)
         .mount(&server)
         .await;

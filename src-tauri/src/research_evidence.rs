@@ -244,7 +244,7 @@ mod tests {
     }
     #[tokio::test]
     async fn evidence_request_is_bounded_and_contains_no_workspace_or_memory() {
-        use wiremock::{matchers::method, Mock, MockServer, Request, ResponseTemplate};
+        use wiremock::{matchers::method, Mock, MockServer, Request};
         let state =
             AppState::new(crate::storage::Storage::open(std::path::Path::new(":memory:")).unwrap())
                 .unwrap();
@@ -253,14 +253,14 @@ mod tests {
             .respond_with(|r: &Request| {
                 let body: Value = serde_json::from_slice(&r.body).unwrap();
                 assert_eq!(
-                    body["response_format"]["json_schema"]["name"],
+                    crate::claude::test::operation(&body),
                     "buddy_research_evidence"
                 );
                 let context: Value =
-                    serde_json::from_str(body["messages"][1]["content"].as_str().unwrap()).unwrap();
+                    serde_json::from_str(body["messages"][0]["content"].as_str().unwrap()).unwrap();
                 assert_eq!(context.as_object().unwrap().len(), 2);
                 assert!(context.get("state").is_none() && context.get("memory").is_none());
-                ResponseTemplate::new(200).set_body_json(envelope(decisions()))
+                crate::claude::test::reply(envelope(decisions()))
             })
             .expect(1)
             .mount(&server)

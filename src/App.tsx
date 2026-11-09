@@ -43,7 +43,7 @@ const empty: Dashboard = {
     dnd: false,
     demo: false,
     mock_ai: false,
-    nebius_configured: false,
+    anthropic_configured: false,
     tavily_configured: false,
   },
 };
@@ -281,8 +281,8 @@ export default function App() {
                 <p className="notice">
                   {data.status.demo ? "Simulated activity" : "Live activity"} ·{" "}
                   {data.status.mock_ai
-                    ? "Mock AI responses — no Nebius call"
-                    : "Real Nebius integration"}
+                    ? "Mock AI responses — no Claude call"
+                    : "Real Claude integration"}
                 </p>
               )}
               {displayedError && (

@@ -63,7 +63,7 @@ pub(crate) async fn run() -> Result<Value, String> {
         return chat_fixture(&service).await;
     }
     let compare = std::env::args().any(|a| a == "--compare-observation-models");
-    let configured = std::env::var("NEBIUS_VISION_MODEL_ID")
+    let configured = std::env::var("ANTHROPIC_VISION_MODEL_ID")
         .ok()
         .filter(|s| !s.trim().is_empty())
         .unwrap_or_else(|| crate::http::DEFAULT_RESPONSE_MODEL.into());
@@ -75,13 +75,9 @@ pub(crate) async fn run() -> Result<Value, String> {
     }
     let mut models = vec![configured];
     if compare {
-        for model in [
-            "nvidia/Nemotron-3.5-Super-VL",
-            crate::http::DEFAULT_RESPONSE_MODEL,
-        ] {
-            if !models.iter().any(|m| m == model) {
-                models.push(model.into());
-            }
+        let model = crate::http::DEFAULT_RESPONSE_MODEL;
+        if !models.iter().any(|m| m == model) {
+            models.push(model.into());
         }
     }
     let mut rows = Vec::new();
@@ -325,7 +321,7 @@ pub(crate) async fn run() -> Result<Value, String> {
         return Err("No matching semantic fixture cases".into());
     }
     Ok(
-        json!({"all_passed":rows.iter().all(|r|r["passed"]==true),"source":"real_nebius_synthetic_fixtures","cases":rows,"provider_calls":calls,"provider_reported_prompt_tokens":prompt_tokens,"provider_reported_completion_tokens":completion_tokens,
+        json!({"all_passed":rows.iter().all(|r|r["passed"]==true),"source":"real_claude_synthetic_fixtures","cases":rows,"provider_calls":calls,"provider_reported_prompt_tokens":prompt_tokens,"provider_reported_completion_tokens":completion_tokens,
         "scope":"Fabricated goals, in-memory storage and rendered synthetic images only. No installed goals, chats, native screens or private evidence were read. Native capture and actual application transitions remain separate acceptance checks."}),
     )
 }
@@ -393,7 +389,7 @@ async fn captured_request(service: &Service<'_>, model: &str, path: &str) -> Res
     let accepted_once = companion::confirm_new_goal(&mut inner.storage, &p).is_err();
     Ok(
         json!({"all_passed":before==0 && saved.is_some() && accepted_once,
-        "source":"native_public_fixture_text_real_nebius", "model":model,
+        "source":"native_public_fixture_text_real_claude", "model":model,
         "native_text_characters":text.chars().count(), "image_used_by_model":false,
         "native_capture_succeeded":report["capture"]["jpeg_base64_length"].as_u64().is_some_and(|n|n>0),
         "provider_calls":1,"latency_ms":started.elapsed().as_millis(),
@@ -418,7 +414,7 @@ async fn chat_fixture(service: &Service<'_>) -> Result<Value, String> {
         ai.share_goal_context = true;
         i.storage.write_setting("ai_assistance_preferences", &ai)?;
         i.status.tracking = true;
-        i.status.nebius_configured = true;
+        i.status.anthropic_configured = true;
         i.companion.view.preferences.screen_task_detection = true;
         i.companion.view.preferences.use_screenshots = true;
         i.companion.view.preferences.automatic_completion = true;
@@ -447,6 +443,6 @@ async fn chat_fixture(service: &Service<'_>) -> Result<Value, String> {
         .map_err(|_| "Fixture state unavailable")?;
     let unchanged = !outcome.committed && before == json!(i.storage.core_work_snapshot()?);
     Ok(
-        json!({"all_passed":unchanged,"source":"real_nebius_synthetic_dialogue","workspace_unchanged":unchanged,"reply":outcome.reply.message,"scope":"The mutation check is automated. Review the synthetic reply for semantic correctness. No installed chats or user data were read."}),
+        json!({"all_passed":unchanged,"source":"real_claude_synthetic_dialogue","workspace_unchanged":unchanged,"reply":outcome.reply.message,"scope":"The mutation check is automated. Review the synthetic reply for semantic correctness. No installed chats or user data were read."}),
     )
 }

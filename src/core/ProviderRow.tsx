@@ -12,7 +12,7 @@ export function ProviderRow({
   checked,
   onChanged,
 }: {
-  provider: "nebius" | "tavily";
+  provider: "anthropic" | "tavily";
   name: string;
   role: string;
   configured: boolean;

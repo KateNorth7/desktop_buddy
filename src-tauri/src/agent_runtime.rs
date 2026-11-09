@@ -268,7 +268,7 @@ fn service_allowed(inner: &Inner) -> bool {
             .storage
             .user_settings()
             .is_ok_and(|s| s.onboarding.completed)
-        && (inner.status.nebius_configured || inner.status.mock_ai)
+        && (inner.status.anthropic_configured || inner.status.mock_ai)
         && !crate::companion::quiet_mode(inner)
         && !inner.companion.view.preferences.paused
         && !inner.companion.view.preferences.quiet(minute)

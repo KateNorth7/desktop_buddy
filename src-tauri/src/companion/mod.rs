@@ -466,8 +466,8 @@ fn progress_status(inner: &Inner, _minute: u32) -> String {
         .is_ok_and(|p| p.enabled && p.share_goal_context)
     {
         "Enable AI assistance and goal sharing to understand progress.".into()
-    } else if !inner.status.nebius_configured {
-        "Connect Nebius to understand progress.".into()
+    } else if !inner.status.anthropic_configured {
+        "Connect Claude to understand progress.".into()
     } else if p.paused {
         "Observation is paused in your settings.".into()
     } else if let Some(error) = &inner.companion.progress_error {
@@ -592,7 +592,7 @@ async fn provider_request(
     data: Value,
     format: Option<Value>,
 ) -> Result<Value, String> {
-    let mut payload = json!({"model":model,"temperature":0.2,"max_tokens":1024,"messages":[{"role":"system","content":system},{"role":"user","content":data.to_string()}]});
+    let mut payload = json!({"model":model,"max_tokens":2048,"messages":[{"role":"system","content":system},{"role":"user","content":data.to_string()}]});
     if let Some(format) = format {
         payload["response_format"] = format;
     }
@@ -1492,7 +1492,7 @@ mod tests {
         inner.buddy.view.avatar.visible = true;
         inner.status.tracking = true;
         inner.status.ai_enabled = true;
-        inner.status.nebius_configured = true;
+        inner.status.anthropic_configured = true;
         inner.status.demo = false;
         inner.status.mock_ai = false;
         inner.storage.set_goal("Send deck").unwrap();
@@ -1563,7 +1563,7 @@ mod tests {
             ..Default::default()
         }));
         assert!(sensitive_window(&ActivitySnapshot {
-            window_title: "Nebius Token Factory API keys".into(),
+            window_title: "Claude (Anthropic) API keys".into(),
             ..Default::default()
         }));
         let sample = redact_sample("Please send the deck\nAPI_KEY=fictional-key\nAuthorization: Bearer demo\nTomorrow at 3");
@@ -1640,11 +1640,11 @@ mod tests {
     async fn companion_provider_sends_only_explicit_context_and_rejects_incomplete_responses() {
         use wiremock::{
             matchers::{header, method, path},
-            Mock, MockServer, ResponseTemplate,
+            Mock, MockServer,
         };
         let server = MockServer::start().await;
-        Mock::given(method("POST")).and(path("/chat")).and(header("authorization", "Bearer test-only"))
-            .respond_with(ResponseTemplate::new(200).set_body_json(json!({"choices":[{"finish_reason":"stop","message":{"content":"Try a small next step."}}]}))).expect(1).mount(&server).await;
+        Mock::given(method("POST")).and(path("/chat")).and(header("x-api-key", "test-only"))
+            .respond_with(crate::claude::test::reply(json!({"choices":[{"finish_reason":"stop","message":{"content":"Try a small next step."}}]}))).expect(1).mount(&server).await;
         let reply = provider_request(
             &reqwest::Client::new(),
             &format!("{}/chat", server.uri()),

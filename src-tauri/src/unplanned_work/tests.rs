@@ -50,7 +50,7 @@ fn ready() -> AppState {
         i.status.tracking = true;
         i.status.demo = false;
         i.status.mock_ai = false;
-        i.status.nebius_configured = true;
+        i.status.anthropic_configured = true;
         i.companion.view.preferences.screen_task_detection = true;
         i.buddy.foreground = Some(sample());
     }
@@ -431,17 +431,17 @@ fn response_validation_requires_a_new_unambiguous_task_and_valid_candidate_ids()
 }
 #[tokio::test]
 async fn classifier_uses_minimized_redacted_context_once_without_credentials_or_raw_urls() {
-    use wiremock::{matchers::method, Mock, MockServer, ResponseTemplate};
+    use wiremock::{matchers::method, Mock, MockServer};
     let server = MockServer::start().await;
     Mock::given(method("POST")).respond_with(|r:&wiremock::Request|{
         let body:Value=serde_json::from_slice(&r.body).unwrap();
-        let context:Value=serde_json::from_str(body["messages"][1]["content"].as_str().unwrap()).unwrap();
+        let context:Value=serde_json::from_str(body["messages"][0]["content"].as_str().unwrap()).unwrap();
         assert_eq!(context["activity"]["domain"],"mail.google.com");
         assert!(context["activity"]["visible_text"].as_str().unwrap().chars().count()<=crate::companion::screen_context::EXCERPT_CHARS);
         assert!(!body.to_string().contains("fictional-secret-canary"));
         assert!(!body.to_string().contains("isolated-test-key"));
         assert!(!body.to_string().contains("/mail/u/0"));
-        ResponseTemplate::new(200).set_body_json(crate::accuracy_check::envelope(json!({"title":"Handle unrelated emails","existing_goal_id":null,"confidence":0.94})))
+        crate::claude::test::reply(crate::accuracy_check::envelope(json!({"title":"Handle unrelated emails","existing_goal_id":null,"confidence":0.94})))
     }).expect(1).mount(&server).await;
     let client = reqwest::Client::new();
     let service = Service {

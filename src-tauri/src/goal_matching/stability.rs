@@ -158,7 +158,7 @@ impl Runtime {
             self.cache.clear();
             self.pending_suggestion = None;
             self.text_fingerprint = None;
-            if changed || self.view.source.as_deref() != Some("nebius_unverified") {
+            if changed || self.view.source.as_deref() != Some("model_unverified") {
                 self.view = MatchView {
                     enabled: true,
                     ..Default::default()
@@ -185,7 +185,7 @@ impl Runtime {
             && !stale
             && !missing
             && self.view.goal_id.is_some()
-            && matches!(self.view.source.as_deref(), Some("nebius" | "nebius_carry")))
+            && matches!(self.view.source.as_deref(), Some("model" | "model_carry")))
         .then_some(self.sample.as_ref())
         .flatten()
         .filter(|old| {
@@ -206,7 +206,7 @@ impl Runtime {
             goal_id: self.view.goal_id,
             confidence: self.view.confidence,
             reason: Some("AI match carried over within the same window; confirming".into()),
-            source: Some("nebius_carry".into()),
+            source: Some("model_carry".into()),
             enabled: true,
         });
         if changed {

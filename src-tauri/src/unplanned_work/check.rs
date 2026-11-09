@@ -40,6 +40,6 @@ pub(crate) async fn run() -> Result<Value, String> {
         }
     }
     Ok(
-        json!({"all_passed":rows.iter().all(|r|r["passed"]==true),"fixture":"synthetic_in_memory","provider":"real_nebius","cases":rows,"scope":"Classifier only; interval transfer, consent and completion persistence are covered by Rust regressions. No installed data or actual screen text was used."}),
+        json!({"all_passed":rows.iter().all(|r|r["passed"]==true),"fixture":"synthetic_in_memory","provider":"real_claude","cases":rows,"scope":"Classifier only; interval transfer, consent and completion persistence are covered by Rust regressions. No installed data or actual screen text was used."}),
     )
 }

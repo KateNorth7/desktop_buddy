@@ -46,7 +46,7 @@ vi.mock("../ai/AiSettings", () => ({ AiSettings: () => null }));
 vi.mock("./TrackingStatus", () => ({ TrackingStatus: () => null }));
 
 const data = {
-  status: { dnd: false, nebius_configured: true, tavily_configured: true },
+  status: { dnd: false, anthropic_configured: true, tavily_configured: true },
   user_settings: defaultUserSettings,
   buddy: { preferences: defaultBuddyPreferences },
 } as Dashboard;
@@ -58,8 +58,8 @@ beforeEach(() => {
     configured_model: "test-model",
     configured_vision_model: "fixture-screen-model",
     configured_image_description_model: "fixture-image-model",
-    services: ["nebius", "tavily"].map((id) => ({
-      id: id as "nebius" | "tavily",
+    services: ["anthropic", "tavily"].map((id) => ({
+      id: id as "anthropic" | "tavily",
       status: "not_checked",
       checked_at: null,
     })),
@@ -107,7 +107,7 @@ it("defaults the single connection row to built-in AI while keeping personal key
   ).toBe(true);
   fireEvent.click(services.getAllByRole("button", { name: "Test" })[0]);
   await waitFor(() =>
-    expect(api.testConnection).toHaveBeenCalledWith("nebius"),
+    expect(api.testConnection).toHaveBeenCalledWith("anthropic"),
   );
   expect(api.providerKey).not.toHaveBeenCalled();
 });
@@ -235,7 +235,7 @@ it("shows Vision as a compact service row and saves only explicit model edits", 
     ).toBeTruthy(),
   );
   const row = within(services.getByRole("group", { name: "Vision model" }));
-  expect(row.getByText("Uses Nebius")).toBeTruthy();
+  expect(row.getByText("Uses Claude")).toBeTruthy();
   expect(
     row.getByRole("img", { name: /Image descriptions: fixture-image-model/ }),
   ).toBeTruthy();

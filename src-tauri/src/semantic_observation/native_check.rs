@@ -214,6 +214,6 @@ pub(super) async fn run() -> Result<Value, String> {
     i.storage.undo_work_event(event)?;
     let undone = i.storage.core_work_snapshot()?.goals[0].status == "open";
     Ok(
-        json!({"all_passed":completed&&undone,"source":"native_public_fixture_real_nebius","native_collector":true,"native_interface_text":true,"native_images":2,"provider_calls":2,"completed":completed,"undo_verified":undone,"layout_wrapped_quote":layout_wrapped_quote,"scope":"Only the isolated synthetic window and in-memory goal were used. No installed user state was modified. This verifies the native evidence/provider/mutation chain, not unattended scheduler timing or every third-party app."}),
+        json!({"all_passed":completed&&undone,"source":"native_public_fixture_real_claude","native_collector":true,"native_interface_text":true,"native_images":2,"provider_calls":2,"completed":completed,"undo_verified":undone,"layout_wrapped_quote":layout_wrapped_quote,"scope":"Only the isolated synthetic window and in-memory goal were used. No installed user state was modified. This verifies the native evidence/provider/mutation chain, not unattended scheduler timing or every third-party app."}),
     )
 }

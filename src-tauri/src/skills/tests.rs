@@ -565,7 +565,7 @@ fn old_conversation_reference_never_targets_reused_sqlite_goal_id() {
     assert_eq!(s.core_snapshot(None).unwrap().goals[0].title, "Replacement");
 }
 #[test]
-fn malformed_nemotron_json_unknown_skills_and_extra_fields_are_rejected() {
+fn malformed_model_json_unknown_skills_and_extra_fields_are_rejected() {
     for content in [
         "not json",
         r#"{"kind":"actions"}"#,
@@ -787,10 +787,10 @@ fn result_fallback_is_readable_without_internal_json_or_identifiers() {
 
 #[tokio::test]
 async fn malformed_provider_output_retries_then_rejects_without_changes() {
-    use wiremock::{matchers::method, Mock, MockServer, ResponseTemplate};
+    use wiremock::{matchers::method, Mock, MockServer};
     let server = MockServer::start().await;
     Mock::given(method("POST"))
-        .respond_with(ResponseTemplate::new(200).set_body_json(
+        .respond_with(crate::claude::test::reply(
             json!({"choices":[{"finish_reason":"stop","message":{"content":"malformed"}}]}),
         ))
         .expect(2)

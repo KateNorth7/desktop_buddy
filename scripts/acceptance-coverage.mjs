@@ -488,15 +488,15 @@ partial(
   "P08-03",
   rust(
     "confirmation_to_tavily_to_work_context_mocked_end_to_end",
-    "correct_goal_step_and_only_relevant_memory_reach_nemotron",
+    "correct_goal_step_and_only_relevant_memory_reach_claude",
   ),
-  "Accept research using actual Nebius/Tavily accounts and assess usefulness for the current step.",
+  "Accept research using actual Claude/Tavily accounts and assess usefulness for the current step.",
 );
 contract(
   "P08-04",
   rust(
     "confirmation_to_tavily_to_work_context_mocked_end_to_end",
-    "correct_goal_step_and_only_relevant_memory_reach_nemotron",
+    "correct_goal_step_and_only_relevant_memory_reach_claude",
   ),
 );
 contract(
@@ -670,7 +670,7 @@ partial(
 partial(
   "P10-03",
   rust("manual_health_is_one_real_bounded_schema_request_without_user_context"),
-  "Run the manual inference health check against the user's actual Nebius account; the automated test uses an isolated HTTP server.",
+  "Run the manual inference health check against the user's actual Claude account; the automated test uses an isolated HTTP server.",
 );
 contract(
   "P10-04",
@@ -727,7 +727,7 @@ contract(
   "SEC-03",
   rust(
     "expired_consent_and_mock_ai_cannot_search",
-    "nemotron_unavailable_prevents_tavily",
+    "claude_unavailable_prevents_tavily",
   ),
 );
 partial(
@@ -743,7 +743,7 @@ contract(
   "SEC-05",
   rust(
     "scoped_retrieval_precedes_reasoning_and_excludes_other_projects_and_screen_text",
-    "correct_goal_step_and_only_relevant_memory_reach_nemotron",
+    "correct_goal_step_and_only_relevant_memory_reach_claude",
     "memory_and_utf8_context_budgets_include_goal_and_checkpoint",
   ),
 );

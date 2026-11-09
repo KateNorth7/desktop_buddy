@@ -40,7 +40,7 @@ async fn web_search_authorization_checks_the_request_without_sending_workspace_o
             .respond_with(move |r: &Request| {
                 let (b, c) = body(r);
                 assert_eq!(
-                    b["response_format"]["json_schema"]["name"],
+                    crate::claude::test::operation(&b),
                     "buddy_chat_research_authorization"
                 );
                 assert_eq!(c.as_object().unwrap().len(), 3);
@@ -130,7 +130,7 @@ async fn history_read_does_not_itself_authorize_web_search() {
     Mock::given(method("POST"))
         .respond_with(move |r: &Request| {
             let (b, c) = body(r);
-            match b["response_format"]["json_schema"]["name"]
+            match crate::claude::test::operation(&b)
                 .as_str()
                 .unwrap()
             {
@@ -190,11 +190,11 @@ async fn research_disabled_after_a_history_read_sends_no_search_and_reports_the_
     let plans = Arc::new(AtomicUsize::new(0));
     Mock::given(method("POST")).respond_with(move |r: &Request| {
         let (b,c)=body(r);
-        match b["response_format"]["json_schema"]["name"].as_str().unwrap_or("prose") {
+        match crate::claude::test::operation(&b).as_str().unwrap_or("prose") {
             "buddy_skill_plan" if plans.fetch_add(1,Ordering::SeqCst)==0 =>
                 response(action(&c,"inspect_conversation",json!({"query":"Tauri","before_message_id":null}),"read",true)),
             "buddy_skill_plan" => { let mut a=answer(&c,"Search requested.");a["web_query"]=json!("Tauri macOS deployment documentation");response(a) },
-            "prose" => ResponseTemplate::new(200).set_body_json(json!({"choices":[{"finish_reason":"stop","message":{"content":"Web research is off; I have no retrieved sources."}}]})),
+            "prose" => crate::claude::test::reply(json!({"choices":[{"finish_reason":"stop","message":{"content":"Web research is off; I have no retrieved sources."}}]})),
             "buddy_dialogue_review" => response(json!({"verdict":"approved","request_mode":"answer","message":""})),
             name => panic!("Unexpected external request: {name}"),
         }
@@ -230,11 +230,11 @@ fn action(context: &Value, name: &str, input: Value, mode: &str, compose: bool) 
 }
 fn body(request: &Request) -> (Value, Value) {
     let b: Value = serde_json::from_slice(&request.body).unwrap();
-    let c = serde_json::from_str(b["messages"][1]["content"].as_str().unwrap()).unwrap();
+    let c = serde_json::from_str(b["messages"][0]["content"].as_str().unwrap()).unwrap();
     (b, c)
 }
 fn response(raw: Value) -> ResponseTemplate {
-    ResponseTemplate::new(200).set_body_json(envelope(raw))
+    crate::claude::test::reply(envelope(raw))
 }
 
 #[tokio::test]
@@ -251,7 +251,7 @@ async fn slow_optional_prose_returns_verified_receipt_without_repeating_committe
     let server = MockServer::start().await;
     Mock::given(method("POST")).respond_with(move |request:&Request| {
         let (body,context)=body(request);
-        if body["response_format"]["json_schema"]["name"]=="buddy_skill_plan" {
+        if crate::claude::test::operation(&body)=="buddy_skill_plan" {
             response(action(&context,"complete_step",json!({"goal":{"goal_id":goal,"reference":null},"step":{"step_id":null,"ordinal":1,"reference":null}}),"change",true))
         } else {
             assert_eq!(context["verified_execution"]["status"],"executed");
@@ -414,9 +414,9 @@ async fn enhanced_goal_edit_keeps_semantic_authorization_review_and_canonical_re
     let server = MockServer::start().await;
     Mock::given(method("POST")).respond_with(move |request:&Request|{
         let (b,c)=body(request);
-        match b["response_format"]["json_schema"]["name"].as_str().unwrap_or("buddy_dialogue_response") {
+        match crate::claude::test::operation(&b).as_str().unwrap_or("buddy_dialogue_response") {
             "buddy_skill_plan"=>{
-                assert!(b["messages"][0]["content"].as_str().unwrap().contains("create_planned_goal"));
+                assert!(crate::claude::test::system(&b).as_str().unwrap().contains("create_planned_goal"));
                 response(action(&c,"update_goal",goal_update(target,json!("high")),"change",true))
             }
             "buddy_dialogue_authorization"=>response(json!({"review":{"verdict":"approved","request_mode":"change","message":""}})),
@@ -496,7 +496,7 @@ async fn dialogue_can_read_then_undo_using_original_scoped_journal() {
     let rounds = Arc::new(AtomicUsize::new(0));
     Mock::given(method("POST")).respond_with(move |request:&Request|{
         let (b,c)=body(request);
-        match b["response_format"]["json_schema"]["name"].as_str().unwrap_or("buddy_dialogue_response") {
+        match crate::claude::test::operation(&b).as_str().unwrap_or("buddy_dialogue_response") {
             "buddy_skill_plan" if rounds.fetch_add(1,Ordering::SeqCst)==0=>response(action(&c,"inspect_goal",json!({"goal":{"goal_id":target,"reference":null}}),"change",true)),
             "buddy_skill_plan"=>{
                 assert_eq!(c["state"]["references"]["last_action"]["skill"],"inspect_goal");
@@ -579,9 +579,9 @@ async fn conversational_answer_sees_queue_and_uses_one_request_for_text_and_voic
                     b["messages"].as_array().unwrap().last().unwrap()["content"],
                     "It is in Up next"
                 );
-                assert_eq!(b["messages"][2]["role"], "user");
+                assert_eq!(b["messages"][1]["role"], "user");
                 assert_eq!(
-                    b["messages"][2]["content"],
+                    b["messages"][1]["content"],
                     "Help me with Psychology assignment"
                 );
                 assert!(c.get("conversation").is_none());
@@ -638,7 +638,7 @@ async fn read_results_update_reference_then_answer_without_redundant_classifier(
         .unwrap();
     let server = MockServer::start().await;
     let count = Arc::new(AtomicUsize::new(0));
-    Mock::given(method("POST")).respond_with(move |r:&Request|{let (b,ctx)=body(r);assert_eq!(b["response_format"]["json_schema"]["name"],"buddy_skill_plan");
+    Mock::given(method("POST")).respond_with(move |r:&Request|{let (b,ctx)=body(r);assert_eq!(crate::claude::test::operation(&b),"buddy_skill_plan");
         if count.fetch_add(1,Ordering::SeqCst)==0 {response(action(&ctx,"inspect_goal",json!({"goal":{"goal_id":psyche,"reference":null}}),"read",true))}
         else {assert_eq!(ctx["tool_results"][0]["results"][0]["goal_id"],psyche);
             assert_eq!(ctx["state"]["references"]["last_action"]["skill"],"inspect_goal");
@@ -690,7 +690,7 @@ async fn mutation_composition_receives_verified_result_only_after_commit() {
         .unwrap();
     let server = MockServer::start().await;
     Mock::given(method("POST")).respond_with(move |r:&Request|{let (b,ctx)=body(r);
-        if b["response_format"]["json_schema"]["name"]=="buddy_skill_plan" {response(action(&ctx,"complete_step",json!({"goal":{"goal_id":psyche,"reference":null},"step":{"step_id":null,"ordinal":1,"reference":null}}),"change",true))}
+        if crate::claude::test::operation(&b)=="buddy_skill_plan" {response(action(&ctx,"complete_step",json!({"goal":{"goal_id":psyche,"reference":null},"step":{"step_id":null,"ordinal":1,"reference":null}}),"change",true))}
         else {assert_eq!(ctx["verified_execution"]["status"],"executed");assert_eq!(ctx["verified_execution"]["results"][0]["data"]["steps"][0]["done"],true);
             response(json!({"message":"The first step is complete. Next, give an everyday example.","resources":[],"memory_update":null,"verified_result_indices":[0]}))}
     }).expect(2).mount(&server).await;
@@ -885,11 +885,11 @@ async fn semantic_preflight_blocks_guessed_target_without_writes() {
     let server = MockServer::start().await;
     Mock::given(method("POST")).respond_with(move |r:&Request| {
         let (b,ctx)=body(r);
-        if b["response_format"]["json_schema"]["name"]=="buddy_skill_plan" {
+        if crate::claude::test::operation(&b)=="buddy_skill_plan" {
             let mut plan=action(&ctx,"delete_goal",json!({"goal":{"goal_id":target,"reference":null}}),"change",false);
             plan.as_object_mut().unwrap().remove("intent"); plan["decision"]=json!("change"); response(plan)
         } else {
-            assert_eq!(b["response_format"]["json_schema"]["name"],"buddy_dialogue_authorization");
+            assert_eq!(crate::claude::test::operation(&b),"buddy_dialogue_authorization");
             assert!(ctx["original_user_context"]["references"]["last_referenced_goal_id"].is_null());
             response(json!({"verdict":"clarify","request_mode":"clarification","message":"Which goal should I delete?"}))
         }
@@ -935,7 +935,7 @@ async fn unexecuted_mutation_claim_is_repaired_before_display() {
     let server = MockServer::start().await;
     Mock::given(method("POST")).respond_with(|r:&Request| {
         let (b,ctx)=body(r);
-        match b["response_format"]["json_schema"]["name"].as_str().unwrap_or("buddy_dialogue_response") {
+        match crate::claude::test::operation(&b).as_str().unwrap_or("buddy_dialogue_response") {
             "buddy_skill_plan"=>response(answer(&ctx,"I switched your focus to Psychology assignment.")),
             "buddy_dialogue_review" if ctx["proposal"]["message"].as_str().unwrap().contains("switched") => {
                 assert!(ctx["proposal"]["verified_execution"].is_null());
@@ -984,8 +984,8 @@ async fn unsupported_pilot_claim_is_repaired_without_mutating_saved_steps() {
     let server = MockServer::start().await;
     Mock::given(method("POST")).respond_with(|r:&Request| {
         let (b,c)=body(r);
-        let system=b["messages"][0]["content"].as_str().unwrap();
-        match b["response_format"]["json_schema"]["name"].as_str().unwrap_or("buddy_dialogue_response") {
+        let system=crate::claude::test::system(&b).as_str().unwrap();
+        match crate::claude::test::operation(&b).as_str().unwrap_or("buddy_dialogue_response") {
             "buddy_skill_plan"=>response(answer(&c,"The pilot proved a 15% revenue increase.")),
             "buddy_dialogue_review" if c["proposal"]["message"].as_str().unwrap().contains("15%")=>{
                 assert!(system.contains("pilot results"));
@@ -1071,7 +1071,7 @@ async fn dialogue_recovers_older_chat_fact_through_read_skill_with_goal_sharing_
     Mock::given(method("POST"))
         .respond_with(|r: &Request| {
             let (b, c) = body(r);
-            let name = b["response_format"]["json_schema"]["name"]
+            let name = crate::claude::test::operation(&b)
                 .as_str()
                 .unwrap();
             assert!(c["state"]["goals"].as_array().unwrap().is_empty());
@@ -1121,7 +1121,7 @@ async fn authorization_outage_fails_closed_before_mutation() {
     Mock::given(method("POST"))
         .respond_with(move |r: &Request| {
             let (b, ctx) = body(r);
-            if b["response_format"]["json_schema"]["name"] == "buddy_skill_plan" {
+            if crate::claude::test::operation(&b) == "buddy_skill_plan" {
                 response(action(
                     &ctx,
                     "set_focus_goal",
@@ -1252,10 +1252,9 @@ async fn writer_uses_plain_text_while_actions_and_review_keep_structured_json() 
     let server = MockServer::start().await;
     Mock::given(method("POST")).respond_with(|r:&Request| {
         let (b,_) = body(r);
-        assert!(b["response_format"].is_null());
-        assert_eq!(b["temperature"],0.2);
-        assert!(b["messages"][0]["content"].as_str().unwrap().contains("without a JSON envelope"));
-        ResponseTemplate::new(200).set_body_json(json!({"model":"fixture","choices":[{"finish_reason":"stop","message":{"content":"Slide 1: Problem\nSlide 2: Proposed pilot\nSlide 3: Budget"}}],"usage":{"prompt_tokens":10,"completion_tokens":20}}))
+        assert!(b["output_config"].get("format").is_none());
+        assert!(crate::claude::test::system(&b).as_str().unwrap().contains("without a JSON envelope"));
+        crate::claude::test::reply(json!({"model":"fixture","choices":[{"finish_reason":"stop","message":{"content":"Slide 1: Problem\nSlide 2: Proposed pilot\nSlide 3: Budget"}}],"usage":{"prompt_tokens":10,"completion_tokens":20}}))
     }).expect(1).mount(&server).await;
     let service = Service {
         client: &state.client,
@@ -1303,10 +1302,10 @@ async fn verbal_delete_confirmation_is_repaired_into_backend_pending_preview() {
     let plans = Arc::new(AtomicUsize::new(0));
     Mock::given(method("POST")).respond_with(move |r:&Request|{
         let (b,c)=body(r);
-        match b["response_format"]["json_schema"]["name"].as_str().unwrap() {
+        match crate::claude::test::operation(&b).as_str().unwrap() {
             "buddy_skill_plan" if plans.fetch_add(1,Ordering::SeqCst)==0 => response(json!({"state_version":c["state"]["state_version"],"response":{"decision":"clarification","question":"Are you sure you want to delete the second step?"}})),
             "buddy_dialogue_review" => {
-                assert!(b["messages"][0]["content"].as_str().unwrap().contains("backend can create its preview"));
+                assert!(crate::claude::test::system(&b).as_str().unwrap().contains("backend can create its preview"));
                 response(json!({"review":{"verdict":"repair","request_mode":"change","message":"The step is unambiguous. Plan delete_step so the backend creates a confirmation preview, not a verbal question."}}))
             },
             "buddy_skill_plan" => response(action(&c,"delete_step",json!({"goal":{"goal_id":target,"reference":null},"step":{"step_id":null,"ordinal":2,"reference":null}}),"change",false)),
@@ -1432,7 +1431,7 @@ async fn confirmation_in_another_language_executes_only_saved_proposal() {
     let server = MockServer::start().await;
     Mock::given(method("POST")).respond_with(move |r:&Request| {
         let (b,ctx)=body(r);
-        match b["response_format"]["json_schema"]["name"].as_str().unwrap_or("buddy_dialogue_response") {
+        match crate::claude::test::operation(&b).as_str().unwrap_or("buddy_dialogue_response") {
             "buddy_dialogue_confirmation"=>{
                 assert_eq!(ctx["pending_proposal"]["actions"][0]["input"]["goal"]["goal_id"],target);
                 response(json!({"decision":"confirm"}))
@@ -1490,7 +1489,7 @@ async fn privacy_change_during_authorization_blocks_execution() {
     Mock::given(method("POST"))
         .respond_with(move |r: &Request| {
             let (b, ctx) = body(r);
-            if b["response_format"]["json_schema"]["name"] == "buddy_skill_plan" {
+            if crate::claude::test::operation(&b) == "buddy_skill_plan" {
                 response(action(
                     &ctx,
                     "set_focus_goal",
@@ -1648,7 +1647,7 @@ async fn recognized_action_replans_instead_of_answering_or_asking_again() {
         let reviews = Arc::new(AtomicUsize::new(0));
         Mock::given(method("POST")).respond_with(move |r:&Request| {
             let (b,ctx)=body(r);
-            match b["response_format"]["json_schema"]["name"].as_str().unwrap_or("buddy_dialogue_response") {
+            match crate::claude::test::operation(&b).as_str().unwrap_or("buddy_dialogue_response") {
                 "buddy_skill_plan" if plans.fetch_add(1,Ordering::SeqCst)==0=>{
                     response(json!({"state_version":ctx["state"]["state_version"],"response":if initial_clarification {
                         json!({"decision":"clarification","question":"Do you want to focus Psychology assignment?"})
@@ -1726,7 +1725,7 @@ async fn duplicate_mutation_is_blocked_before_authorization_or_execution() {
     let server = MockServer::start().await;
     Mock::given(method("POST")).respond_with(move |r: &Request| {
         let (b, ctx) = body(r);
-        match b["response_format"]["json_schema"]["name"].as_str().unwrap_or("buddy_dialogue_response") {
+        match crate::claude::test::operation(&b).as_str().unwrap_or("buddy_dialogue_response") {
             "buddy_skill_plan" => response(action(&ctx,"set_focus_goal",json!({"goal":{"goal_id":goal,"reference":null}}),"change",true)),
             "buddy_target_clarification" => response(json!({"question":"Two goals share this title. Which do you mean? Select it in the chat goal selector."})),
             name => panic!("Ambiguous mutation must never reach {name}"),
@@ -1767,10 +1766,10 @@ async fn mixed_version_configuration_path_is_repaired_before_review_can_approve_
     let server = MockServer::start().await;
     Mock::given(method("POST")).respond_with(|r:&Request| {
         let (body,context)=body(r);
-        match body["response_format"]["json_schema"]["name"].as_str() {
+        match crate::claude::test::operation(&body).as_str() {
             None=> {
                 assert!(context["reply_correction"].as_str().unwrap().contains("not present"));
-                ResponseTemplate::new(200).set_body_json(json!({"choices":[{"finish_reason":"stop","message":{"content":"Use bundle.macOS.minimumSystemVersion in the v2 configuration."}}]}))
+                crate::claude::test::reply(json!({"choices":[{"finish_reason":"stop","message":{"content":"Use bundle.macOS.minimumSystemVersion in the v2 configuration."}}]}))
             },
             Some("buddy_dialogue_review")=>response(json!({"verdict":"approved","request_mode":"answer","message":""})),
             other=>panic!("Unexpected operation {other:?}"),
@@ -1857,10 +1856,10 @@ async fn voice_soundalike_context_reaches_planner_authorizer_and_reply_without_r
     let server = MockServer::start().await;
     Mock::given(method("POST")).respond_with(move |r: &Request| {
         let (b, context) = body(r);
-        assert!(b["messages"][0]["content"].as_str().unwrap().contains(VOICE_INTERPRETATION));
+        assert!(crate::claude::test::system(&b).as_str().unwrap().contains(VOICE_INTERPRETATION));
         assert_eq!(context["latest_request"], original);
         assert_eq!(context["event_type"], "voice_message");
-        match b["response_format"]["json_schema"]["name"].as_str().unwrap_or("buddy_dialogue_response") {
+        match crate::claude::test::operation(&b).as_str().unwrap_or("buddy_dialogue_response") {
             "buddy_skill_plan" => response(action(&context, "rename_goal", json!({"goal":{"goal_id":target,"reference":null},"title":"fix the microphone issue in sumi app"}), "change", true)),
             "buddy_dialogue_authorization" => response(json!({"review":{"verdict":"approved","request_mode":"change","message":""}})),
             "buddy_dialogue_response" => response(json!({"message":"Renamed to fix the microphone issue in sumi app.","resources":[],"memory_update":null,"verified_result_indices":[0]})),
@@ -1908,7 +1907,7 @@ async fn natural_preparatory_read_can_finish_a_requested_change_but_cannot_autho
         let seen = plans.clone();
         Mock::given(method("POST")).respond_with(move |request:&Request| {
             let (b,c)=body(request);
-            match b["response_format"]["json_schema"]["name"].as_str().unwrap_or("buddy_dialogue_response") {
+            match crate::claude::test::operation(&b).as_str().unwrap_or("buddy_dialogue_response") {
                 "buddy_skill_plan" if seen.fetch_add(1,Ordering::SeqCst)<if duplicate_read {2}else{1}=>{
                     let mut read=action(&c,"inspect_goal",json!({"goal":{"goal_id":target,"reference":null}}),"read",true);
                     read["proposed_actions"][0]["instruction"]=json!(if seen.load(Ordering::SeqCst)==1 {"Read the goal details."}else{"Inspect the same saved goal."});

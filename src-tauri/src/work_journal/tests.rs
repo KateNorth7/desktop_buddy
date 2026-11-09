@@ -217,7 +217,7 @@ async fn receipt_verifier_rejects_visual_descriptions_and_unquoted_evidence_befo
 }
 #[tokio::test]
 async fn receipt_verifier_requires_current_exact_criterion_and_high_confidence() {
-    use wiremock::{matchers::method, Mock, MockServer, ResponseTemplate};
+    use wiremock::{matchers::method, Mock, MockServer};
     let server = MockServer::start().await;
     let client = reqwest::Client::new();
     let service = crate::goal_analysis::Service {
@@ -235,7 +235,7 @@ async fn receipt_verifier_requires_current_exact_criterion_and_high_confidence()
         (true, true, 0.9, false),
     ] {
         server.reset().await;
-        Mock::given(method("POST")).respond_with(ResponseTemplate::new(200).set_body_json(json!({"choices":[{"finish_reason":"stop","message":{"content":json!({"current_receipt":current,"criterion_met":criterion,"confidence":confidence}).to_string()}}]}))).expect(1).mount(&server).await;
+        Mock::given(method("POST")).respond_with(crate::claude::test::reply(json!({"choices":[{"finish_reason":"stop","message":{"content":json!({"current_receipt":current,"criterion_met":criterion,"confidence":confidence}).to_string()}}]}))).expect(1).mount(&server).await;
         assert_eq!(
             verify_receipt(
                 &service,
