@@ -1,5 +1,18 @@
 # sumi session handoff
 
+## Unreleased — local completion signals and episode-end close offers, 9 November 2026
+
+Stage 3 on `claude/tracking-diagnostics`. New `src-tauri/src/completion_signals.rs`, called from `commands::collect` after goal matching with the sample's counted goal (attribution at or above `relevance::THRESHOLD`); state lives in `goal_matching::Runtime.signals` and is session-only.
+
+- **Simple goals** are classified from their own title and description in English or Russian: join a call (join verb plus call noun, never "prepare/schedule"), visit a site (visit verb plus a domain, or "site <name>"), send an email (classified only; no automatic signal yet). A meeting surface (`in_meeting`: Meet, Jitsi, Whereby, Webex, Gather, Around, Zoom/Teams meeting titles, FaceTime, and Teams/Slack/Discord/Skype/Telegram/WhatsApp/Viber/Signal windows titled as a call or huddle, same rules on macOS and Windows) for 60 s closes the only open join-call goal; 5 s on the named site closes the only matching visit goal. Two candidate goals of one kind never close. Closing goes through `automatically_complete` (durable Undo, receipt `signal:place`) and queues the existing automatic-completion card ("Closed “…”." with Undo). With automatic completion off, the confirmation card is queued instead.
+- **Episode-end offers**: attributed time per goal; once the user has been away for 150 s after at least 60 s of work, the existing goal-completion card ("Mark this goal complete?" / Not yet) is queued for a goal without unfinished steps, at most once per 30 minutes per goal. A window sharing the goal's words keeps the episode open, so a not-yet-matched return (Life OS web app) is not read as leaving. Offers never change anything until confirmed.
+- `companion::queue_prompt` exposes the queue for the regular delivery pass (quiet hours and pauses still apply). Journal codes: `completion_applied`, `completion_proposed`, `automatic_completion_disabled`.
+- Replay: both real cases now get a close offer after the finishing window and never during the work (`finishing_a_goal_and_moving_on_offers_to_close_it`).
+
+Not done: a done criterion written at goal creation by the agent (needs the analysis prompt, which the provider swap also touches); an email-sent signal (needs interface text); screen-text call controls for unknown apps; goals with unfinished steps still get no whole-goal offer.
+
+Evidence: `cargo test --locked` 796 passed / 5 ignored; Clippy `-D warnings` and `cargo fmt --check` clean. Frontend unchanged (existing cards). Not done: Windows build, live run, release.
+
 ## Unreleased — episode attribution and lane priority, 9 November 2026
 
 Stage 2 on `claude/tracking-diagnostics`, on top of the attempt journal below. Three changes in `goal_matching.rs`:

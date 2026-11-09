@@ -15,6 +15,7 @@ pub mod coaching;
 mod collector;
 mod commands;
 mod companion;
+mod completion_signals;
 mod contact;
 mod continuity;
 mod conversation_check;

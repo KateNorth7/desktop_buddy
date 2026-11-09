@@ -27,6 +27,9 @@ struct Window {
     seconds: u64,
     #[serde(default)]
     goal: Option<String>,
+    /// The goal was finished by the end of this window.
+    #[serde(default)]
+    done: bool,
 }
 /// What one replay measured, in seconds.
 #[derive(Debug)]
@@ -35,6 +38,9 @@ struct Replay {
     attributed: i64,
     misattributed: i64,
     asked: usize,
+    /// Replay seconds when the goal was finished, and when closing it was first offered.
+    done_at: Option<u64>,
+    offered_at: Option<u64>,
 }
 impl Replay {
     fn share(&self) -> f64 {
@@ -129,6 +135,8 @@ fn replay(case: &Case) -> Replay {
     let start = chrono::Utc::now();
     let mut clock = 0u64;
     let mut asked = 0;
+    let mut done_at = None;
+    let mut offered_at = None;
     for window in &case.windows {
         let a = snapshot(window);
         let key = fingerprint(&a);
@@ -151,6 +159,15 @@ fn replay(case: &Case) -> Replay {
                 entry.until = wall.timestamp();
             }
             let attribution = attribution(&inner, &a).unwrap();
+            let counted = attribution
+                .goal_id
+                .as_deref()
+                .and_then(|id| id.parse::<i64>().ok())
+                .filter(|_| attribution.confidence >= crate::relevance::THRESHOLD);
+            crate::completion_signals::observe(&mut inner, &a, true, counted, instant).unwrap();
+            if offered_at.is_none() && offered(&inner, target) {
+                offered_at = Some(clock);
+            }
             let interval = crate::history::UsageInterval {
                 start: wall - chrono::Duration::seconds(3),
                 end: wall,
@@ -190,6 +207,9 @@ fn replay(case: &Case) -> Replay {
                 .unwrap();
             }
         }
+        if window.done {
+            done_at = Some(clock);
+        }
     }
     let expected = case
         .windows
@@ -227,7 +247,20 @@ fn replay(case: &Case) -> Replay {
         attributed,
         misattributed,
         asked,
+        done_at,
+        offered_at,
     }
+}
+fn offered(inner: &crate::commands::Inner, goal: i64) -> bool {
+    inner
+        .storage
+        .connection
+        .query_row(
+            "SELECT EXISTS(SELECT 1 FROM tracking_attempts WHERE outcome='completion_proposed' AND goal_id=?1)",
+            [goal],
+            |r| r.get(0),
+        )
+        .unwrap()
 }
 /// Baseline: the replays run end to end, never credit an unrelated goal, and stay within
 /// the AI request budget.
@@ -263,5 +296,17 @@ fn a_perfect_matcher_attributes_nearly_all_goal_time() {
     for case in cases() {
         let result = replay(&case);
         assert!(result.share() >= 0.9, "{}: {result:?}", case.id);
+    }
+}
+/// Both real goals were finished and then left: closing each is offered after the last
+/// piece of work, never while it is still going on.
+#[test]
+fn finishing_a_goal_and_moving_on_offers_to_close_it() {
+    for case in cases() {
+        let result = replay(&case);
+        let (Some(done), Some(offered)) = (result.done_at, result.offered_at) else {
+            panic!("{}: no offer {result:?}", case.id);
+        };
+        assert!(offered > done, "{}: offered mid-work {result:?}", case.id);
     }
 }

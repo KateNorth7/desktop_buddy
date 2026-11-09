@@ -89,6 +89,8 @@ pub struct Metrics {
 }
 #[derive(Default)]
 pub struct Runtime {
+    /// Local completion signals and per-goal work episodes.
+    pub(crate) signals: crate::completion_signals::Tracker,
     /// A matching task is already waiting for the shared AI lane; no second one queues.
     lane_waiting: bool,
     pub view: MatchView,

@@ -457,6 +457,25 @@ pub fn collect(state: &AppState) -> Result<(), String> {
             inner.companion.semantic.invalidate_evidence();
         }
         crate::goal_matching::observe_inner(&mut inner, &snapshot, allowed && !in_sumi)?;
+        let attributed = if allowed && !in_sumi {
+            let matched = crate::goal_matching::attribution(&inner, &snapshot)?;
+            matched
+                .goal_id
+                .and_then(|id| id.parse::<i64>().ok())
+                .filter(|_| matched.confidence >= crate::relevance::THRESHOLD)
+        } else {
+            None
+        };
+        // Completion signals never block collection; a failure is reported, not raised.
+        if let Err(error) = crate::completion_signals::observe(
+            &mut inner,
+            &snapshot,
+            allowed && !in_sumi,
+            attributed,
+            Instant::now(),
+        ) {
+            inner.last_error = Some(error);
+        }
         inner.buddy.foreground = (allowed && !in_sumi).then(|| snapshot.clone());
         crate::companion::observe(&mut inner, &snapshot, allowed && !in_sumi);
         let selected_goal = if in_sumi {

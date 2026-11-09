@@ -257,6 +257,10 @@ pub(crate) fn offer(
 fn delivery_paused(inner: &Inner) -> bool {
     delivery_reason(inner).is_some()
 }
+/// Queues a prompt for the regular delivery pass, which applies quiet hours and pauses.
+pub(crate) fn queue_prompt(inner: &mut Inner, prompt: Intervention, now: i64) {
+    queue::enqueue(inner, prompt, now);
+}
 pub(crate) fn queue_match(inner: &mut Inner, goal_id: i64, title: &str, confidence: f64, now: i64) {
     queue::enqueue(
         inner,
