@@ -197,6 +197,25 @@ fn replay(case: &Case) -> Replay {
         .filter(|w| w.goal.as_deref() == Some("target"))
         .map(|w| w.seconds.div_ceil(3) as i64 * 3)
         .sum();
+    if std::env::var("REPLAY_DEBUG").is_ok() {
+        let mut q = inner.storage.connection.prepare("SELECT app,title,status,COALESCE(goal_id,0),SUM(milliseconds)/1000,MIN(reason) FROM review_intervals GROUP BY context_key ORDER BY MIN(started_at)").unwrap();
+        for row in q
+            .query_map([], |r| {
+                Ok(format!(
+                    "{} | {} | {} | {} | {}s | {}",
+                    r.get::<_, String>(0)?,
+                    r.get::<_, String>(1)?,
+                    r.get::<_, String>(2)?,
+                    r.get::<_, i64>(3)?,
+                    r.get::<_, i64>(4)?,
+                    r.get::<_, String>(5)?
+                ))
+            })
+            .unwrap()
+        {
+            eprintln!("{}", row.unwrap());
+        }
+    }
     let attributed = inner.storage.relevant_seconds(target, None).unwrap() as i64;
     let misattributed = ids
         .values()
@@ -211,7 +230,7 @@ fn replay(case: &Case) -> Replay {
     }
 }
 /// Baseline: the replays run end to end, never credit an unrelated goal, and stay within
-/// the AI request budget. The printed shares are the numbers stage 2 must raise.
+/// the AI request budget.
 #[test]
 fn real_sequences_replay_without_crediting_unrelated_goals() {
     for case in cases() {
@@ -237,10 +256,9 @@ fn real_sequences_replay_without_crediting_unrelated_goals() {
         );
     }
 }
-/// Target for the episode work: with a perfect matcher, nearly all of the goal's time
-/// reaches it, including short hops between the email, the draft and the form.
+/// With a perfect matcher, nearly all of the goal's time reaches it, including short hops
+/// between the email, the draft and the form (52% before episode attribution).
 #[test]
-#[ignore = "target behaviour for the episode-based attribution stage"]
 fn a_perfect_matcher_attributes_nearly_all_goal_time() {
     for case in cases() {
         let result = replay(&case);

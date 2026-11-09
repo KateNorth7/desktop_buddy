@@ -35,7 +35,10 @@ pub const REASK: Duration = Duration::from_secs(90);
 const EPISODE_GAP: Duration = Duration::from_secs(120);
 /// Unassigned time across an episode's windows that justifies asking about the whole
 /// episode, even while its newest window has not been stable for `AI_STABLE`.
-const EPISODE_ASK: Duration = Duration::from_secs(180);
+const EPISODE_ASK: Duration = Duration::from_secs(45);
+/// How long attribution waits for the shared AI lane before giving up the turn. Other
+/// background checks finish within this, so attribution no longer loses every turn to them.
+const LANE_WAIT: Duration = Duration::from_secs(45);
 
 /// A run of windows that form one stretch of work; see `Runtime::episode`.
 pub(crate) struct Episode {
@@ -86,6 +89,8 @@ pub struct Metrics {
 }
 #[derive(Default)]
 pub struct Runtime {
+    /// A matching task is already waiting for the shared AI lane; no second one queues.
+    lane_waiting: bool,
     pub view: MatchView,
     pub metrics: Metrics,
     sample: Option<ActivitySnapshot>,
@@ -433,10 +438,21 @@ fn observe_inner_at(
         return Ok(());
     }
     inner.goal_matching.proposal = resolved.view.clone();
-    let stable = inner
-        .goal_matching
-        .stable_since
-        .is_some_and(|at| now.saturating_duration_since(at) >= LOCAL_STABLE);
+    // Returning to a window that local evidence already tied to this goal earlier in the
+    // trail needs no new stability wait: short revisits of a form or an email still count.
+    let returning = resolved.view.goal_id.is_some_and(|id| {
+        let key = fingerprint(sample);
+        inner
+            .goal_matching
+            .trail
+            .iter()
+            .any(|entry| entry.key == key && entry.goal_id == Some(id))
+    });
+    let stable = returning
+        || inner
+            .goal_matching
+            .stable_since
+            .is_some_and(|at| now.saturating_duration_since(at) >= LOCAL_STABLE);
     let explicit = resolved.view.source.as_deref() == Some("explicit_focus");
     // Generic titles cannot keep an AI assignment indefinitely. Periodic
     // refresh allows a later task in the same window to acquire new evidence.
@@ -485,6 +501,28 @@ fn observe_inner_at(
         .goal_id
         .filter(|_| view.confidence.unwrap_or(0.) >= crate::relevance::THRESHOLD);
     inner.goal_matching.record_trail(sample, matched, wall, now);
+    // A local match that settles after the stability wait owns the whole stable context,
+    // as an AI answer does; otherwise its first half minute would stay pending forever.
+    let settled = matched.filter(|id| {
+        matches!(
+            view.source.as_deref(),
+            Some("local_keywords" | "user_rule" | "learned_lane")
+        ) && (inner.goal_matching.view.goal_id != Some(*id)
+            || inner.goal_matching.view.source != view.source)
+    });
+    if let Some(id) = settled {
+        attribute_context(
+            inner,
+            sample,
+            id,
+            view.confidence.unwrap_or(0.),
+            view.reason
+                .as_deref()
+                .unwrap_or("Local evidence identifies this goal"),
+            now,
+            false,
+        );
+    }
     inner.goal_matching.view = view;
     // Focus lifecycle updates can change a checkpoint; bind to the resulting state.
     inner.goal_matching.signature = Some(resolution::resolve(inner, sample)?.signature);
@@ -804,6 +842,7 @@ fn due_inner(inner: &crate::commands::Inner, now: Instant) -> bool {
     cloud_allowed(inner)
         && (inner.status.anthropic_configured || inner.status.mock_ai)
         && !matching.in_flight
+        && !matching.lane_waiting
         && !debounced
         && ready
 }
@@ -1187,11 +1226,22 @@ fn finish(
     Ok(suggestion)
 }
 pub async fn identify(app: &AppHandle, state: &AppState) {
-    let Ok(_provider) = state.companion_request.try_lock() else {
-        // Another AI task holds the shared lane; record the lost turn so it can be seen.
-        if let Ok(inner) = state.inner.lock() {
+    // Attribution is how measured time reaches a goal: wait for the shared lane instead of
+    // losing the turn to whichever observation or review call happens to hold it.
+    match state.inner.lock() {
+        Ok(mut inner) if !inner.goal_matching.lane_waiting => {
+            inner.goal_matching.lane_waiting = true;
+        }
+        _ => return,
+    }
+    let lane = tokio::time::timeout(LANE_WAIT, state.companion_request.lock()).await;
+    if let Ok(mut inner) = state.inner.lock() {
+        inner.goal_matching.lane_waiting = false;
+        if lane.is_err() {
             note(&inner, "skipped_lane_busy", None, None);
         }
+    }
+    let Ok(_provider) = lane else {
         return;
     };
     let job = state

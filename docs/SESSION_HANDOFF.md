@@ -1,5 +1,18 @@
 # sumi session handoff
 
+## Unreleased — episode attribution and lane priority, 9 November 2026
+
+Stage 2 on `claude/tracking-diagnostics`, on top of the attempt journal below. Three changes in `goal_matching.rs`:
+
+- A local match (keywords, unique user rule, learned profile) that settles after `LOCAL_STABLE` now assigns the whole stable context through `attribute_context`, as an AI answer already did; its first half minute no longer stays pending.
+- Returning to a window that the trail already ties to the same locally resolved goal skips the stability wait, so short revisits of a form or an email count.
+- `EPISODE_ASK` drops from 180 s to 45 s of unassigned time across two or more windows, so hops between an email, a ChatGPT draft and a form are asked about as one episode.
+- Goal matching waits up to `LANE_WAIT` (45 s) for the shared `companion_request` lane instead of skipping the turn; `Runtime.lane_waiting` keeps a second task from queueing, and a timeout is journaled as `skipped_lane_busy`.
+
+Replay with the oracle matcher: Payoneer 252 s of 261 s (97%, was 52%) with five matcher calls, Life OS unchanged at full coverage with nine calls; no unrelated goal credited. The 90% target test is now enabled. More episode questions spend more of the daily gateway allowance; watch `provider_rate_limit` in `tracking_attempts`. Real model accuracy on these episodes is not yet measured.
+
+Evidence: `cargo test --locked` 790 passed / 5 ignored; Clippy `-D warnings` and `cargo fmt --check` clean. Frontend unchanged since stage 1 (349 passed, lint and build clean). Not done: Windows build, live run, release.
+
 ## Unreleased — tracking diagnostics and replay cases, 9 November 2026
 
 Branch `claude/tracking-diagnostics` (from fork `main` at 0.50.0, no version bump yet). Stage 1 of the tracking and completion plan; nothing in the attribution or completion logic changed.
