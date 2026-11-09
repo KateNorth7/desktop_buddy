@@ -199,6 +199,53 @@ pub(crate) fn in_meeting(a: &ActivitySnapshot) -> bool {
     .any(|name| app.contains(name))
         && says(&call_words)
 }
+/// Mail clients on both platforms: web mail by site, desktop mail by app name.
+fn mail_window(a: &ActivitySnapshot) -> bool {
+    if let Some(domain) = a.browser.as_ref().and_then(|b| b.domain.as_deref()) {
+        let domain = domain.to_lowercase();
+        return [
+            "mail.google.com",
+            "outlook.live.com",
+            "outlook.office.com",
+            "outlook.office365.com",
+            "mail.yahoo.com",
+            "mail.yandex.ru",
+            "mail.yandex.com",
+            "e.mail.ru",
+            "mail.proton.me",
+            "app.fastmail.com",
+            "icloud.com",
+        ]
+        .iter()
+        .any(|host| domain == *host || domain.ends_with(&format!(".{host}")));
+    }
+    let app = a.process_name.to_lowercase();
+    [
+        "mail",
+        "outlook",
+        "spark",
+        "thunderbird",
+        "airmail",
+        "superhuman",
+        "mimestream",
+    ]
+    .iter()
+    .any(|name| app.contains(name))
+}
+/// Confirmation phrases mail clients show once a message has left, in English and Russian.
+fn email_sent(text: &str) -> bool {
+    let text = text.to_lowercase();
+    [
+        "message sent",
+        "email sent",
+        "your message has been sent",
+        "письмо отправлено",
+        "сообщение отправлено",
+        "ваше письмо отправлено",
+    ]
+    .iter()
+    .any(|phrase| text.contains(phrase))
+}
 fn site_matches(a: &ActivitySnapshot, target: &str) -> bool {
     let Some(domain) = a
         .browser
@@ -279,10 +326,19 @@ pub(crate) fn observe(
                 matches!(classify(&g.title, &g.description), GoalKind::VisitSite(t) if site_matches(sample, &t))
             })
             .collect();
+        let email_goals: Vec<_> = goals
+            .iter()
+            .filter(|g| classify(&g.title, &g.description) == GoalKind::SendEmail)
+            .collect();
+        let sent = email_goals.len() == 1
+            && mail_window(sample)
+            && crate::companion::screen_context::cached_text(inner, sample).is_some_and(email_sent);
         let candidate = if in_meeting(sample) && call_goals.len() == 1 {
             Some((call_goals[0].id, "meeting", CALL_DWELL))
         } else if site_goals.len() == 1 {
             Some((site_goals[0].id, "site", SITE_DWELL))
+        } else if sent {
+            Some((email_goals[0].id, "email_sent", Duration::ZERO))
         } else {
             None
         };

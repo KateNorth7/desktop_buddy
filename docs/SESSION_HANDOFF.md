@@ -9,9 +9,11 @@ Stage 3 on `claude/tracking-diagnostics`. New `src-tauri/src/completion_signals.
 - `companion::queue_prompt` exposes the queue for the regular delivery pass (quiet hours and pauses still apply). Journal codes: `completion_applied`, `completion_proposed`, `automatic_completion_disabled`.
 - Replay: both real cases now get a close offer after the finishing window and never during the work (`finishing_a_goal_and_moving_on_offers_to_close_it`).
 
-Not done: a done criterion written at goal creation by the agent (needs the analysis prompt, which the provider swap also touches); an email-sent signal (needs interface text); screen-text call controls for unknown apps; goals with unfinished steps still get no whole-goal offer.
+An email goal closes when the cached Accessibility text of a mail window (web mail by site, desktop mail by app name) shows a sent confirmation in English or Russian and exactly one open email goal exists; `screen_context::cached_text` exposes the existing cache for this local phrase check only (no new reads, nothing sent). Closing depends on a sample having been read while the confirmation was visible, so it is opportunistic; the episode-end offer covers the rest.
 
-Evidence: `cargo test --locked` 796 passed / 5 ignored; Clippy `-D warnings` and `cargo fmt --check` clean. Frontend unchanged (existing cards). Not done: Windows build, live run, release.
+Not done: a done criterion written at goal creation by the agent (needs the analysis prompt, which the provider swap also touches); screen-text call controls for unknown apps; goals with unfinished steps still get no whole-goal offer. Open product question: the review panel for waiting time was removed from Progress on 24 October (`dff8476`); bringing a one-tap assignment list back needs the owner's decision.
+
+Evidence: `cargo test --locked` 797 passed / 5 ignored; Clippy `-D warnings` and `cargo fmt --check` clean. Frontend unchanged (existing cards). Not done: Windows build, live run, release.
 
 ## Unreleased — episode attribution and lane priority, 9 November 2026
 

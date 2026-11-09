@@ -26,6 +26,7 @@ fn window(app: &str, title: &str, domain: Option<&str>) -> ActivitySnapshot {
         process_name: app.into(),
         window_title: title.into(),
         idle_seconds: 1,
+        window_id: Some(if domain.is_some() { 7 } else { 8 }),
         ..Default::default()
     };
     if let Some(domain) = domain {
@@ -210,4 +211,29 @@ fn leaving_a_goal_after_real_work_offers_to_close_it_once() {
         "open",
         "an offer never closes the goal"
     );
+}
+
+#[test]
+fn an_email_goal_closes_when_the_mail_client_shows_the_message_was_sent() {
+    let (state, ids) = setup(&["Написать письмо HR"]);
+    let mut inner = state.inner.lock().unwrap();
+    inner.companion.view.preferences.automatic_completion = true;
+    let base = Instant::now();
+    let gmail = window("Google Chrome", "Inbox - Gmail", Some("mail.google.com"));
+    let chat = window("Telegram", "Telegram", None);
+    crate::companion::screen_context::cache_for_test(&mut inner, &gmail, "Compose\nTo: HR");
+    run(&mut inner, &gmail, None, base, 0, 9);
+    assert_eq!(status(&inner, ids[0]), "open", "composing is not sending");
+    // The same phrase in a chat app is not a sent email.
+    crate::companion::screen_context::cache_for_test(&mut inner, &chat, "Message sent");
+    run(&mut inner, &chat, None, base, 12, 18);
+    assert_eq!(status(&inner, ids[0]), "open");
+    crate::companion::screen_context::cache_for_test(
+        &mut inner,
+        &gmail,
+        "Inbox\nMessage sent. Undo View message",
+    );
+    run(&mut inner, &gmail, None, base, 21, 24);
+    assert_eq!(status(&inner, ids[0]), "completed");
+    assert_eq!(outcomes(&inner), vec!["completion_applied"]);
 }

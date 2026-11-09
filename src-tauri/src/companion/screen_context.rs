@@ -62,6 +62,36 @@ pub(crate) fn cached_signature(inner: &Inner, activity: &ActivitySnapshot) -> Op
         .and_then(|c| c.text.as_ref().ok())
         .map(|text| crate::companion::engine::fingerprint(text))
 }
+/// Text last read from this exact window under the current consent, for local phrase
+/// checks only. Nothing is read here; a window without a recent sample has no text.
+pub(crate) fn cached_text<'a>(inner: &'a Inner, activity: &ActivitySnapshot) -> Option<&'a str> {
+    inner
+        .companion
+        .screen_context
+        .as_ref()
+        .filter(|c| {
+            c.consent
+                == (
+                    inner.last_consent_change,
+                    inner.companion.screen_context_epoch,
+                )
+                && same_window(&c.activity, activity)
+        })
+        .and_then(|c| c.text.as_ref().ok())
+        .map(String::as_str)
+}
+#[cfg(test)]
+pub(crate) fn cache_for_test(inner: &mut Inner, activity: &ActivitySnapshot, text: &str) {
+    inner.companion.screen_context = Some(CachedText {
+        activity: activity.clone(),
+        consent: (
+            inner.last_consent_change,
+            inner.companion.screen_context_epoch,
+        ),
+        at: Instant::now(),
+        text: Ok(text.into()),
+    });
+}
 fn allowed_in_session(inner: &Inner, activity: &ActivitySnapshot, session_active: bool) -> bool {
     session_active
         && inner.status.tracking
