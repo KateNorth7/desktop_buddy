@@ -29,7 +29,6 @@ alter table public.buddy_ai_counters enable row level security;
 revoke all on public.buddy_ai_counters from public, anon, authenticated;
 grant all on public.buddy_ai_counters to service_role;
 
-drop function if exists public.buddy_reserve_ai(uuid, text, bigint);
 create or replace function public.buddy_reserve_ai(p_user uuid, p_route text, p_units bigint, p_microusd bigint)
 returns boolean language plpgsql security definer set search_path = '' as $$
 declare
@@ -71,6 +70,16 @@ end;
 $$;
 revoke all on function public.buddy_reserve_ai(uuid,text,bigint,bigint) from public, anon, authenticated;
 grant execute on function public.buddy_reserve_ai(uuid,text,bigint,bigint) to service_role;
+
+-- The gateway deployed before 0.51.0 reserves without a cost estimate. Keeping this
+-- signature lets the SQL be applied before that function is replaced; its requests
+-- count against call and unit limits only.
+create or replace function public.buddy_reserve_ai(p_user uuid, p_route text, p_units bigint)
+returns boolean language sql security definer set search_path = '' as $$
+  select public.buddy_reserve_ai(p_user, p_route, p_units, 0);
+$$;
+revoke all on function public.buddy_reserve_ai(uuid,text,bigint) from public, anon, authenticated;
+grant execute on function public.buddy_reserve_ai(uuid,text,bigint) to service_role;
 
 -- Replaces a request's reserved estimate with the provider's reported usage.
 -- p_delta is actual minus estimate in micro-dollars; today's spend never drops below zero.

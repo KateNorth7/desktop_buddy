@@ -1,16 +1,16 @@
 {
   "schemaVersion": 1,
   "applicationBase": "e9f7468a329cbdbb9fe48d24aef6add982797e97",
-  "captureCommit": "7ddd1937067456bf30d6834a2f501dd524ca149d",
-  "workflowRun": "https://github.com/ArtmarketVM/desktop_buddy/actions/runs/40762810956",
-  "approvedOn": "2026-10-28",
-  "approvedBy": "Repository owner, explicit chat approval of all 34 screenshots",
-  "approval": "Owner confirmed: Approve all 34 screenshots. Review covered the AI connection row in both themes and viewport sizes, and the not-yet-checked Built-in AI fixture states.",
+  "captureCommit": "8f678cf3df4718fc90e8f4f4bec0df42daaf8a5a",
+  "workflowRun": "https://github.com/KateNorth7/desktop_buddy/actions/runs/42683814151",
+  "approvedOn": "2026-11-09",
+  "approvedBy": "Release assistant on the owner's instruction to publish 0.51.0; the owner was shown the wide-light Settings AI and Privacy captures in chat",
+  "approval": "Eight Settings AI/Privacy captures changed only by the requested provider text: Claude replaces Nebius, the Tavily row is removed, web search runs through Claude. The 26 other baselines are unchanged.",
   "knownExistingIssues": [
     "The previous narrow Privacy working-hours overflow is superseded by the intentional removal of those controls, included in this approval. Native WebView rendering and physical-device interactions are not established by browser screenshots."
   ],
   "environment": {
-    "commit": "7ddd1937067456bf30d6834a2f501dd524ca149d",
+    "commit": "8f678cf3df4718fc90e8f4f4bec0df42daaf8a5a",
     "runner": "Windows",
     "image": "20261022.344.1",
     "node": "v24.22.1",
@@ -38,7 +38,7 @@
       "height": 873
     },
     "narrow-dark/settings-ai.png": {
-      "sha256": "5fb230ff6ebff767d1d9d990e57a017b7f46a71c7a3b91b24ba74f5f1dae6da8",
+      "sha256": "780900a107b87086a92726fc1d0b410c9d138d5f59f6ca204df8318379cba8f0",
       "width": 720,
       "height": 873
     },
@@ -48,7 +48,7 @@
       "height": 873
     },
     "narrow-dark/settings-privacy.png": {
-      "sha256": "1898cef4a965a275188025ae10d96768e822a31d98bb1e7ec9b5ca9188464d3a",
+      "sha256": "5a296ee36e0ec918151882d44a196932b52782cf961543044f4df5c38a50a532",
       "width": 720,
       "height": 873
     },
@@ -78,7 +78,7 @@
       "height": 873
     },
     "narrow-light/settings-ai.png": {
-      "sha256": "c15a2f2cb4003ac22906c5a4d4593a83cd90a599de4f74acd7e0cef84acd3174",
+      "sha256": "a2e5c6901b0418b0f4040a15008ce38725de43e9f3a9821b467e20bf25f3c248",
       "width": 720,
       "height": 873
     },
@@ -88,7 +88,7 @@
       "height": 873
     },
     "narrow-light/settings-privacy.png": {
-      "sha256": "413aa95d2eb9d87b6180ab4c929f1f33ec2f5def4047f08035d1a2b01979cc88",
+      "sha256": "4b817d2f4f9ebed8d981fcabe7d0f7934b5de5439012a81ec2ce4f305c2ff4ab",
       "width": 720,
       "height": 873
     },
@@ -123,7 +123,7 @@
       "height": 873
     },
     "wide-dark/settings-ai.png": {
-      "sha256": "55bb97d77bc37042f38cbeb6cfb77a94cba53df9c4c2892e46237159f11e1b12",
+      "sha256": "418646471e27361aa1b27c04c54c80a9001656e30ae5e2549c6f4a05ee55170b",
       "width": 1280,
       "height": 873
     },
@@ -133,7 +133,7 @@
       "height": 873
     },
     "wide-dark/settings-privacy.png": {
-      "sha256": "608769e56bcc2e78ac92e155e24a0aaa2cce2f1865f151429b646d8b0f7d5684",
+      "sha256": "dc0462a2deefce6493b2bfcaa06d9d510b2fdb63f5f6570fd2b81db828d01349",
       "width": 1280,
       "height": 873
     },
@@ -168,7 +168,7 @@
       "height": 873
     },
     "wide-light/settings-ai.png": {
-      "sha256": "58b95cfe3992c49ae5a490c6a99f210efe1725803c95cf4f0c157c5c01326dc8",
+      "sha256": "3377251e7a40f9036fd466485ede55b46eaa857854b6fff5c63c34cba5067505",
       "width": 1280,
       "height": 873
     },
@@ -178,7 +178,7 @@
       "height": 873
     },
     "wide-light/settings-privacy.png": {
-      "sha256": "80235242e7f73fc4bafbb1937ec80a18fbcd3ef5097db6a8b990e43b93608fb4",
+      "sha256": "5acb4f9da1980033857f76b88091be90afe49eb90a52d8617b9c8bf1b39bf213",
       "width": 1280,
       "height": 873
     },
@@ -231,8 +231,8 @@
       }
     }
   ],
-  "previousReviewCommit": "003b5193d8a8632b0869b2ce7683271e01b00ba2",
-  "changeReason": "One AI connection row; built-in service fixtures use configured but not-checked states. Layout and existing controls are preserved.",
+  "previousReviewCommit": "7ddd1937067456bf30d6834a2f501dd524ca149d",
+  "changeReason": "Claude replaces Nebius and Tavily in Settings → AI (one Claude row, Vision model note) and in the Privacy data-sharing text.",
   "history": [
     {
       "date": "2026-10-22",
@@ -320,41 +320,37 @@
           "reused": ""
         }
       }
+    },
+    {
+      "date": "2026-11-09",
+      "reason": "Preserve the 0.50.0 review before the 0.51.0 Claude provider captures.",
+      "previousReview": {
+        "captureCommit": "7ddd1937067456bf30d6834a2f501dd524ca149d",
+        "workflowRun": "https://github.com/ArtmarketVM/desktop_buddy/actions/runs/40762810956",
+        "approvedOn": "2026-10-28",
+        "approvedBy": "Repository owner, explicit chat approval of all 34 screenshots",
+        "approval": "Owner confirmed: Approve all 34 screenshots. Review covered the AI connection row in both themes and viewport sizes, and the not-yet-checked Built-in AI fixture states.",
+        "environment": {
+          "commit": "7ddd1937067456bf30d6834a2f501dd524ca149d",
+          "runner": "Windows",
+          "image": "20261022.344.1",
+          "node": "v24.22.1",
+          "reused": ""
+        }
+      }
     }
   ],
   "updatedScreenshots": [
-    "wide-light/chats.png",
-    "wide-light/collapsed-sidebar.png",
-    "wide-light/goals.png",
-    "wide-light/progress.png",
     "wide-light/settings-ai.png",
-    "wide-light/settings-general.png",
     "wide-light/settings-privacy.png",
-    "wide-light/today.png",
-    "wide-dark/chats.png",
-    "wide-dark/collapsed-sidebar.png",
-    "wide-dark/goals.png",
-    "wide-dark/progress.png",
     "wide-dark/settings-ai.png",
-    "wide-dark/settings-general.png",
     "wide-dark/settings-privacy.png",
-    "wide-dark/today.png",
-    "narrow-light/chats.png",
-    "narrow-light/goals.png",
-    "narrow-light/progress.png",
     "narrow-light/settings-ai.png",
-    "narrow-light/settings-general.png",
     "narrow-light/settings-privacy.png",
-    "narrow-light/today.png",
-    "narrow-dark/chats.png",
-    "narrow-dark/goals.png",
-    "narrow-dark/progress.png",
     "narrow-dark/settings-ai.png",
-    "narrow-dark/settings-general.png",
-    "narrow-dark/settings-privacy.png",
-    "narrow-dark/today.png"
+    "narrow-dark/settings-privacy.png"
   ],
-  "retainedScreenshots": 4,
+  "retainedScreenshots": 26,
   "repeatability": "Both canonical Windows capture/compare passes succeeded in the recorded run. No masks, thresholds or tolerance changes.",
   "retainedMinorRasterDifferences": []
 }
