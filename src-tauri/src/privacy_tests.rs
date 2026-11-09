@@ -11,16 +11,16 @@ fn endpoints_and_retention_are_validated() {
         test_url(
             "https://api.anthropic.com/v1/messages",
             "anthropic",
-            Some("claude-opus-5-5")
+            Some("claude-haiku-5-5")
         )
         .unwrap()
         .as_str(),
-        "https://api.anthropic.com/v1/models/claude-opus-5-5"
+        "https://api.anthropic.com/v1/models/claude-haiku-5-5"
     );
     assert!(test_url(
         "https://example.com/unknown",
         "anthropic",
-        Some("claude-opus-5-5")
+        Some("claude-haiku-5-5")
     )
     .is_err());
     assert!(test_url(

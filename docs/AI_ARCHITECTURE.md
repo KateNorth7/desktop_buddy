@@ -38,15 +38,15 @@ Local-first is a storage/ownership boundary, not an offline-AI claim. SQLite its
 
 | Role | Default | Source boundary |
 | --- | --- | --- |
-| General background reasoning, matching and primary auxiliary operations | `claude-opus-5-5` at low effort | `claude.rs`, `http.rs`, `goal_analysis.rs`, `goal_matching.rs`, `agent_runtime/reasoning.rs` |
-| Dialogue planning, action authorization/review, answers and contextual research synthesis | `claude-opus-5-5`; deliberate planning at high effort (`ANTHROPIC_RESPONSE_MODEL_ID` override) | `http.rs`, `agent_dialogue.rs`, `ai_chat.rs`, research modules |
-| Goal-aware screen interpretation | `claude-opus-5-5`; first pass can use the configured vision model | `semantic_observation.rs`, `vision.rs` |
-| Independent outcome verifier | `claude-opus-5-5` by default; personal runtime override where permitted | `semantic_observation.rs` |
-| Retrospective image descriptions | `claude-opus-5-5` | `vision.rs`, activity review |
+| General background reasoning, matching and primary auxiliary operations | `claude-haiku-5-5` at low effort | `claude.rs`, `http.rs`, `goal_analysis.rs`, `goal_matching.rs`, `agent_runtime/reasoning.rs` |
+| Dialogue planning, action authorization/review, answers and contextual research synthesis | `claude-haiku-5-5`; deliberate planning at high effort (`ANTHROPIC_RESPONSE_MODEL_ID` override) | `http.rs`, `agent_dialogue.rs`, `ai_chat.rs`, research modules |
+| Goal-aware screen interpretation | `claude-haiku-5-5`; first pass can use the configured vision model | `semantic_observation.rs`, `vision.rs` |
+| Independent outcome verifier | `claude-haiku-5-5` by default; personal runtime override where permitted | `semantic_observation.rs` |
+| Retrospective image descriptions | `claude-haiku-5-5` | `vision.rs`, activity review |
 | Local microphone transcription | Quantized Whisper large-v3-turbo, `whisper-rs` 0.16.0 | `local_voice.rs`, `core_import.rs` |
 | Source retrieval | Claude `web_search` server tool (at most two searches per run), cited excerpts only | `web_search.rs`, `research.rs`, `research_evidence.rs` |
 
-A configured or listed model is not proof of successful generation. The server has a fixed allowlist; Built-in AI keeps its routed defaults. Personal-provider model/endpoint overrides have their own rules. A bounded interactive proposal fallback retries once on the default primary model after a stalled attempt; it does not replay an already executed action. `claude.rs` is the only module that speaks the Claude wire format: it moves system messages into the cached `system` prompt, converts strict JSON schemas into structured outputs (unsupported constraints are removed on the wire and still validated locally), maps `stop_reason` back onto the internal `choices` envelope and enables server-side fallback for safety refusals. See the README configuration table and `http.rs`.
+A configured or listed model is not proof of successful generation. The server has a fixed allowlist; Built-in AI keeps its routed defaults. Personal-provider model/endpoint overrides have their own rules. A bounded interactive proposal fallback retries once on the default primary model after a stalled attempt; it does not replay an already executed action. `claude.rs` is the only module that speaks the Claude wire format: it moves system messages into the cached `system` prompt, converts strict JSON schemas into structured outputs (unsupported constraints are removed on the wire and still validated locally), maps `stop_reason` back onto the internal `choices` envelope and enables server-side fallback for safety refusals on the Claude tiers that support it (not Haiku). See the README configuration table and `http.rs`.
 
 Whisper downloads verified public weights on first use (about 548 MiB). Metal accelerates the Mac path; Windows uses CPU. Audio stays in memory. Optional transcript correction may send bounded text and permitted goal titles before the editable draft appears; only Send enters chat. OS Dictation/Apple Speech language packs do not drive this path. [Voice details](LOCAL_VOICE.md).
 

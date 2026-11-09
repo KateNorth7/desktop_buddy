@@ -2,7 +2,7 @@
 type Environment = (name: string) => string | undefined;
 type Dependencies = { env: Environment; fetch: typeof fetch };
 // Built-in AI routes one Claude model; personal connections keep their own controls.
-const MODELS = new Set(["claude-opus-5-5"]);
+const MODELS = new Set(["claude-haiku-5-5"]);
 const ANTHROPIC_VERSION = "2026-10-21";
 // Server-side fallback re-runs a safety refusal on another Claude model in the same call.
 const ANTHROPIC_BETA = "server-side-fallback-2026-07-01";
@@ -17,7 +17,7 @@ const PRICE: Record<
   string,
   { input: number; output: number; cacheWrite: number; cacheRead: number }
 > = {
-  "claude-opus-5-5": { input: 4, output: 20, cacheWrite: 5, cacheRead: 0.2 },
+  "claude-haiku-5-5": { input: 0.1, output: 0.5, cacheWrite: 0.125, cacheRead: 0.01 },
 };
 const SEARCH_MICROUSD = 10000;
 // Reserved before a request: a conservative estimate settled to actual usage after it.
@@ -216,7 +216,7 @@ export function actualMicrousd(
   model: string,
   usage: Record<string, unknown> | undefined,
 ): number {
-  const price = PRICE[model] ?? PRICE["claude-opus-5-5"];
+  const price = PRICE[model] ?? PRICE["claude-haiku-5-5"];
   const count = (value: unknown) =>
     Number.isFinite(Number(value)) && Number(value) > 0 ? Number(value) : 0;
   const tools = (usage?.server_tool_use ?? {}) as Record<string, unknown>;

@@ -9,7 +9,7 @@ import {
 const jwt = "aaa.bbb.ccc";
 const user = "11111111-1111-4111-8111-111111111111";
 const chat = () => ({
-  model: "claude-opus-5-5",
+  model: "claude-haiku-5-5",
   max_tokens: 1024,
   system: [{ type: "text", text: "Synthetic instructions", cache_control: { type: "ephemeral" } }],
   messages: [{ role: "user", content: "Summarize the fictional checklist" }],
@@ -20,7 +20,7 @@ const chat = () => ({
   fallbacks: "default",
 });
 const search = () => ({
-  model: "claude-opus-5-5",
+  model: "claude-haiku-5-5",
   max_tokens: 2048,
   messages: [{ role: "user", content: "official application workflow" }],
   tools: [{ type: "web_search_20260209", name: "web_search", max_uses: 2, allowed_callers: ["direct"] }],
@@ -58,7 +58,7 @@ function fixture({
       return Response.json(true, { status: settleStatus });
     if (url.includes("/v1/models/"))
       return Response.json({
-        id: "claude-opus-5-5",
+        id: "claude-haiku-5-5",
         display_name: "Claude Opus 5.5",
         private: "not returned",
       });
@@ -67,7 +67,7 @@ function fixture({
         id: "msg_fixture",
         type: "message",
         role: "assistant",
-        model: "claude-opus-5-5",
+        model: "claude-haiku-5-5",
         content: [{ type: "text", text: "Synthetic answer" }],
         stop_reason: "end_turn",
         usage,
@@ -122,7 +122,7 @@ test("a verified user is billed atomically before a fixed upstream request and s
   assert.equal(settlement.p_user, user);
   assert.equal(
     settlement.p_delta,
-    actualMicrousd("claude-opus-5-5", usage) - reservation.p_microusd,
+    actualMicrousd("claude-haiku-5-5", usage) - reservation.p_microusd,
   );
   const raw = await response.text();
   assert.ok(!raw.includes("private-anthropic-fixture"));
@@ -130,16 +130,16 @@ test("a verified user is billed atomically before a fixed upstream request and s
   assert.equal(response.headers.get("cache-control"), "no-store");
 });
 test("costs are estimated from the request and settled from reported usage in micro-dollars", () => {
-  // 1000 input × $4/M + 200 cache writes × $5/M + 500 cache reads × $0.20/M + 300 output × $20/M
-  assert.equal(actualMicrousd("claude-opus-5-5", usage), 4000 + 1000 + 100 + 6000);
+  // 1000 input × $0.10/M + 200 cache writes × $0.125/M + 500 cache reads × $0.01/M + 300 output × $0.50/M
+  assert.equal(actualMicrousd("claude-haiku-5-5", usage), 100 + 25 + 5 + 150);
   assert.equal(
-    actualMicrousd("claude-opus-5-5", { ...usage, server_tool_use: { web_search_requests: 2 } }),
-    11100 + 20000,
+    actualMicrousd("claude-haiku-5-5", { ...usage, server_tool_use: { web_search_requests: 2 } }),
+    280 + 20000,
   );
-  assert.equal(actualMicrousd("claude-opus-5-5", undefined), 0);
+  assert.equal(actualMicrousd("claude-haiku-5-5", undefined), 0);
   const plain = validateMessages(chat());
   assert.equal(plain.route, "ai");
-  assert.ok(plain.microusd >= 1024 * 20 && plain.microusd < 100000);
+  assert.ok(plain.microusd >= 1024 * 0.5 && plain.microusd < 100000);
   const searching = validateMessages(search());
   assert.equal(searching.route, "search");
   assert.ok(searching.microusd >= plain.microusd + 20000);
@@ -251,14 +251,14 @@ test("health checks reach the provider once, filter private fields and are not s
   const f = fixture();
   const response = await f.handler(
     new Request(
-      "https://project.supabase.co/functions/v1/buddy-ai/anthropic/v1/models/claude-opus-5-5",
+      "https://project.supabase.co/functions/v1/buddy-ai/anthropic/v1/models/claude-haiku-5-5",
       { headers: { Authorization: "Bearer " + jwt } },
     ),
   );
   assert.equal(response.status, 200);
-  assert.deepEqual(await response.json(), { id: "claude-opus-5-5" });
+  assert.deepEqual(await response.json(), { id: "claude-haiku-5-5" });
   assert.equal(f.calls.length, 3);
-  assert.equal(f.calls[2].url, "https://api.anthropic.com/v1/models/claude-opus-5-5");
+  assert.equal(f.calls[2].url, "https://api.anthropic.com/v1/models/claude-haiku-5-5");
   assert.equal(JSON.parse(f.calls[1].options.body).p_microusd, 0);
 });
 test("provider failures are sanitized, never replayed and keep the reserved estimate", async () => {

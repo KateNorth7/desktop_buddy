@@ -3,7 +3,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
-export const EXPECTED_MODELS = ["claude-opus-5-5"];
+export const EXPECTED_MODELS = ["claude-haiku-5-5"];
 const LIMIT = 2_000_000;
 class HealthFailure extends Error {
   constructor(stage, status = null) {

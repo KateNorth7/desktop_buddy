@@ -11,7 +11,7 @@ pub const API_VERSION: &str = "2026-10-21";
 /// Server-side fallback re-runs a safety refusal on another Claude model inside
 /// the same request instead of surfacing an empty answer.
 pub const BETA_FEATURES: &str = "server-side-fallback-2026-07-01";
-pub const DEFAULT_MODEL: &str = "claude-opus-5-5";
+pub const DEFAULT_MODEL: &str = "claude-haiku-5-5";
 const SUPPORTED_FORMATS: [&str; 10] = [
     "date-time",
     "time",
@@ -94,7 +94,14 @@ pub fn to_request(payload: &Value) -> Value {
     if let Some(tools) = payload.get("tools").filter(|tools| tools.is_array()) {
         request.insert("tools".into(), tools.clone());
     }
-    request.insert("fallbacks".into(), json!("default"));
+    // Server-side refusal fallback exists for the Opus, Sonnet and Fable tiers; Haiku has none.
+    if !request
+        .get("model")
+        .and_then(Value::as_str)
+        .is_some_and(|m| m.starts_with("claude-haiku"))
+    {
+        request.insert("fallbacks".into(), json!("default"));
+    }
     Value::Object(request)
 }
 
@@ -504,7 +511,13 @@ mod tests {
         assert_eq!(content[1]["source"]["media_type"], "image/jpeg");
         assert_eq!(content[1]["source"]["data"], "QUJD");
         assert_eq!(request["output_config"]["effort"], "high");
-        assert_eq!(request["fallbacks"], "default");
+        assert!(request.get("fallbacks").is_none());
+        assert_eq!(
+            to_request(
+                &json!({"model":"claude-opus-5-5","messages":[{"role":"user","content":"x"}]})
+            )["fallbacks"],
+            "default"
+        );
         let schema = &request["output_config"]["format"]["schema"];
         assert_eq!(request["output_config"]["format"]["type"], "json_schema");
         assert_eq!(schema["description"], "focus_decision");
@@ -533,7 +546,7 @@ mod tests {
     #[test]
     fn prose_requests_default_to_low_effort_without_a_format() {
         let request = to_request(
-            &json!({"model":"claude-opus-5-5","messages":[{"role":"assistant","content":"Earlier"},{"role":"user","content":"Now"}]}),
+            &json!({"model":"claude-haiku-5-5","messages":[{"role":"assistant","content":"Earlier"},{"role":"user","content":"Now"}]}),
         );
         assert_eq!(request["output_config"]["effort"], "low");
         assert!(request["output_config"].get("format").is_none());
@@ -544,11 +557,11 @@ mod tests {
     }
     #[test]
     fn responses_map_stop_reasons_refusals_and_usage() {
-        let ok = from_response(json!({"model":"claude-opus-5-5","content":[{"type":"text","text":"{\"ok\":true}"}],"stop_reason":"end_turn","usage":{"input_tokens":12,"output_tokens":3}})).unwrap();
+        let ok = from_response(json!({"model":"claude-haiku-5-5","content":[{"type":"text","text":"{\"ok\":true}"}],"stop_reason":"end_turn","usage":{"input_tokens":12,"output_tokens":3}})).unwrap();
         assert_eq!(ok["choices"][0]["finish_reason"], "stop");
         assert_eq!(ok["choices"][0]["message"]["content"], "{\"ok\":true}");
         assert_eq!(ok["usage"]["prompt_tokens"], 12);
-        assert_eq!(ok["model"], "claude-opus-5-5");
+        assert_eq!(ok["model"], "claude-haiku-5-5");
         let cut = from_response(
             json!({"content":[{"type":"text","text":"{"}],"stop_reason":"max_tokens"}),
         )
@@ -565,7 +578,7 @@ mod tests {
     }
     #[test]
     fn web_search_payload_and_results_keep_the_internal_search_shape() {
-        let payload = web_search_payload("claude-opus-5-5", "Rust async lifetime guide", 9);
+        let payload = web_search_payload("claude-haiku-5-5", "Rust async lifetime guide", 9);
         let request = to_request(&payload);
         assert_eq!(request["tools"][0]["type"], "web_search_20260209");
         assert_eq!(request["tools"][0]["max_uses"], 3);
@@ -574,7 +587,7 @@ mod tests {
             "Rust async lifetime guide"
         );
         assert!(request["output_config"].get("format").is_none());
-        let envelope = from_response(json!({"model":"claude-opus-5-5","stop_reason":"end_turn","content":[
+        let envelope = from_response(json!({"model":"claude-haiku-5-5","stop_reason":"end_turn","content":[
             {"type":"server_tool_use","id":"s1","name":"web_search","input":{"query":"q"}},
             {"type":"web_search_tool_result","tool_use_id":"s1","content":[
                 {"type":"web_search_result","url":"https://example.com/a","title":"A","encrypted_content":"x","page_age":null},

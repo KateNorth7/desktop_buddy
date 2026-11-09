@@ -217,8 +217,8 @@ export function fixtureReply(
       return {
         connection_mode: "built_in",
         configured_model: null,
-        configured_vision_model: "claude-opus-5-5",
-        configured_image_description_model: "claude-opus-5-5",
+        configured_vision_model: "claude-haiku-5-5",
+        configured_image_description_model: "claude-haiku-5-5",
         services: ["anthropic", "model", "search"].map((id) => ({
           id,
           status: "not_checked",

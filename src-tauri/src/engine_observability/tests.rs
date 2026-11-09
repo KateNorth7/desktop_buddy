@@ -272,7 +272,7 @@ fn request_cancellation_newest_request_and_privacy_staleness_are_observable() {
     stale.finish("success", None);
     assert!(view(&state.inner.lock().unwrap()).unwrap()["last_inference"].is_null());
     assert!(model_label("model\nsecret=token").is_none());
-    assert!(model_label("claude-opus-5-5").is_some());
+    assert!(model_label("claude-haiku-5-5").is_some());
 }
 #[tokio::test]
 async fn instrumented_request_uses_existing_validation_and_records_metadata_only() {

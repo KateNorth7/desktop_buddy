@@ -17,7 +17,7 @@ test("AI settings display the resolved screenshot models without saving an overr
     exact: true,
   });
   await expect(
-    row.getByText("screenshots · claude-opus-5-5", { exact: true }),
+    row.getByText("screenshots · claude-haiku-5-5", { exact: true }),
   ).toBeVisible();
   await expect(row.getByText("Uses Claude", { exact: true })).toBeVisible();
   await expect(
@@ -44,7 +44,7 @@ test("AI settings display the resolved screenshot models without saving an overr
     name: "Vision model ID",
     exact: true,
   });
-  await expect(field).toHaveValue("claude-opus-5-5");
+  await expect(field).toHaveValue("claude-haiku-5-5");
   await field.fill("cancelled-model");
   await row.getByRole("button", { name: "Cancel", exact: true }).click();
   await expect(field).toHaveCount(0);

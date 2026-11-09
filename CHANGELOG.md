@@ -4,7 +4,7 @@
 
 - Replace Nebius Token Factory with the Claude Messages API (Anthropic). All
   reasoning, dialogue, goal matching, screen understanding and image description
-  run on `claude-opus-5-5` by default; `ANTHROPIC_MODEL_ID`,
+  run on `claude-haiku-5-5` by default; `ANTHROPIC_MODEL_ID`,
   `ANTHROPIC_RESPONSE_MODEL_ID` and `ANTHROPIC_VISION_MODEL_ID` override it for
   personal connections. The saved provider key is now `ANTHROPIC_API_KEY`; on
   macOS it occupies the Keychain slot the pinned credential helper already
@@ -12,7 +12,7 @@
 - Translate every request at the HTTP boundary (`claude.rs`): strict JSON output
   uses Claude structured outputs, system prompts are cached, hidden reasoning runs
   at low effort for bounded operations and high effort for deliberate planning,
-  and a safety refusal falls back server-side to another Claude model.
+  and, on the Claude tiers that support it, a safety refusal falls back server-side to another Claude model.
 - Replace Tavily with Claude's `web_search` tool (`web_search.rs`): one bounded
   request per research run, cited excerpts as sources, no second provider or key.
 - Cap built-in AI at a shared $1.00 per UTC day (`budget_microusd_daily`): the

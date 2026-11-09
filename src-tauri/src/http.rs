@@ -342,12 +342,12 @@ mod tests {
     }
     #[test]
     fn constrained_structured_requests_do_not_spend_action_budget_on_hidden_reasoning() {
-        let payload = chat("claude-opus-5-5");
+        let payload = chat("claude-haiku-5-5");
         assert_eq!(constrained_payload(&payload)["reasoning_effort"], "low");
         let mut explicit = payload.clone();
         explicit["reasoning_effort"] = serde_json::json!("high");
         assert_eq!(constrained_payload(&explicit), explicit);
-        let prose = serde_json::json!({"model":"claude-opus-5-5","messages":[{"role":"user","content":"Write"}]});
+        let prose = serde_json::json!({"model":"claude-haiku-5-5","messages":[{"role":"user","content":"Write"}]});
         assert_eq!(constrained_payload(&prose), prose);
         let search = serde_json::json!({"query":"public docs"});
         assert_eq!(constrained_payload(&search), search);
@@ -400,7 +400,7 @@ mod tests {
             .respond_with(|request: &Request| {
                 let body: Value = serde_json::from_slice(&request.body).unwrap();
                 assert!(request.headers.get("authorization").is_none());
-                assert_eq!(body["model"], "claude-opus-5-5");
+                assert_eq!(body["model"], "claude-haiku-5-5");
                 assert_eq!(body["system"][0]["text"], "Existing instructions");
                 assert_eq!(body["messages"][0]["content"], "Synthetic request");
                 assert_eq!(body["output_config"]["effort"], "low");
@@ -420,7 +420,7 @@ mod tests {
             &reqwest::Client::new(),
             &format!("{}/v1/messages", server.uri()),
             "synthetic-key",
-            &chat("claude-opus-5-5"),
+            &chat("claude-haiku-5-5"),
         )
         .await
         .unwrap();
@@ -441,7 +441,7 @@ mod tests {
                 &reqwest::Client::new(),
                 &server.uri(),
                 "synthetic-key",
-                &chat("claude-opus-5-5"),
+                &chat("claude-haiku-5-5"),
             )
             .await
             .unwrap_err(),

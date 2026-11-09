@@ -24,8 +24,8 @@ vi.mock("../ai/serviceStatus", async (importOriginal) => ({
   serviceStatusApi: { read: vi.fn() },
 }));
 const fixture: ServiceSnapshot = {
-  configured_model: "claude-opus-5-5",
-  configured_response_model: "claude-opus-5-5",
+  configured_model: "claude-haiku-5-5",
+  configured_response_model: "claude-haiku-5-5",
   services: ["anthropic", "model", "search"].map((id) => ({
     id: id as "anthropic" | "model" | "search",
     status: "not_checked",
