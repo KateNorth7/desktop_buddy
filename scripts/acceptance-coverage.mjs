@@ -482,20 +482,20 @@ contract(
 
 contract(
   "P08-01 P08-02",
-  rust("stuck_without_consent_never_calls_tavily_or_enqueues_network_work"),
+  rust("stuck_without_consent_never_calls_web_search_or_enqueues_network_work"),
 );
 partial(
   "P08-03",
   rust(
-    "confirmation_to_tavily_to_work_context_mocked_end_to_end",
+    "confirmation_to_web_search_to_work_context_mocked_end_to_end",
     "correct_goal_step_and_only_relevant_memory_reach_claude",
   ),
-  "Accept research using actual Claude/Tavily accounts and assess usefulness for the current step.",
+  "Accept research using an actual Claude account and assess usefulness for the current step.",
 );
 contract(
   "P08-04",
   rust(
-    "confirmation_to_tavily_to_work_context_mocked_end_to_end",
+    "confirmation_to_web_search_to_work_context_mocked_end_to_end",
     "correct_goal_step_and_only_relevant_memory_reach_claude",
   ),
 );
@@ -509,7 +509,7 @@ contract(
 contract(
   "P08-06",
   rust(
-    "tavily_unavailable_has_no_synthesis_or_attached_result",
+    "web_search_unavailable_has_no_synthesis_or_attached_result",
     "malformed_intent_and_hallucinated_source_indices_never_attach",
     "stale_goal_step_checkpoint_consent_and_replay_are_rejected",
   ),
@@ -517,7 +517,7 @@ contract(
 contract(
   "P08-07",
   rust(
-    "privacy_revoked_during_intent_cancels_before_tavily",
+    "privacy_revoked_during_intent_cancels_before_web_search",
     "stale_goal_step_checkpoint_consent_and_replay_are_rejected",
     "consent_is_bound_to_context_before_the_worker_starts",
   ),
@@ -727,7 +727,7 @@ contract(
   "SEC-03",
   rust(
     "expired_consent_and_mock_ai_cannot_search",
-    "claude_unavailable_prevents_tavily",
+    "claude_unavailable_prevents_web_search",
   ),
 );
 partial(

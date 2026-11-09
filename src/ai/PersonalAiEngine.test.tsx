@@ -30,7 +30,7 @@ const fixture: PersonalAiEngine = {
     latency_ms: 24,
     provider_reported_model: null,
   },
-  tavily_status: "key_configured_not_search_tested",
+  web_search_status: "key_configured_not_search_tested",
   runtime: {
     status: "suppressed",
     pending_events: 0,

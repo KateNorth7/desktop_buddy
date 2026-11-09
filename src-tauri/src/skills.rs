@@ -1553,7 +1553,7 @@ pub fn execute_for_event(
                 ],
             )
             .map_err(|e| e.to_string())?;
-        return Ok(Execution{status:"confirmation_required",results:preview,message:Some(if plan.actions.iter().any(|a|a.name=="search_web") {"Allow web research for this goal and step? Only a short search query goes to Tavily. Reply Confirm or Cancel. No search has run yet."} else {"Confirm the proposed changes above? Reply Confirm or Cancel. Nothing has changed yet."}.into())});
+        return Ok(Execution{status:"confirmation_required",results:preview,message:Some(if plan.actions.iter().any(|a|a.name=="search_web") {"Allow web research for this goal and step? Only a short search query goes to Claude web search. Reply Confirm or Cancel. No search has run yet."} else {"Confirm the proposed changes above? Reply Confirm or Cancel. Nothing has changed yet."}.into())});
     }
     Ok(Execution {
         status: "executed",

@@ -247,8 +247,8 @@ export function PersonalAiEnginePanel({
                 </dd>
               </>
             )}
-            <dt>Tavily status</dt>
-            <dd>{readable(data.tavily_status)}</dd>
+            <dt>Web search status</dt>
+            <dd>{readable(data.web_search_status)}</dd>
             <dt>AgentRuntime status</dt>
             <dd>
               {readable(data.runtime.status)} · {data.runtime.pending_events}{" "}

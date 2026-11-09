@@ -1,5 +1,5 @@
 import { invoke } from "../data/ipc";
-export type ServiceId = "anthropic" | "model" | "tavily";
+export type ServiceId = "anthropic" | "model" | "search";
 export type ServiceState =
   | "verified"
   | "unavailable"

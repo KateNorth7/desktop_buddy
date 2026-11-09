@@ -11,6 +11,17 @@ const BASE = "/buddy-ai";
 const MAX_BODY = 17000000;
 const MAX_RESPONSE = 2000000;
 const EFFORTS = new Set(["low", "medium", "high", "xhigh", "max"]);
+// Claude list prices in micro-dollars per token ($ per million tokens), plus
+// $10 per 1,000 web searches. Update together with MODELS.
+const PRICE: Record<
+  string,
+  { input: number; output: number; cacheWrite: number; cacheRead: number }
+> = {
+  "claude-opus-5-5": { input: 4, output: 20, cacheWrite: 5, cacheRead: 0.2 },
+};
+const SEARCH_MICROUSD = 10000;
+// Reserved before a request: a conservative estimate settled to actual usage after it.
+const RESERVED_OUTPUT_TOKENS = 1536;
 const reply = (status: number, message: string) =>
   Response.json(
     { error: message },
@@ -63,8 +74,16 @@ function isTextBlock(part: unknown): part is { type: "text"; text: string } {
     )
   );
 }
-/** Validates a Claude Messages request and returns conservative reservation units. */
-export function validateMessages(body: Record<string, unknown>): number {
+export type Validated = {
+  /** Conservative reservation units, not a currency price. */
+  units: number;
+  /** Estimated cost in micro-dollars, reserved before the call and settled after it. */
+  microusd: number;
+  /** Quota route: `search` when the request runs Claude's web search tool. */
+  route: "ai" | "search";
+};
+/** Validates a Claude Messages request and derives its reservation. */
+export function validateMessages(body: Record<string, unknown>): Validated {
   const fields = new Set([
     "model",
     "max_tokens",
@@ -72,6 +91,7 @@ export function validateMessages(body: Record<string, unknown>): number {
     "system",
     "output_config",
     "fallbacks",
+    "tools",
   ]);
   if (
     Object.keys(body).some((k) => !fields.has(k)) ||
@@ -108,6 +128,28 @@ export function validateMessages(body: Record<string, unknown>): number {
       )
         throw Error("format");
     }
+  }
+  let searches = 0;
+  if (body.tools !== undefined) {
+    // The only server tool allowed is one bounded web search; every search is billed.
+    if (!Array.isArray(body.tools) || body.tools.length !== 1) throw Error("tools");
+    const tool = body.tools[0] as Record<string, unknown>;
+    if (
+      !tool ||
+      typeof tool !== "object" ||
+      tool.type !== "web_search_20260209" ||
+      tool.name !== "web_search" ||
+      !Number.isInteger(tool.max_uses) ||
+      Number(tool.max_uses) < 1 ||
+      Number(tool.max_uses) > 3 ||
+      (tool.allowed_callers !== undefined &&
+        JSON.stringify(tool.allowed_callers) !== '["direct"]') ||
+      Object.keys(tool).some(
+        (k) => !["type", "name", "max_uses", "allowed_callers"].includes(k),
+      )
+    )
+      throw Error("tools");
+    searches = Number(tool.max_uses);
   }
   let images = 0,
     imageBytes = 0,
@@ -155,39 +197,53 @@ export function validateMessages(body: Record<string, unknown>): number {
   }
   if (images > 4 || imageBytes > 16000200 || textBytes > 160000)
     throw Error("content budget");
-  // Conservative reservation units, not a quoted currency price. Timeouts stay charged.
-  return textBytes + Number(body.max_tokens) * 8 + images * 16384;
+  const price = PRICE[String(body.model)];
+  const inputTokens = Math.ceil(textBytes / 3) + images * 1600 + 400;
+  const outputTokens = Math.min(Number(body.max_tokens), RESERVED_OUTPUT_TOKENS);
+  return {
+    // Conservative reservation units, not a quoted currency price. Timeouts stay charged.
+    units: textBytes + Number(body.max_tokens) * 8 + images * 16384,
+    microusd: Math.ceil(
+      inputTokens * price.input +
+        outputTokens * price.output +
+        searches * SEARCH_MICROUSD,
+    ),
+    route: searches ? "search" : "ai",
+  };
 }
-type Route = { method: string; url: string; secret: string; kind: string };
+/** Cost of one completed response from the provider's reported usage, in micro-dollars. */
+export function actualMicrousd(
+  model: string,
+  usage: Record<string, unknown> | undefined,
+): number {
+  const price = PRICE[model] ?? PRICE["claude-opus-5-5"];
+  const count = (value: unknown) =>
+    Number.isFinite(Number(value)) && Number(value) > 0 ? Number(value) : 0;
+  const tools = (usage?.server_tool_use ?? {}) as Record<string, unknown>;
+  return Math.ceil(
+    count(usage?.input_tokens) * price.input +
+      count(usage?.cache_creation_input_tokens) * price.cacheWrite +
+      count(usage?.cache_read_input_tokens) * price.cacheRead +
+      count(usage?.output_tokens) * price.output +
+      count(tools.web_search_requests) * SEARCH_MICROUSD,
+  );
+}
+type Route = { method: string; url: string; kind: string };
 function resolveRoute(path: string): Route | undefined {
-  const routes: Record<string, Route> = {
-    [`${BASE}/anthropic/v1/messages`]: {
+  if (path === `${BASE}/anthropic/v1/messages`)
+    return {
       method: "POST",
       url: "https://api.anthropic.com/v1/messages",
-      secret: "ANTHROPIC_API_KEY",
       kind: "ai",
-    },
-    [`${BASE}/tavily/search`]: {
-      method: "POST",
-      url: "https://api.tavily.com/search",
-      secret: "TAVILY_API_KEY",
-      kind: "search",
-    },
-    [`${BASE}/tavily/usage`]: {
-      method: "GET",
-      url: "https://api.tavily.com/usage",
-      secret: "TAVILY_API_KEY",
-      kind: "health",
-    },
-  };
-  if (routes[path]) return routes[path];
+    };
   // One model object per health check: a paginated catalog cannot hide the model.
-  const model = path.match(/^\/buddy-ai\/anthropic\/v1\/models\/([A-Za-z0-9._-]{1,80})$/)?.[1];
+  const model = path.match(
+    /^\/buddy-ai\/anthropic\/v1\/models\/([A-Za-z0-9._-]{1,80})$/,
+  )?.[1];
   if (model && MODELS.has(model))
     return {
       method: "GET",
       url: `https://api.anthropic.com/v1/models/${model}`,
-      secret: "ANTHROPIC_API_KEY",
       kind: "health",
     };
   return undefined;
@@ -213,9 +269,21 @@ export function createGateway(dependencies: Dependencies) {
       return reply(401, "Authentication required");
     const supabase = env("SUPABASE_URL"),
       service = env("SUPABASE_SERVICE_ROLE_KEY"),
-      upstream = env(route.secret);
+      upstream = env("ANTHROPIC_API_KEY");
     if (!supabase || !service || !upstream)
       return reply(503, "Built-in AI is not configured");
+    const rpc = (name: string, body: Record<string, unknown>) =>
+      request(`${supabase}/rest/v1/rpc/${name}`, {
+        method: "POST",
+        headers: {
+          apikey: service,
+          Authorization: `Bearer ${service}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(body),
+        redirect: "error",
+        signal: AbortSignal.timeout(10000),
+      });
     let stage = "auth";
     try {
       const userResponse = await request(`${supabase}/auth/v1/user`, {
@@ -234,8 +302,9 @@ export function createGateway(dependencies: Dependencies) {
         user.role !== "authenticated"
       )
         return reply(401, "Invalid user session");
-      let payload: Record<string, unknown> | undefined,
-        units = 0;
+      let payload: Record<string, unknown> | undefined;
+      let reservation: Validated = { units: 0, microusd: 0, route: "ai" };
+      let quotaRoute: string = route.kind;
       if (req.method === "POST") {
         if (
           !(req.headers.get("content-type") ?? "").startsWith(
@@ -247,32 +316,8 @@ export function createGateway(dependencies: Dependencies) {
           payload = JSON.parse(await bounded(req, MAX_BODY));
           if (!payload || Array.isArray(payload) || typeof payload !== "object")
             throw Error("payload");
-          if (route.kind === "ai") units = validateMessages(payload!);
-          else {
-            if (
-              Object.keys(payload!).some(
-                (k) =>
-                  ![
-                    "query",
-                    "search_depth",
-                    "max_results",
-                    "topic",
-                    "include_raw_content",
-                  ].includes(k),
-              ) ||
-              typeof payload!.query !== "string" ||
-              payload!.query.length < 1 ||
-              payload!.query.length > 1000 ||
-              !["basic", "advanced"].includes(String(payload!.search_depth)) ||
-              !Number.isInteger(payload!.max_results) ||
-              Number(payload!.max_results) < 1 ||
-              Number(payload!.max_results) > 5 ||
-              (payload!.topic !== undefined && payload!.topic !== "general") ||
-              (payload!.include_raw_content !== undefined &&
-                payload!.include_raw_content !== false)
-            )
-              throw Error("search");
-          }
+          reservation = validateMessages(payload!);
+          quotaRoute = reservation.route;
         } catch {
           return reply(
             400,
@@ -281,47 +326,28 @@ export function createGateway(dependencies: Dependencies) {
         }
       }
       stage = "quota";
-      const reservation = await request(
-        `${supabase}/rest/v1/rpc/buddy_reserve_ai`,
-        {
-          method: "POST",
-          headers: {
-            apikey: service,
-            Authorization: `Bearer ${service}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            p_user: user.id,
-            p_route: route.kind,
-            p_units: units,
-          }),
-          redirect: "error",
-          signal: AbortSignal.timeout(10000),
-        },
-      );
-      if (!reservation.ok)
+      const reserved = await rpc("buddy_reserve_ai", {
+        p_user: user.id,
+        p_route: quotaRoute,
+        p_units: reservation.units,
+        p_microusd: reservation.microusd,
+      });
+      if (!reserved.ok)
         return reply(503, "Built-in AI is temporarily unavailable");
-      if (JSON.parse(await bounded(reservation, 1000)) !== true)
+      if (JSON.parse(await bounded(reserved, 1000)) !== true)
         return reply(
           429,
           "Built-in AI allowance reached. Try later or use your own API keys.",
         );
       stage = "provider";
-      const headers: Record<string, string> =
-        route.secret === "ANTHROPIC_API_KEY"
-          ? {
-              "x-api-key": upstream,
-              "anthropic-version": ANTHROPIC_VERSION,
-              "anthropic-beta": ANTHROPIC_BETA,
-              "Content-Type": "application/json",
-            }
-          : {
-              Authorization: `Bearer ${upstream}`,
-              "Content-Type": "application/json",
-            };
       const response = await request(route.url, {
         method: route.method,
-        headers,
+        headers: {
+          "x-api-key": upstream,
+          "anthropic-version": ANTHROPIC_VERSION,
+          "anthropic-beta": ANTHROPIC_BETA,
+          "Content-Type": "application/json",
+        },
         body: payload ? JSON.stringify(payload) : undefined,
         redirect: "error",
         signal: AbortSignal.any([req.signal, AbortSignal.timeout(60000)]),
@@ -330,7 +356,7 @@ export function createGateway(dependencies: Dependencies) {
         console.warn(
           JSON.stringify({
             event: "gateway_upstream_failure",
-            service: route.kind,
+            service: quotaRoute,
             status: response.status,
           }),
         );
@@ -346,20 +372,26 @@ export function createGateway(dependencies: Dependencies) {
       stage = "response";
       const data = JSON.parse(await bounded(response, MAX_RESPONSE));
       if (route.method === "GET") {
-        if (route.secret === "TAVILY_API_KEY") {
-          if (!data.key || typeof data.key !== "object")
-            return reply(502, "Invalid service health response");
-          return Response.json(
-            { key: { configured: true } },
-            { headers: { "Cache-Control": "no-store" } },
-          );
-        }
         if (typeof data.id !== "string" || !MODELS.has(data.id))
           return reply(502, "Invalid service model response");
         return Response.json(
           { id: data.id },
           { headers: { "Cache-Control": "no-store" } },
         );
+      }
+      // Replace the estimate with the provider's reported usage so the daily
+      // budget tracks real spend. A failed settlement keeps the estimate.
+      stage = "settle";
+      const actual = actualMicrousd(String(payload?.model), data?.usage);
+      try {
+        const settled = await rpc("buddy_settle_ai", {
+          p_user: user.id,
+          p_delta: actual - reservation.microusd,
+        });
+        if (!settled.ok)
+          console.warn(JSON.stringify({ event: "gateway_settle_failure" }));
+      } catch {
+        console.warn(JSON.stringify({ event: "gateway_settle_failure" }));
       }
       return Response.json(data, { headers: { "Cache-Control": "no-store" } });
     } catch (error) {

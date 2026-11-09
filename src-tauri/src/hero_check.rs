@@ -276,8 +276,6 @@ pub async fn run() -> Result<Value, String> {
         "Live rehearsal refuses AI_MOCK",
     )?;
     let service = Service::configured(&root.client)?;
-    let tavily_url = crate::http::endpoint("TAVILY_API_URL")?;
-    let tavily_key = crate::http::secret("TAVILY_API_KEY")?;
     let workspace = Workspace::new()?;
     let mut state = AppState::new(Storage::open(&workspace.database())?)?;
     let mut rows = Vec::new();
@@ -339,8 +337,8 @@ pub async fn run() -> Result<Value, String> {
         };
         passed(&mut rows,stage,started);
 
-        stage="real_tavily_research_and_attachment";let started=Instant::now();
-        let research=crate::research::run_with_service(&state,a,research_id,&service,&tavily_url,&tavily_key).await?;
+        stage="real_web_search_research_and_attachment";let started=Instant::now();
+        let research=crate::research::run_with_service(&state,a,research_id,&service).await?;
         require(!research.sources.is_empty() && !research.summary.is_empty(),"Research did not return grounded sources")?;
         {let mut i=state.inner.lock().unwrap();let context=i.storage.work_context(a)?.ok_or("Research context missing")?;
             require(i.storage.context_research(context.id)?.iter().any(|r|r.research_id==research_id),"Research was not attached to the goal context")?;

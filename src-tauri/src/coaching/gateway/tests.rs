@@ -213,8 +213,10 @@ async fn in_flight_privacy_target_and_pause_changes_discard_provider_output() {
         let server = MockServer::start().await;
         Mock::given(method("POST"))
             .respond_with(
-                crate::claude::test::reply(response(json!({"title":"Open the proposal","estimated_seconds":10})))
-                    .set_delay(Duration::from_millis(250)),
+                crate::claude::test::reply(response(
+                    json!({"title":"Open the proposal","estimated_seconds":10}),
+                ))
+                .set_delay(Duration::from_millis(250)),
             )
             .expect(1)
             .mount(&server)
@@ -363,8 +365,10 @@ async fn privacy_revoked_during_an_invalid_reply_prevents_a_repair_request() {
     let server = MockServer::start().await;
     Mock::given(method("POST"))
         .respond_with(
-            crate::claude::test::reply(response(json!({"title":"Open proposal","estimated_seconds":1})))
-                .set_delay(Duration::from_millis(250)),
+            crate::claude::test::reply(response(
+                json!({"title":"Open proposal","estimated_seconds":1}),
+            ))
+            .set_delay(Duration::from_millis(250)),
         )
         .expect(1)
         .mount(&server)

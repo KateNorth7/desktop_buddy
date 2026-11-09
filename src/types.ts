@@ -57,7 +57,7 @@ interface Status {
   demo: boolean;
   mock_ai: boolean;
   anthropic_configured: boolean;
-  tavily_configured: boolean;
+  web_search_configured: boolean;
 }
 interface PersonalWorkState {
   active_goal_id: number | null;

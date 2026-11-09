@@ -46,7 +46,7 @@ vi.mock("../ai/AiSettings", () => ({ AiSettings: () => null }));
 vi.mock("./TrackingStatus", () => ({ TrackingStatus: () => null }));
 
 const data = {
-  status: { dnd: false, anthropic_configured: true, tavily_configured: true },
+  status: { dnd: false, anthropic_configured: true, web_search_configured: true },
   user_settings: defaultUserSettings,
   buddy: { preferences: defaultBuddyPreferences },
 } as Dashboard;
@@ -58,8 +58,8 @@ beforeEach(() => {
     configured_model: "test-model",
     configured_vision_model: "fixture-screen-model",
     configured_image_description_model: "fixture-image-model",
-    services: ["anthropic", "tavily"].map((id) => ({
-      id: id as "anthropic" | "tavily",
+    services: ["anthropic", "search"].map((id) => ({
+      id: id as "anthropic" | "search",
       status: "not_checked",
       checked_at: null,
     })),
@@ -140,7 +140,7 @@ it("switches connection automatically without replacing, deleting or requesting 
   expect(screen.queryByRole("button", { name: "Save preferences" })).toBeNull();
 });
 
-it("keeps a successful provider check after the temporary receipt disappears, for both keys", async () => {
+it("keeps a successful provider check after the temporary receipt disappears", async () => {
   const services = await openSettings();
   vi.mocked(api.testConnection).mockImplementation(async (provider) => {
     snapshot.services.find((item) => item.id === provider)!.status = "verified";
@@ -151,15 +151,12 @@ it("keeps a successful provider check after the temporary receipt disappears, fo
     fireEvent.click(services.getAllByRole("button", { name: "Test" })[0]);
   });
   await act(async () => {
-    fireEvent.click(services.getAllByRole("button", { name: "Test" })[1]);
-  });
-  await act(async () => {
     vi.advanceTimersByTime(5000);
   });
   expect(services.getAllByRole("status").map((row) => row.textContent)).toEqual(
-    ["Connected", "Connected"],
+    ["Connected"],
   );
-  expect(serviceStatusApi.read).toHaveBeenCalledTimes(3);
+  expect(serviceStatusApi.read).toHaveBeenCalledTimes(2);
 });
 
 it("refreshes failed checks and preserves short errors until the next action", async () => {

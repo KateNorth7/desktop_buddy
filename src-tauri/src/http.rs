@@ -175,7 +175,10 @@ async fn post_json_with_timeout(
     // are sent as built. Responses come back in the crate's internal envelope.
     let chat = crate::claude::is_chat(&payload);
     let (body, auth) = if chat {
-        (crate::claude::to_request(&payload), crate::shared_ai::Auth::Claude)
+        (
+            crate::claude::to_request(&payload),
+            crate::shared_ai::Auth::Claude,
+        )
     } else {
         (payload, crate::shared_ai::Auth::Bearer)
     };
@@ -255,17 +258,15 @@ pub fn endpoint(name: &str) -> Result<String, String> {
 pub fn secret(name: &str) -> Result<String, String> {
     if crate::shared_ai::mode() == crate::shared_ai::ConnectionMode::BuiltIn {
         match name {
-            "ANTHROPIC_API_KEY" | "TAVILY_API_KEY" => {
-                return Ok(crate::shared_ai::SHARED_CREDENTIAL.into())
-            }
-            "ANTHROPIC_API_URL" | "TAVILY_API_URL" => return crate::shared_ai::endpoint(name),
+            "ANTHROPIC_API_KEY" => return Ok(crate::shared_ai::SHARED_CREDENTIAL.into()),
+            "ANTHROPIC_API_URL" => return crate::shared_ai::endpoint(name),
             "ANTHROPIC_MODEL_ID" => return Ok(DEFAULT_PRIMARY_MODEL.into()),
             "ANTHROPIC_VISION_MODEL_ID" => return Ok(DEFAULT_RESPONSE_MODEL.into()),
             _ => {}
         }
     }
     // Test providers use synthetic environment keys, never the user's vault.
-    if !cfg!(test) && matches!(name, "ANTHROPIC_API_KEY" | "TAVILY_API_KEY") {
+    if !cfg!(test) && matches!(name, "ANTHROPIC_API_KEY") {
         if let Some(key) = crate::credentials::read(name)? {
             return Ok(key);
         }
@@ -276,18 +277,17 @@ pub fn secret(name: &str) -> Result<String, String> {
         .or_else(|| match name {
             "ANTHROPIC_API_URL" => Some(crate::claude::API_URL.into()),
             "ANTHROPIC_MODEL_ID" => Some(DEFAULT_PRIMARY_MODEL.into()),
-            "TAVILY_API_URL" => Some("https://api.tavily.com/search".into()),
             _ => None,
         })
         .ok_or_else(|| format!("Configure {name} in Settings"))
 }
 pub fn configured(name: &str) -> bool {
     if crate::shared_ai::mode() == crate::shared_ai::ConnectionMode::BuiltIn
-        && matches!(name, "ANTHROPIC_API_KEY" | "TAVILY_API_KEY")
+        && matches!(name, "ANTHROPIC_API_KEY")
     {
         return crate::shared_ai::configured();
     }
-    if !cfg!(test) && matches!(name, "ANTHROPIC_API_KEY" | "TAVILY_API_KEY") {
+    if !cfg!(test) && matches!(name, "ANTHROPIC_API_KEY") {
         return std::env::var(name)
             .map(|s| !s.trim().is_empty())
             .unwrap_or(false)

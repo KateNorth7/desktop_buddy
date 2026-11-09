@@ -101,7 +101,6 @@ pub(crate) fn activate(mode: ConnectionMode) {
 pub(crate) fn endpoint(provider: &str) -> Result<String, String> {
     let suffix = match provider {
         "ANTHROPIC_API_URL" => "/anthropic/v1/messages",
-        "TAVILY_API_URL" => "/tavily/search",
         _ => return Err("Unknown built-in service".into()),
     };
     Ok(format!("{}/functions/v1/buddy-ai{suffix}", config()?.url))
@@ -114,9 +113,10 @@ fn route_allowed(config: &PublicConfig, mode: ConnectionMode, url: &str, key: &s
     key == SHARED_CREDENTIAL
         && [
             "/anthropic/v1/messages".to_string(),
-            format!("/anthropic/v1/models/{}", crate::http::DEFAULT_PRIMARY_MODEL),
-            "/tavily/search".to_string(),
-            "/tavily/usage".to_string(),
+            format!(
+                "/anthropic/v1/models/{}",
+                crate::http::DEFAULT_PRIMARY_MODEL
+            ),
         ]
         .iter()
         .any(|suffix| url == format!("{root}{suffix}"))
@@ -127,7 +127,7 @@ fn route_allowed(config: &PublicConfig, mode: ConnectionMode, url: &str, key: &s
 pub(crate) enum Auth {
     /// Claude API: `x-api-key` plus the pinned `anthropic-version`.
     Claude,
-    /// Tavily and other bearer-token services.
+    /// Other bearer-token services.
     Bearer,
 }
 #[derive(Clone, Copy)]

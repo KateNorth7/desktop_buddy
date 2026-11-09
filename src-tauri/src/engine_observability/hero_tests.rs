@@ -13,7 +13,9 @@ use crate::{
 };
 use wiremock::{matchers::method, Mock, MockServer, Request, ResponseTemplate};
 fn envelope(value: Value) -> ResponseTemplate {
-    crate::claude::test::reply(json!({"model":"fixture-reported-model","choices":[{"finish_reason":"stop","message":{"content":value.to_string()}}]}))
+    crate::claude::test::reply(
+        json!({"model":"fixture-reported-model","choices":[{"finish_reason":"stop","message":{"content":value.to_string()}}]}),
+    )
 }
 fn target(id: i64) -> Value {
     json!({"goal_id":id,"reference":null})
@@ -153,9 +155,13 @@ async fn hackathon_hero_two_lanes_voice_park_receipt_resume_research_summary_res
     let state = AppState::new(Storage::open(&path).unwrap()).unwrap();
     state.inner.lock().unwrap().status.mock_ai = false;
     let claude = MockServer::start().await;
-    let tavily = MockServer::start().await;
     Mock::given(method("POST")).respond_with(|request:&Request|{
         let body:Value=serde_json::from_slice(&request.body).unwrap();
+        if body.get("tools").is_some() {
+            assert_eq!(body["messages"][0]["content"],"technical documentation submission checklist");
+            assert!(body.get("memories").is_none() && body.get("goal").is_none());
+            return crate::claude::test::search_reply(json!([{"title":"Documentation","url":"https://docs.rs/","content":"Describe the architecture, tests and remaining limitations."}]));
+        }
         let source:Value=serde_json::from_str(body["messages"][0]["content"].as_str().unwrap()).unwrap();
         assert!(body.get("audio").is_none());assert!(!body.to_string().contains("RAW_ACCESSIBILITY_CANARY"));
         match crate::claude::test::operation(&body).as_str().unwrap() {
@@ -182,13 +188,6 @@ async fn hackathon_hero_two_lanes_voice_park_receipt_resume_research_summary_res
             other=>panic!("Unexpected inference operation: {other}"),
         }
     }).mount(&claude).await;
-    Mock::given(method("POST")).respond_with(|request:&Request|{
-        let body:Value=serde_json::from_slice(&request.body).unwrap();
-        assert_eq!(body["query"],"technical documentation submission checklist");
-        assert_eq!(body["include_raw_content"],false);
-        assert!(body.get("memories").is_none() && body.get("goal").is_none());
-        crate::claude::test::reply(json!({"results":[{"title":"Documentation","url":"https://docs.rs/","content":"Describe the architecture, tests and remaining limitations."}]}))
-    }).expect(1).mount(&tavily).await;
     {
         let service = Service {
             client: &state.client,
@@ -268,7 +267,12 @@ async fn hackathon_hero_two_lanes_voice_park_receipt_resume_research_summary_res
             }
         }
         send(&state, &service, "Return me to the hackathon", false).await;
-        assert!(tavily.received_requests().await.unwrap().is_empty());
+        assert!(claude.received_requests().await.unwrap().iter().all(|r| {
+            serde_json::from_slice::<Value>(&r.body)
+                .unwrap()
+                .get("tools")
+                .is_none()
+        }));
         let research_id = {
             let mut inner = state.inner.lock().unwrap();
             let offer =
@@ -287,16 +291,9 @@ async fn hackathon_hero_two_lanes_voice_park_receipt_resume_research_summary_res
                 .unwrap()
                 .unwrap()
         };
-        let research = crate::research::run_with_service(
-            &state,
-            hackathon,
-            research_id,
-            &service,
-            &tavily.uri(),
-            "fixture",
-        )
-        .await
-        .unwrap();
+        let research = crate::research::run_with_service(&state, hackathon, research_id, &service)
+            .await
+            .unwrap();
         assert_eq!(research.sources.len(), 1);
         state
             .inner
@@ -321,7 +318,7 @@ async fn hackathon_hero_two_lanes_voice_park_receipt_resume_research_summary_res
         assert!(!summary.contains("CLIENT_PRIVATE_CANARY"));
         println!("Hero fixture grounded summary:\n{summary}");
         let calls = claude.received_requests().await.unwrap();
-        assert_eq!(calls.len(), 12); // 7 plans + 2 checkpoints + 3 research calls (including evidence); action receipts are local.
+        assert_eq!(calls.len(), 13); // 7 plans + 2 checkpoints + 3 research calls (including evidence) + 1 web search; action receipts are local.
         let panel = view(&state.inner.lock().unwrap()).unwrap();
         assert_eq!(panel["last_skill"], "inspect_continuity");
         assert_eq!(panel["last_inference"]["status"], "success");

@@ -665,7 +665,7 @@ pub async fn research(
     let Some(query) = &plan.query else {
         return (vec![], None);
     };
-    match crate::tavily::research(client, query).await {
+    match crate::web_search::research(client, query).await {
         Ok(sources) => (sources, None),
         Err(error) => (
             vec![],
@@ -734,7 +734,7 @@ pub async fn analyze_goal(
             ],
             warnings: vec![Warning {
                 title: "Mock AI response".into(),
-                detail: "AI_MOCK is enabled. No Claude or Tavily request was sent.".into(),
+                detail: "AI_MOCK is enabled. No Claude request was sent.".into(),
                 source_url: None,
             }],
             ..Default::default()

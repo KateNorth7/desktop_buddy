@@ -15,7 +15,7 @@ const dashboard: Pick<Dashboard, "status" | "goal_matching" | "goal"> = {
     demo: false,
     mock_ai: false,
     anthropic_configured: false,
-    tavily_configured: false,
+    web_search_configured: false,
   },
   goal: { id: 1, text: "Build dashboard", created_at: "2026-10-08T00:00:00Z" },
 };

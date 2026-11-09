@@ -30,13 +30,13 @@ The Mac application uses the project's stable internal code-signing identity. Th
 - **Activity and Progress:** observe foreground app/window sessions on Windows and macOS when tracking is enabled. Attribute relevant activity to goals, distinguish idle time, and keep observed time separate from confirmed completion.
 - **Gentle interventions:** offer help when work appears stuck or drifting, subject to consent, evidence, quiet schedules, context gates and duplicate prevention. Remaining silent is a valid agent decision.
 - **Deadline check-ins:** show factual mascot reminders before, at and after a goal deadline. **I’m on it** acknowledges the reminder; **Reschedule** saves a future date/time; **Chat** opens a conversation. These reminders do not complete the goal or move it into Today. No macOS/Windows system notifications are used. See [deadline reminders](docs/DEADLINE_REMINDERS.md).
-- **Contextual research:** after applicable search authorization, use Tavily sources to answer a current work question and attach research to the goal's WorkContext.
+- **Contextual research:** after applicable search authorization, use cited web sources retrieved through Claude to answer a current work question and attach research to the goal's WorkContext.
 - **Evidence-based completion:** interpret goals against bounded interface text, recent context and optional actual pixels. A separate saved permission, enabled for new profiles, can automatically complete an existing goal/step after independent outcome verification, with durable Undo in Progress. Time alone never proves completion.
 - **Work outside the plan:** offer an open Today task for ongoing work, or a completed item only for a verified result. New goals always require acceptance.
 - **Optional active-window vision:** enabled for new profiles and switchable in Settings, with separate system permission, bounded encrypted review evidence, private/excluded-window gates and text fallback. Vision descriptions alone cannot close tasks.
 - **Daily continuity:** summarize saved priorities, waiting items, parked work and confirmed completions across goals, without inventing completed work or assigning a productivity score.
 - **Coaching:** one executable **Tiny Habits** workflow helps turn a goal barrier into a small feasible action and an anchor. It is not a collection of 16 implemented coaching workflows, and finishing a coaching micro-action does not automatically complete its parent goal.
-- **Local voice input:** turn supported local speech recognition into a transcript that enters the same chat/action pipeline as typed text. Raw audio is not sent to Claude or Tavily.
+- **Local voice input:** turn supported local speech recognition into a transcript that enters the same chat/action pipeline as typed text. Raw audio is not sent to Claude.
 
 These capabilities have different prerequisites. The companion can remain visible while tracking is paused; visibility does not mean background observation or AI calls are enabled.
 
@@ -49,7 +49,7 @@ These capabilities have different prerequisites. The companion can remain visibl
 | Response model            | `claude-opus-5-5` (override with `ANTHROPIC_RESPONSE_MODEL_ID`) | Interactive dialogue planning, action authorization/review, answers, research synthesis and checkpoint wording |
 | Goal-aware foreground observation | `claude-opus-5-5`; the vision model is configurable | Combines goals, permitted interface text, recent context and optional actual pixels; independently checks observable outcomes before opt-in completion |
 | Retrospective scene captioning | `claude-opus-5-5` | Bounded visual context for daily review; a caption alone is not completion evidence |
-| Tavily                    | Search API                                         | Retrieves web sources; it is not a dialogue model                                                              |
+| Web search                | Claude `web_search` tool, at most two searches per research run | Retrieves cited web sources through the same Claude connection; no separate search provider                 |
 | Local speech recognition | Whisper large-v3-turbo via `whisper-rs`; Metal on Apple Silicon, CPU on Windows | Converts microphone audio to an editable transcript locally; the first use downloads verified public model weights |
 
 The language models run in the cloud. An NVIDIA GPU is not required on the user's computer. The developer panel distinguishes the **configured model** from a provider-reported model ID when one is available.
@@ -73,7 +73,7 @@ flowchart TD
     Runtime --> Connection
     Connection --> Gateway[Built-in AI: authenticated Supabase gateway]
     Connection --> Personal[Personal keys: direct provider requests]
-    Gateway --> Providers[Claude API and authorized Tavily search]
+    Gateway --> Providers[Claude API, including authorized web search]
     Personal --> Providers
     Providers --> Validate[Rust validation and freshness checks]
     Validate --> Offers[Goal or step proposal requires acceptance]
@@ -101,12 +101,12 @@ Goal matching uses a cascade: explicit focus, deterministic app rules, local rel
 
 Memory retrieval is deterministic and scoped by actual goal, step and conversation references. It uses type, pinned status, recency and relevance within a bounded context budget; it does not send the entire SQLite database to a model. Inferred personal patterns require repeated evidence. Explicit preferences take priority over inferred ones.
 
-Research uses the relevant goal, step and checkpoint to form a limited query. Tavily receives the query and search options rather than the full memory store. The backend validates source references and selected excerpts before attaching the synthesis. This reduces unsupported citations; it is not a guarantee that every statement is correct.
+Research uses the relevant goal, step and checkpoint to form a limited query. Claude's web search tool receives only that query, never the memory store. The backend validates source references and selected excerpts before attaching the synthesis. This reduces unsupported citations; it is not a guarantee that every statement is correct.
 
 ## First run and privacy
 
 1. Install the appropriate release and complete setup. **With tracking** is preselected; continuing enables observation after the required system access is granted. Choose **Without tracking** for manual use. New profiles enable AI assistance, goal context, research, activity matching, dictation text correction, memory, screenshots and verified automatic completion; each can be disabled in Settings.
-2. **Built-in AI** is selected by default: no account, invitation or API-key entry is required. To use personal provider accounts, choose **Settings → AI → Services → AI connection → Use my API keys**, then save your Claude (Anthropic) and Tavily keys in the existing rows.
+2. **Built-in AI** is selected by default: no account, invitation or API-key entry is required. To use personal provider accounts, choose **Settings → AI → Services → AI connection → Use my API keys**, then save your Anthropic API key in the Claude row.
 3. Choose tracking, AI context-sharing, visible-text assistance, memory and interruption preferences. On macOS, grant the relevant Accessibility permission for supported observation features.
 4. For voice, grant microphone access. The first microphone action downloads the verified multilingual Whisper model (about 548 MiB); allow it to finish before recording. OS Dictation language packs are not used by this path. Recognition quality still depends on the recording and language. See [local voice](docs/LOCAL_VOICE.md).
 5. Select a focus goal and inspect Progress and the **Personal AI Engine** panel to verify actual behavior.
@@ -115,11 +115,11 @@ Tracking startup follows saved onboarding consent and the saved tracking request
 
 Goals, conversations, activity and memory are stored in the user's local SQLite database. The application does **not** encrypt that database itself. Foreground app names and bounded window titles can be retained as activity data. When screenshot assistance is enabled, permitted active-window images and bounded interface-text samples can be retained as encrypted local review evidence until the corresponding Daily summary is successfully saved, then deleted. A failed or missed summary can retain this evidence across restarts; clearing local history deletes it. This evidence is separate from permanent Personal Memory and the unencrypted activity database. Enabled AI features can send permitted images and bounded, filtered visible text to the Claude API. See [Daily activity review](docs/DAILY_ACTIVITY_REVIEW.md) for the storage and cleanup lifecycle.
 
-Built-in AI relays permitted requests through an authenticated Supabase Edge Function. Claude and Tavily keys remain server-side; only the public Supabase client configuration ships in the app. A technical anonymous session starts automatically and is retained in a private local file; it cannot read service tables or retrieve provider secrets. Atomic server limits apply uniformly, with no account tiers or invitations. See [Shared AI deployment](docs/SUPABASE_GATEWAY.md).
+Built-in AI relays permitted requests through an authenticated Supabase Edge Function. The Claude key remains server-side; only the public Supabase client configuration ships in the app. A technical anonymous session starts automatically and is retained in a private local file; it cannot read service tables or retrieve provider secrets. Atomic server limits apply uniformly, with no account tiers or invitations, and built-in AI spend is capped at a shared $1.00 per UTC day that the server policy can change without a new installer. See [Shared AI deployment](docs/SUPABASE_GATEWAY.md).
 
 In **Use my API keys**, provider keys remain runtime-only: Windows uses Credential Manager; macOS uses Keychain through the unchanged pinned credential helper, which only accepts its original account names, so the Claude key occupies the slot that previously held the Nebius key and a previously saved Nebius key must be replaced in Settings. Saved keys take precedence over environment keys. Removing a saved key does not revoke it at the provider and can expose an existing environment fallback. Switching connections preserves saved keys and never silently falls back to a different account.
 
-“Local-first” does not mean entirely offline: enabled cloud features send permitted text/context to the Claude API and authorized search queries to Tavily. Memory OFF stops memory use/writes through its controls; it is separate from deleting chat history, goals or activity. Review the individual data controls before sharing sensitive work.
+“Local-first” does not mean entirely offline: enabled cloud features send permitted text/context and authorized search queries to the Claude API. Memory OFF stops memory use/writes through its controls; it is separate from deleting chat history, goals or activity. Review the individual data controls before sharing sensitive work.
 
 ## Developer setup
 
@@ -143,8 +143,6 @@ For optional personal-provider credentials, select **Use my API keys**, then cop
 | `ANTHROPIC_MODEL_ID`        | Optional primary model override; also used for interactive responses unless separately overridden |
 | `ANTHROPIC_RESPONSE_MODEL_ID` | Optional interactive response/planning model override                                           |
 | `ANTHROPIC_VISION_MODEL_ID` | Optional screen-understanding model override; Claude models accept images                         |
-| `TAVILY_API_KEY`            | Runtime Tavily key, used when no saved key takes precedence                                       |
-| `TAVILY_API_URL`            | Search endpoint; default `https://api.tavily.com/search`                                          |
 | `DEMO_MODE`                 | `true` simulates activity; it does not enable mock provider responses                             |
 | `AI_MOCK`                   | `true` explicitly enables mock AI responses; leave off for real-provider testing                  |
 

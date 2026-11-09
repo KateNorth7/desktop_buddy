@@ -155,11 +155,11 @@ export function AiSettings({
       </label>
       <label className="toggle-row">
         <span>
-          Allow Tavily web research
+          Allow web research
           <small>
             sumi searches only when current information or an official workflow
-            is useful. Tavily receives the search query; Claude receives
-            returned source snippets.
+            is useful. Claude's web search tool receives the search query and
+            returns cited source excerpts.
           </small>
         </span>
         <input

@@ -677,7 +677,7 @@ fn tracking_requires_both_persistent_request_and_consent_and_keeps_pause_after_g
 }
 
 #[tokio::test]
-#[ignore = "Uses configured Claude/Tavily accounts with synthetic data; provider charges may apply"]
+#[ignore = "Uses a configured Claude account with synthetic data; provider charges may apply"]
 async fn live_ai_goal_and_chat_smoke() {
     std::env::set_var("BUDDY_LIVE_DIAGNOSTICS", "true");
     let _ = dotenvy::from_path(std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../.env"));

@@ -2,7 +2,6 @@
 pub fn provider_name(provider: &str) -> Result<&'static str, String> {
     match provider {
         "anthropic" => Ok("ANTHROPIC_API_KEY"),
-        "tavily" => Ok("TAVILY_API_KEY"),
         _ => Err("Unknown provider".into()),
     }
 }
@@ -168,7 +167,6 @@ mod tests {
     #[test]
     fn accepts_only_known_providers() {
         assert_eq!(provider_name("anthropic").unwrap(), "ANTHROPIC_API_KEY");
-        assert_eq!(provider_name("tavily").unwrap(), "TAVILY_API_KEY");
         assert!(provider_name("arbitrary-secret").is_err());
     }
     #[test]

@@ -146,7 +146,7 @@ function dashboard(theme: "light" | "dark", buddy: boolean): Dashboard {
       demo: false,
       mock_ai: false,
       anthropic_configured: true,
-      tavily_configured: true,
+      web_search_configured: true,
       last_collected_at: NOW,
     },
     user_settings: {
@@ -219,7 +219,7 @@ export function fixtureReply(
         configured_model: null,
         configured_vision_model: "claude-opus-5-5",
         configured_image_description_model: "claude-opus-5-5",
-        services: ["anthropic", "model", "tavily"].map((id) => ({
+        services: ["anthropic", "model", "search"].map((id) => ({
           id,
           status: "not_checked",
           checked_at: null,

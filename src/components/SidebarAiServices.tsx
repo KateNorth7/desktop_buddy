@@ -27,11 +27,11 @@ const services = [
       "Plans and validates goal actions and interprets background activity. The response model writes natural replies and checkpoints. Runs through Claude, not on this computer.",
   },
   {
-    id: "tavily",
-    name: "Tavily",
+    id: "search",
+    name: "Web search",
     icon: Search,
     description:
-      "Finds web sources after you approve research. Receives a short search query, not your full memory.",
+      "Finds web sources through Claude's search tool after you approve research. Receives a short search query, not your full memory.",
   },
 ] as const;
 export function SidebarAiServices({
@@ -79,7 +79,7 @@ export function SidebarAiServices({
     if (!desktop || !allowed.current || !navigator.onLine)
       return Promise.resolve();
     setBusy(true);
-    setChecking(["anthropic", "model", "tavily"]);
+    setChecking(["anthropic", "model", "search"]);
     setReceipt("");
     const work = async () => {
       try {
@@ -87,17 +87,12 @@ export function SidebarAiServices({
         if (!allowed.current || !mounted.current || !navigator.onLine) return;
         if (initial?.services.some((item) => item.status === "mock")) return;
         await Promise.allSettled(
-          (["anthropic", "tavily"] as const).map(async (provider) => {
+          (["anthropic"] as const).map(async (provider) => {
             try {
               await api.testConnection(provider);
             } finally {
               await refresh();
-              if (mounted.current)
-                setChecking((pending) =>
-                  pending.filter((id) =>
-                    provider === "anthropic" ? id === "tavily" : id !== "tavily",
-                  ),
-                );
+              if (mounted.current) setChecking([]);
             }
           }),
         );

@@ -44,7 +44,7 @@ const empty: Dashboard = {
     demo: false,
     mock_ai: false,
     anthropic_configured: false,
-    tavily_configured: false,
+    web_search_configured: false,
   },
 };
 const dashboardQuery = queryClient.query(

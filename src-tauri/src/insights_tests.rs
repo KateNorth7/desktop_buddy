@@ -212,7 +212,7 @@ fn explicit_rules_skip_automatic_ai_and_budget_blocks_searches() {
     i.status.ai_enabled = true;
     i.status.mock_ai = false;
     i.status.anthropic_configured = true;
-    i.status.tavily_configured = true;
+    i.status.web_search_configured = true;
     i.buddy.foreground = Some(snapshot());
     i.buddy.view.preferences.proactive = true;
     drop(i);

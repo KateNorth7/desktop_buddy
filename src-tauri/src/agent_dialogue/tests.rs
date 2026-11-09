@@ -130,10 +130,7 @@ async fn history_read_does_not_itself_authorize_web_search() {
     Mock::given(method("POST"))
         .respond_with(move |r: &Request| {
             let (b, c) = body(r);
-            match crate::claude::test::operation(&b)
-                .as_str()
-                .unwrap()
-            {
+            match crate::claude::test::operation(&b).as_str().unwrap() {
                 "buddy_skill_plan" if plans.fetch_add(1, Ordering::SeqCst) == 0 => {
                     response(action(
                         &c,
@@ -1071,9 +1068,7 @@ async fn dialogue_recovers_older_chat_fact_through_read_skill_with_goal_sharing_
     Mock::given(method("POST"))
         .respond_with(|r: &Request| {
             let (b, c) = body(r);
-            let name = crate::claude::test::operation(&b)
-                .as_str()
-                .unwrap();
+            let name = crate::claude::test::operation(&b).as_str().unwrap();
             assert!(c["state"]["goals"].as_array().unwrap().is_empty());
             assert!(!c.to_string().contains("WRONG-999"));
             if name == "buddy_skill_plan" && c["tool_results"].as_array().unwrap().is_empty() {

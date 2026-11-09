@@ -175,7 +175,7 @@ export function MemorySettings({
           on this device. Relevant memories may be sent to Claude during chat
           only when AI goal-context sharing is enabled. Memory controls do not
           enable tracking or AI sharing. With web research enabled, generated
-          Tavily search queries may reflect the shared context.
+          web search queries may reflect the shared context.
         </p>
       )}
       {!data && (

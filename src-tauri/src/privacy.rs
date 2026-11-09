@@ -1,7 +1,7 @@
 use crate::{
     collector,
     commands::{AppState, Inner},
-    http, focus,
+    focus, http,
 };
 use serde_json::{json, Value};
 use std::time::{Duration, Instant};
@@ -104,8 +104,8 @@ pub fn get_privacy_preview(state: State<AppState>) -> Result<Value, String> {
         .unwrap_or_default();
     Ok(
         json!({"focus_check":focus::focus_context(&goal,&activity),"proactive_search_planning":focus::recommendation_search_context(&goal,&activity,&memory),
-        "anthropic_destination":destination("ANTHROPIC_API_URL")?,"tavily_destination":destination("TAVILY_API_URL")?,
-        "note":"Local preview of user context only; no request was sent. Context may change before the next request. Query planning and resource selection use up to ten rated titles and ten recently offered titles for this goal. Resource selection additionally sends up to five candidate titles, URLs and snippets to Claude. Tavily receives only your typed or generated search query, not the raw activity list or rating history."}),
+        "anthropic_destination":destination("ANTHROPIC_API_URL")?,
+        "note":"Local preview of user context only; no request was sent. Context may change before the next request. Query planning and resource selection use up to ten rated titles and ten recently offered titles for this goal. Resource selection additionally sends up to five candidate titles, URLs and snippets to Claude. Web search receives only your typed or generated search query, not the raw activity list or rating history."}),
     )
 }
 fn destination(name: &str) -> Result<String, String> {
@@ -117,14 +117,24 @@ fn destination(name: &str) -> Result<String, String> {
 
 /// Derives the provider's health route from its generation endpoint. The Claude
 /// check reads one model object, so pagination of the catalog cannot hide it.
-pub fn test_url(endpoint: &str, provider: &str, model: Option<&str>) -> Result<reqwest::Url, String> {
+pub fn test_url(
+    endpoint: &str,
+    provider: &str,
+    model: Option<&str>,
+) -> Result<reqwest::Url, String> {
     let mut url = reqwest::Url::parse(endpoint).map_err(|_| "Invalid service endpoint")?;
     let (suffix, target) = match provider {
         "anthropic" => {
-            let model = model.filter(|m| !m.is_empty() && m.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'.' || b == b'_')).ok_or("Configure a Claude model before checking the connection")?;
+            let model = model
+                .filter(|m| {
+                    !m.is_empty()
+                        && m.bytes().all(|b| {
+                            b.is_ascii_alphanumeric() || b == b'-' || b == b'.' || b == b'_'
+                        })
+                })
+                .ok_or("Configure a Claude model before checking the connection")?;
             ("/messages", format!("/models/{model}"))
         }
-        "tavily" => ("/search", "/usage".to_string()),
         _ => return Err("Unknown provider".into()),
     };
     let path = url
@@ -180,7 +190,10 @@ pub async fn probe_connection(
     guard.check()?;
     match provider {
         "anthropic" => {
-            let id = data.get("id").and_then(Value::as_str).ok_or("Claude returned an invalid model response")?;
+            let id = data
+                .get("id")
+                .and_then(Value::as_str)
+                .ok_or("Claude returned an invalid model response")?;
             let available = Some(id) == model;
             Ok(ConnectionProbe { model_available: Some(available), message: if available {
                 "Connected. The configured model is available. Generation, billing, and structured-output support have not been tested."
@@ -188,10 +201,6 @@ pub async fn probe_connection(
                 "Connected, but the configured model is not available to this key. Update ANTHROPIC_MODEL_ID or check model access. No focus request was sent."
             }.into() })
         }
-        "tavily" if data.get("key").is_some_and(Value::is_object) => Ok(ConnectionProbe {
-            model_available: None,
-            message: "Connected. The key can access usage information. No search query was sent; search access has not been tested.".into(),
-        }),
         _ => Err("Provider returned an invalid connection-check response".into()),
     }
 }
@@ -227,19 +236,14 @@ pub async fn test_provider_connection(
         inner.last_consent_change
     };
     let result = async {
-        let (endpoint, key, model) = if provider == "anthropic" {
-            (
-                http::endpoint("ANTHROPIC_API_URL")?,
-                http::secret("ANTHROPIC_API_KEY")?,
-                Some(http::secret("ANTHROPIC_MODEL_ID")?),
-            )
-        } else {
-            (
-                http::endpoint("TAVILY_API_URL")?,
-                http::secret("TAVILY_API_KEY")?,
-                None,
-            )
-        };
+        if provider != "anthropic" {
+            return Err("Unknown provider".into());
+        }
+        let (endpoint, key, model) = (
+            http::endpoint("ANTHROPIC_API_URL")?,
+            http::secret("ANTHROPIC_API_KEY")?,
+            Some(http::secret("ANTHROPIC_MODEL_ID")?),
+        );
         let url = test_url(&endpoint, &provider, model.as_deref())?;
         probe_connection(
             &state.client,

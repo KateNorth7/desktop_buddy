@@ -317,7 +317,7 @@ fn activity_delivery_ignores_working_hours_but_respects_quiet_idle_and_media() {
     inner.status.tracking = true;
     inner.status.ai_enabled = true;
     inner.status.anthropic_configured = true;
-    inner.status.tavily_configured = true;
+    inner.status.web_search_configured = true;
     inner.status.mock_ai = false;
     inner.buddy.view.preferences.proactive = true;
     inner.buddy.view.preferences.local_nudges = true;

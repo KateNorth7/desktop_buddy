@@ -77,7 +77,7 @@ fn retired_research_never_schedules_while_display_respects_preferences_pause_and
     inner.buddy.view.preferences.proactive = true;
     inner.status.mock_ai = false;
     inner.status.anthropic_configured = true;
-    inner.status.tavily_configured = true;
+    inner.status.web_search_configured = true;
     assert!(!due(&inner));
     inner.buddy.last_search = Some(Instant::now());
     assert!(!due(&inner));

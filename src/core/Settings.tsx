@@ -165,7 +165,7 @@ export function CoreSettings({
     await servicesQuery.refresh();
     await onChanged();
   };
-  const serviceState = (id: "anthropic" | "tavily") =>
+  const serviceState = (id: "anthropic") =>
     services?.services.find((item) => item.id === id)?.status;
   useEffect(() => {
     if (section !== "Privacy" || !desktop) return;
@@ -656,18 +656,6 @@ export function CoreSettings({
                 }
                 configured={data.status.anthropic_configured}
                 checked={serviceState("anthropic")}
-                onChanged={providerChanged}
-              />
-              <ProviderRow
-                key={`tavily:${preferences.ai_connection_mode ?? "built_in"}`}
-                provider="tavily"
-                name="Tavily"
-                managed={
-                  (preferences.ai_connection_mode ?? "built_in") === "built_in"
-                }
-                role="web search"
-                configured={data.status.tavily_configured}
-                checked={serviceState("tavily")}
                 onChanged={providerChanged}
               />
               <div

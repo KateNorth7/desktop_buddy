@@ -39,7 +39,10 @@ async fn manual_health_is_one_real_bounded_schema_request_without_user_context()
                 "Check structured inference."
             );
             assert_eq!(body["messages"].as_array().unwrap().len(), 1);
-            assert!(crate::claude::test::system(&body).as_str().unwrap().contains("Return exactly the JSON object"));
+            assert!(crate::claude::test::system(&body)
+                .as_str()
+                .unwrap()
+                .contains("Return exactly the JSON object"));
             assert!(!body.to_string().contains("fixture-secret"));
             assert!(
                 body.get("memory").is_none()
@@ -306,7 +309,7 @@ fn sidebar_status_is_content_free_and_configuration_does_not_claim_connectivity(
     let state = state();
     let mut inner = state.inner.lock().unwrap();
     inner.status.anthropic_configured = true;
-    inner.status.tavily_configured = true;
+    inner.status.web_search_configured = true;
     let status = service_status_view(&inner);
     assert_eq!(status["services"][0]["status"], "not_checked");
     assert_eq!(status["services"][1]["status"], "not_checked");
@@ -355,7 +358,7 @@ fn sidebar_distinguishes_provider_access_from_model_access_and_expires_checks() 
     let state = state();
     let mut inner = state.inner.lock().unwrap();
     inner.status.anthropic_configured = true;
-    inner.status.tavily_configured = true;
+    inner.status.web_search_configured = true;
     begin_connection_check(&mut inner, "anthropic").unwrap();
     assert!(begin_connection_check(&mut inner, "anthropic").is_err());
     assert_eq!(
@@ -368,10 +371,9 @@ fn sidebar_distinguishes_provider_access_from_model_access_and_expires_checks() 
     assert_eq!(status["services"][0]["status"], "verified");
     assert_eq!(status["services"][1]["status"], "unavailable");
     assert!(begin_connection_check(&mut inner, "anthropic").is_err());
-    finish_connection_check(&mut inner, "tavily", revision, false, None);
     assert_eq!(
         service_status_view(&inner)["services"][2]["status"],
-        "unavailable"
+        "verified"
     );
     inner.engine.connections[0].as_mut().unwrap().checked =
         Instant::now() - Duration::from_secs(16 * 60);
@@ -423,11 +425,10 @@ fn successful_probe_refreshes_stale_startup_configuration_flags() {
     let mut inner = state.inner.lock().unwrap();
     inner.status.mock_ai = false;
     inner.status.anthropic_configured = false;
-    inner.status.tavily_configured = false;
+    inner.status.web_search_configured = false;
     let revision = inner.privacy_revision;
     finish_connection_check(&mut inner, "anthropic", revision, true, Some(true));
-    finish_connection_check(&mut inner, "tavily", revision, true, None);
-    assert!(inner.status.anthropic_configured && inner.status.tavily_configured);
+    assert!(inner.status.anthropic_configured && inner.status.web_search_configured);
     for service in service_status_view(&inner)["services"].as_array().unwrap() {
         assert_eq!(service["status"], "verified");
     }
@@ -439,12 +440,12 @@ fn failed_or_stale_probe_cannot_restore_removed_credential_status() {
     let mut inner = state.inner.lock().unwrap();
     inner.status.mock_ai = false;
     inner.status.anthropic_configured = false;
-    inner.status.tavily_configured = false;
+    inner.status.web_search_configured = false;
     let revision = inner.privacy_revision;
     finish_connection_check(&mut inner, "anthropic", revision, false, None);
     inner.mark_consent_change();
-    finish_connection_check(&mut inner, "tavily", revision, true, None);
-    assert!(!inner.status.anthropic_configured && !inner.status.tavily_configured);
+    finish_connection_check(&mut inner, "anthropic", revision, true, None);
+    assert!(!inner.status.anthropic_configured && !inner.status.web_search_configured);
     assert_eq!(
         service_status_view(&inner)["services"][2]["status"],
         "not_configured"
@@ -470,13 +471,12 @@ fn goal_edits_do_not_invalidate_provider_authentication_or_in_flight_checks() {
     let state = state();
     let mut inner = state.inner.lock().unwrap();
     inner.status.anthropic_configured = true;
-    inner.status.tavily_configured = true;
+    inner.status.web_search_configured = true;
     let revision = inner.last_consent_change;
     finish_connection_check(&mut inner, "anthropic", revision, true, Some(true));
-    begin_connection_check(&mut inner, "tavily").unwrap();
     // Goal and chat edits advance the domain revision, without changing consent.
     inner.privacy_revision += 1;
-    finish_connection_check(&mut inner, "tavily", revision, true, None);
+    assert!(begin_connection_check(&mut inner, "anthropic").is_err());
     for service in service_status_view(&inner)["services"].as_array().unwrap() {
         assert_eq!(service["status"], "verified");
     }

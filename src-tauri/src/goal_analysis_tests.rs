@@ -148,7 +148,7 @@ fn incomplete_refused_and_malformed_provider_responses_are_rejected_without_echo
     }
 }
 #[tokio::test]
-async fn local_and_ambiguous_requests_do_not_call_tavily_even_if_provider_suggests_query() {
+async fn local_and_ambiguous_requests_do_not_call_web_search_even_if_provider_suggests_query() {
     let plan = parse_plan(&response(
         json!({"kind":"personal","query":"unneeded search"}),
     ))

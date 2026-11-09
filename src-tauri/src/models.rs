@@ -84,7 +84,7 @@ pub struct Status {
     pub demo: bool,
     pub mock_ai: bool,
     pub anthropic_configured: bool,
-    pub tavily_configured: bool,
+    pub web_search_configured: bool,
 }
 #[derive(Serialize)]
 pub struct Dashboard {

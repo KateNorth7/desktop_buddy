@@ -1585,7 +1585,7 @@ pub fn set_core_preferences(
         crate::shared_ai::activate(preferences.ai_connection_mode);
         inner.mark_consent_change();
         inner.status.anthropic_configured = crate::http::configured("ANTHROPIC_API_KEY");
-        inner.status.tavily_configured = crate::http::configured("TAVILY_API_KEY");
+        inner.status.web_search_configured = crate::http::configured("ANTHROPIC_API_KEY");
     }
     inner.companion.view.preferences = companion;
     crate::frontend_events::changed(

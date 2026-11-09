@@ -28,9 +28,9 @@ describe("provider settings commands", () => {
     });
   });
   it("removes a saved key without sending an empty replacement", async () => {
-    await api.providerKey("tavily", null);
+    await api.providerKey("anthropic", null);
     expect(invoke).toHaveBeenLastCalledWith("set_provider_key", {
-      provider: "tavily",
+      provider: "anthropic",
       key: null,
     });
   });

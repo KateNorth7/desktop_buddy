@@ -49,9 +49,9 @@ export async function checkAvailability({ config, fetcher = fetch, now = new Dat
   const report = {
     checked_at: now.toISOString(), status: "failed", stage: "configuration",
     public_client_key_expires_at: clientKeyExpiry(config?.publishableKey),
-    checks: { anonymous_auth: false, claude_model: false, tavily_auth: false, session_signout: false },
+    checks: { anonymous_auth: false, claude_model: false, session_signout: false },
     models: Object.fromEntries(EXPECTED_MODELS.map(id => [id, false])),
-    scope: "Authentication and model/usage health; no generation, search or desktop observation.",
+    scope: "Authentication and model health; no generation, search or desktop observation.",
   };
   let session, base, headers;
   try {
@@ -82,11 +82,6 @@ export async function checkAvailability({ config, fetcher = fetch, now = new Dat
     }
     if (!Object.values(report.models).every(Boolean)) throw new HealthFailure("claude_models_missing");
     report.checks.claude_model = true;
-    const tavily = await jsonResponse(fetcher, base + "/functions/v1/buddy-ai/tavily/usage", {
-      method: "GET", headers,
-    }, "tavily_auth");
-    if (tavily.key?.configured !== true) throw new HealthFailure("tavily_auth");
-    report.checks.tavily_auth = true;
     report.status = "passed";
     report.stage = "complete";
   } catch (error) {

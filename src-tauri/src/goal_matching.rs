@@ -637,8 +637,7 @@ pub fn attribution(
             .sample
             .as_ref()
             .is_some_and(|s| fingerprint(s) == fingerprint(sample));
-        if view.source.as_deref() == Some("model_unverified") && view.goal_id.is_some() && current
-        {
+        if view.source.as_deref() == Some("model_unverified") && view.goal_id.is_some() && current {
             return Ok(crate::relevance::ActivityMatch {
                 goal_id: view.goal_id.map(|id| id.to_string()),
                 confidence: view.confidence.unwrap_or(0.),

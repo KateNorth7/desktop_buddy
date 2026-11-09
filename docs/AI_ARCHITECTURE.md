@@ -25,12 +25,9 @@ flowchart LR
     Route -->|Built-in default| Auth[Anonymous Supabase Auth session]
     Auth --> Gateway[buddy-ai Edge Function and atomic quotas]
     Gateway --> Claude[Claude Messages API]
-    Gateway --> Tavily[Tavily authorized web search]
     Route -->|Use my API keys| Direct[Direct HTTPS provider calls]
     Direct --> Claude
-    Direct --> Tavily
     Claude --> Rust
-    Tavily --> Rust
 ```
 
 Built-in provider keys never enter the frontend or the public bundle. They remain in the Edge Function environment; only public Supabase client configuration ships. Personal keys entered in Settings pass to the backend for secure storage; provider calls read the OS vault or runtime environment. The unchanged macOS credential helper accepts only the pinned signed parent. Switching modes invalidates old health receipts/pending authority and does not silently use another account after failure.
@@ -47,7 +44,7 @@ Local-first is a storage/ownership boundary, not an offline-AI claim. SQLite its
 | Independent outcome verifier | `claude-opus-5-5` by default; personal runtime override where permitted | `semantic_observation.rs` |
 | Retrospective image descriptions | `claude-opus-5-5` | `vision.rs`, activity review |
 | Local microphone transcription | Quantized Whisper large-v3-turbo, `whisper-rs` 0.16.0 | `local_voice.rs`, `core_import.rs` |
-| Source retrieval | Tavily search API, not a dialogue model | `research.rs`, `research_evidence.rs` |
+| Source retrieval | Claude `web_search` server tool (at most two searches per run), cited excerpts only | `web_search.rs`, `research.rs`, `research_evidence.rs` |
 
 A configured or listed model is not proof of successful generation. The server has a fixed allowlist; Built-in AI keeps its routed defaults. Personal-provider model/endpoint overrides have their own rules. A bounded interactive proposal fallback retries once on the default primary model after a stalled attempt; it does not replay an already executed action. `claude.rs` is the only module that speaks the Claude wire format: it moves system messages into the cached `system` prompt, converts strict JSON schemas into structured outputs (unsupported constraints are removed on the wire and still validated locally), maps `stop_reason` back onto the internal `choices` envelope and enables server-side fallback for safety refusals. See the README configuration table and `http.rs`.
 

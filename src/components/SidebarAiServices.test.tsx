@@ -26,8 +26,8 @@ vi.mock("../ai/serviceStatus", async (importOriginal) => ({
 const fixture: ServiceSnapshot = {
   configured_model: "claude-opus-5-5",
   configured_response_model: "claude-opus-5-5",
-  services: ["anthropic", "model", "tavily"].map((id) => ({
-    id: id as "anthropic" | "model" | "tavily",
+  services: ["anthropic", "model", "search"].map((id) => ({
+    id: id as "anthropic" | "model" | "search",
     status: "not_checked",
     checked_at: null,
   })),
@@ -41,19 +41,19 @@ afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
 });
-it("startup probes both providers without claiming health from key metadata alone", async () => {
+it("startup probes the provider without claiming health from key metadata alone", async () => {
   render(<SidebarAiServices />);
   await screen.findByRole("button", { name: "Claude model: Not checked" });
-  expect(api.testConnection).toHaveBeenCalledTimes(2);
+  expect(api.testConnection).toHaveBeenCalledTimes(1);
   expect(document.querySelectorAll(".service-verified")).toHaveLength(0);
 });
-it("rechecks both services after the selected connection changes", async () => {
+it("rechecks the services after the selected connection changes", async () => {
   vi.mocked(serviceStatusApi.read).mockResolvedValue({
     ...fixture,
     connection_mode: "built_in",
   });
   render(<SidebarAiServices />);
-  await waitFor(() => expect(api.testConnection).toHaveBeenCalledTimes(2));
+  await waitFor(() => expect(api.testConnection).toHaveBeenCalledTimes(1));
   await act(async () => {
     await Promise.resolve();
   });
@@ -64,7 +64,7 @@ it("rechecks both services after the selected connection changes", async () => {
   await act(async () => {
     servicesQuery.setData({ ...fixture, connection_mode: "personal" });
   });
-  await waitFor(() => expect(api.testConnection).toHaveBeenCalledTimes(4));
+  await waitFor(() => expect(api.testConnection).toHaveBeenCalledTimes(2));
   expect(document.querySelectorAll(".service-verified")).toHaveLength(0);
 });
 it("hover details explain the cloud model and preserve configured-model provenance", async () => {
@@ -100,9 +100,8 @@ it("manual refresh checks both providers again after startup", async () => {
     screen.getByRole("button", { name: "Check AI connections" }),
   );
   await screen.findByRole("button", { name: "Claude model: Model available" });
-  expect(api.testConnection).toHaveBeenCalledTimes(4);
+  expect(api.testConnection).toHaveBeenCalledTimes(2);
   expect(api.testConnection).toHaveBeenCalledWith("anthropic");
-  expect(api.testConnection).toHaveBeenCalledWith("tavily");
   expect(screen.getByRole("status").textContent).toContain("refreshed");
 });
 it("a failed probe still refreshes status and never treats failure as success", async () => {
@@ -172,13 +171,10 @@ function deferred() {
   });
   return { promise, resolve };
 }
-it("startup stays neutral until real probes finish and reports each provider independently", async () => {
+it("startup stays neutral until the real probe finishes and web search follows the Claude connection", async () => {
   const anthropic = deferred();
-  const tavily = deferred();
-  vi.mocked(api.testConnection).mockImplementation((provider) =>
-    (provider === "anthropic" ? anthropic.promise : tavily.promise).then(
-      () => "Checked",
-    ),
+  vi.mocked(api.testConnection).mockImplementation(() =>
+    anthropic.promise.then(() => "Checked"),
   );
   vi.mocked(serviceStatusApi.read).mockResolvedValue({
     ...fixture,
@@ -186,30 +182,23 @@ it("startup stays neutral until real probes finish and reports each provider ind
   });
   render(<SidebarAiServices />);
   await screen.findByRole("button", { name: "Claude: Checking…" });
-  await waitFor(() => expect(api.testConnection).toHaveBeenCalledTimes(2));
+  expect(
+    screen.getByRole("button", { name: "Web search: Checking…" }),
+  ).toBeTruthy();
+  await waitFor(() => expect(api.testConnection).toHaveBeenCalledTimes(1));
+  expect(api.testConnection).toHaveBeenCalledWith("anthropic");
   expect(document.querySelectorAll(".service-not_configured")).toHaveLength(0);
   vi.mocked(serviceStatusApi.read).mockResolvedValue({
     ...fixture,
     services: fixture.services.map((s) => ({
       ...s,
-      status: s.id === "tavily" ? "checking" : "verified",
+      status: s.id === "search" ? "unavailable" : "verified",
     })),
   });
   await act(async () => anthropic.resolve());
   await screen.findByRole("button", { name: "Claude: Connected" });
-  expect(
-    screen.getByRole("button", { name: "Tavily: Checking…" }),
-  ).toBeTruthy();
-  vi.mocked(serviceStatusApi.read).mockResolvedValue({
-    ...fixture,
-    services: fixture.services.map((s) => ({
-      ...s,
-      status: s.id === "tavily" ? "unavailable" : "verified",
-    })),
-  });
-  await act(async () => tavily.resolve());
   await screen.findByRole("button", {
-    name: "Tavily: Could not verify access",
+    name: "Web search: Could not verify access",
   });
 });
 it("StrictMode and sidebar collapse do not duplicate startup probes", async () => {
@@ -226,7 +215,7 @@ it("StrictMode and sidebar collapse do not duplicate startup probes", async () =
   );
   fireEvent(window, new Event("focus"));
   await waitFor(() => expect(serviceStatusApi.read).toHaveBeenCalled());
-  expect(api.testConnection).toHaveBeenCalledTimes(2);
+  expect(api.testConnection).toHaveBeenCalledTimes(1);
 });
 it("an offline startup waits for reconnection before probing", async () => {
   const online = vi.spyOn(navigator, "onLine", "get").mockReturnValue(false);
@@ -235,7 +224,7 @@ it("an offline startup waits for reconnection before probing", async () => {
   online.mockReturnValue(true);
   fireEvent(window, new Event("online"));
   await screen.findByRole("button", { name: "Claude: Not checked" });
-  expect(api.testConnection).toHaveBeenCalledTimes(2);
+  expect(api.testConnection).toHaveBeenCalledTimes(1);
 });
 it("simulated providers never trigger real startup network checks", async () => {
   vi.mocked(serviceStatusApi.read).mockResolvedValue({
@@ -277,5 +266,5 @@ it("refreshes expired connections directly from a status-dot card", async () => 
   });
   await user.click(refresh);
   await screen.findByRole("button", { name: "Claude: Connected" });
-  expect(api.testConnection).toHaveBeenCalledTimes(4);
+  expect(api.testConnection).toHaveBeenCalledTimes(2);
 });

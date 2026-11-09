@@ -13,9 +13,14 @@
   uses Claude structured outputs, system prompts are cached, hidden reasoning runs
   at low effort for bounded operations and high effort for deliberate planning,
   and a safety refusal falls back server-side to another Claude model.
+- Replace Tavily with Claude's `web_search` tool (`web_search.rs`): one bounded
+  request per research run, cited excerpts as sources, no second provider or key.
+- Cap built-in AI at a shared $1.00 per UTC day (`budget_microusd_daily`): the
+  gateway reserves a list-price estimate per request and settles it to reported
+  usage; exhausted budgets return 429.
 - Route built-in AI through `/anthropic/v1/messages` and check model access with
   one model object instead of a paginated catalog. The Supabase function needs
-  an `ANTHROPIC_API_KEY` secret and a redeploy.
+  an `ANTHROPIC_API_KEY` secret, the updated SQL and a redeploy.
 
 ## 0.36.11 — grounded research and demo readiness
 

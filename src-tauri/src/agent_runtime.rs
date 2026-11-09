@@ -744,7 +744,7 @@ pub async fn tick(app: &AppHandle) {
                 crate::commands::automatic_analysis(&handle, &handle.state::<AppState>()).await;
             });
         }
-        // The legacy proactive cadence can offer research, never authorize a Tavily call.
+        // The legacy proactive cadence can offer research, never authorize a web search call.
         if let Ok(mut inner) = state.inner.lock() {
             if crate::buddy::due(&inner) {
                 let goal = inner.storage.goal().ok().flatten().map(|g| g.id);

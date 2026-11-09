@@ -235,7 +235,6 @@ struct ConnectionHealth {
 fn provider_index(provider: &str) -> Result<usize, String> {
     match provider {
         "anthropic" => Ok(0),
-        "tavily" => Ok(1),
         _ => Err("Unknown provider".into()),
     }
 }
@@ -274,11 +273,8 @@ pub(crate) fn finish_connection_check(
     // Startup metadata can predate Keychain authorization or a completed app update.
     // A successful current probe proves that a usable runtime credential exists.
     if connected {
-        if provider == "anthropic" {
-            inner.status.anthropic_configured = true;
-        } else {
-            inner.status.tavily_configured = true;
-        }
+        inner.status.anthropic_configured = true;
+        inner.status.web_search_configured = true;
     }
     inner.engine.connections[index] = Some(ConnectionHealth {
         connected,
@@ -300,7 +296,7 @@ fn service_status_view(inner: &Inner) -> Value {
             0,
             inner.status.anthropic_configured && configured_model.is_some(),
         ),
-        ("tavily", 1, inner.status.tavily_configured),
+        ("search", 0, inner.status.web_search_configured),
     ]
     .into_iter()
     .map(|(id, index, configured)| {
@@ -675,9 +671,9 @@ pub(crate) fn view(inner: &Inner) -> Result<Value, String> {
     } else {
         None
     };
-    let tavily = if !ai.web_research {
+    let web_search = if !ai.web_research {
         "disabled"
-    } else if !inner.status.tavily_configured {
+    } else if !inner.status.web_search_configured {
         "key_not_configured"
     } else {
         match research.as_deref() {
@@ -695,7 +691,7 @@ pub(crate) fn view(inner: &Inner) -> Result<Value, String> {
         "active_goal":goal.as_ref().map(|g|json!({"id":g.id,"label":label(&g.text)})),"active_step":step.map(|s|json!({"id":s.id,"label":label(&s.text)})),
         "work_state":crate::work_state::compute(inner)?.state,"retrieval":retrieval,"last_decision":inner.agent.diagnostics.last_decision,
         "last_skill":last_skill,"last_inference":if inner.engine.privacy==inner.privacy_revision {inner.engine.last.as_ref()}else{None},
-        "observation":{"interface_text":crate::companion::screen_context::capability(inner),"screenshots_enabled":inner.companion.view.preferences.use_screenshots,"screenshot_status":if inner.vision.status.is_empty(){"not_checked"}else{inner.vision.status},"screenshot_detail":inner.vision.detail,"configured_vision_model":model_label(&crate::vision::configured_model(inner)).unwrap_or_else(||"unavailable".into()),"automatic_completion":inner.companion.view.preferences.automatic_completion,"hourly_disclosures":inner.companion.observation_calls.iter().filter(|at|at.elapsed()<Duration::from_secs(3600)).count(),"hourly_limit":crate::observation::HOURLY_LIMIT,"evidence_bytes":inner.storage.review_vault_usage().map(|(used,_)|used).unwrap_or(0),"evidence_limit_bytes":inner.storage.review_vault_usage().map(|(_,limit)|limit).unwrap_or(0),"semantic_observation":inner.companion.semantic.diagnostics()},"tavily_status":tavily,"runtime":crate::agent_runtime::diagnostics_view(inner),"health":if inner.engine.health_privacy==inner.privacy_revision {inner.engine.health.clone()}else{Health::default()},
+        "observation":{"interface_text":crate::companion::screen_context::capability(inner),"screenshots_enabled":inner.companion.view.preferences.use_screenshots,"screenshot_status":if inner.vision.status.is_empty(){"not_checked"}else{inner.vision.status},"screenshot_detail":inner.vision.detail,"configured_vision_model":model_label(&crate::vision::configured_model(inner)).unwrap_or_else(||"unavailable".into()),"automatic_completion":inner.companion.view.preferences.automatic_completion,"hourly_disclosures":inner.companion.observation_calls.iter().filter(|at|at.elapsed()<Duration::from_secs(3600)).count(),"hourly_limit":crate::observation::HOURLY_LIMIT,"evidence_bytes":inner.storage.review_vault_usage().map(|(used,_)|used).unwrap_or(0),"evidence_limit_bytes":inner.storage.review_vault_usage().map(|(_,limit)|limit).unwrap_or(0),"semantic_observation":inner.companion.semantic.diagnostics()},"web_search_status":web_search,"runtime":crate::agent_runtime::diagnostics_view(inner),"health":if inner.engine.health_privacy==inner.privacy_revision {inner.engine.health.clone()}else{Health::default()},
         "configuration":{"tracking":inner.status.tracking,"ai_assistance":ai.enabled,"goal_context_sharing":ai.share_goal_context,"automatic_goal_matching":ai.automatic_goal_matching,"completion_detection":inner.companion.view.preferences.screen_task_detection,"dnd":inner.status.dnd,"paused":inner.companion.view.preferences.paused},"skills":skill_groups(),"events":inner.engine.events.iter().rev().collect::<Vec<_>>(),"demo_mode":inner.status.demo,"ai_mock":inner.status.mock_ai}),
     )
 }
@@ -792,8 +788,12 @@ async fn health_call(service: &Service<'_>, timeout: Duration) -> Health {
         }
         let value: Value = serde_json::from_slice(&bytes)
             .map_err(|_| ("invalid_json", "Claude returned invalid JSON."))?;
-        let value = crate::claude::from_response(value)
-            .map_err(|_| ("invalid_response", "Claude returned an unexpected response."))?;
+        let value = crate::claude::from_response(value).map_err(|_| {
+            (
+                "invalid_response",
+                "Claude returned an unexpected response.",
+            )
+        })?;
         guard
             .check()
             .map_err(|_| ("cancelled", "AI connection changed."))?;

@@ -10,7 +10,6 @@ function mock({ fail, missing = false, payload } = {}) {
     if (path === fail) return Response.json({ secret }, { status: 401 });
     if (path.endsWith("/signup")) return Response.json({ access_token: secret, refresh_token: secret, user: { is_anonymous: true } });
     if (path.includes("/v1/models/")) return Response.json(payload ?? { id: missing ? "other-model" : path.split("/").pop(), display_name: "Fixture" });
-    if (path.endsWith("/usage")) return Response.json({ key: { configured: true } });
     if (path.endsWith("/logout")) return new Response(null, { status: 204 });
     throw new Error(secret);
   } };
@@ -18,7 +17,7 @@ function mock({ fail, missing = false, payload } = {}) {
 test("uses only anonymous auth, catalog and usage; never generates, searches or logs credentials", async () => {
   const m = mock(); const report = await checkAvailability({ config, fetcher: m.fetcher });
   assert.equal(report.status, "passed");
-  assert.deepEqual(m.calls.map(c => c.path), ["/auth/v1/signup", "/functions/v1/buddy-ai/anthropic/v1/models/claude-opus-5-5", "/functions/v1/buddy-ai/tavily/usage", "/auth/v1/logout"]);
+  assert.deepEqual(m.calls.map(c => c.path), ["/auth/v1/signup", "/functions/v1/buddy-ai/anthropic/v1/models/claude-opus-5-5", "/auth/v1/logout"]);
   assert.ok(!JSON.stringify(report).includes(secret));
   assert.ok(Object.values(report.checks).every(Boolean));
   assert.ok(m.calls.every(c => c.options.redirect === "error"));
@@ -35,9 +34,9 @@ test("invalid or expired public configuration performs no network request", asyn
   assert.equal(clientKeyExpiry(key), "1970-01-01T00:00:01.000Z");
 });
 test("provider failure reports a sanitized stage and still signs out", async () => {
-  const m = mock({ fail: "/functions/v1/buddy-ai/tavily/usage" });
+  const m = mock({ fail: "/functions/v1/buddy-ai/anthropic/v1/models/claude-opus-5-5" });
   const report = await checkAvailability({ config, fetcher: m.fetcher });
-  assert.equal(report.status, "failed"); assert.equal(report.stage, "tavily_auth");
+  assert.equal(report.status, "failed"); assert.equal(report.stage, "claude_model");
   assert.equal(report.http_status, 401); assert.equal(report.checks.session_signout, true);
   assert.ok(!JSON.stringify(report).includes(secret));
 });

@@ -17,14 +17,18 @@ fn endpoints_and_retention_are_validated() {
         .as_str(),
         "https://api.anthropic.com/v1/models/claude-opus-5-5"
     );
-    assert_eq!(
-        test_url("https://api.tavily.com/search", "tavily", None)
-            .unwrap()
-            .as_str(),
-        "https://api.tavily.com/usage"
-    );
-    assert!(test_url("https://example.com/unknown", "anthropic", Some("claude-opus-5-5")).is_err());
-    assert!(test_url("https://api.anthropic.com/v1/messages", "anthropic", Some("../secret")).is_err());
+    assert!(test_url(
+        "https://example.com/unknown",
+        "anthropic",
+        Some("claude-opus-5-5")
+    )
+    .is_err());
+    assert!(test_url(
+        "https://api.anthropic.com/v1/messages",
+        "anthropic",
+        Some("../secret")
+    )
+    .is_err());
     for days in [0, 7, 30, 90] {
         assert!(validate_retention(days).is_ok());
     }
@@ -146,9 +150,9 @@ async fn connection_checks_use_get_without_private_context() {
     let server = MockServer::start().await;
     Mock::given(method("GET"))
         .and(header("x-api-key", "test-key"))
-        .respond_with(
-            crate::claude::test::reply(json!({"id":"test-model","display_name":"Test"})),
-        )
+        .respond_with(crate::claude::test::reply(
+            json!({"id":"test-model","display_name":"Test"}),
+        ))
         .expect(1)
         .mount(&server)
         .await;
@@ -176,8 +180,8 @@ async fn connection_errors_do_not_echo_provider_bodies() {
         &reqwest::Client::new(),
         &server.uri(),
         "test-key",
-        "tavily",
-        None,
+        "anthropic",
+        Some("configured-model"),
     )
     .await
     .unwrap_err();
@@ -189,9 +193,7 @@ async fn connection_errors_do_not_echo_provider_bodies() {
 async fn model_probe_reports_missing_model_without_claiming_inference() {
     let server = MockServer::start().await;
     Mock::given(method("GET"))
-        .respond_with(
-            crate::claude::test::reply(json!({"id":"other-model"})),
-        )
+        .respond_with(crate::claude::test::reply(json!({"id":"other-model"})))
         .expect(1)
         .mount(&server)
         .await;
@@ -207,28 +209,4 @@ async fn model_probe_reports_missing_model_without_claiming_inference() {
     assert_eq!(result.model_available, Some(false));
     assert!(result.message.contains("not available"));
     assert!(server.received_requests().await.unwrap()[0].body.is_empty());
-}
-
-#[tokio::test]
-async fn tavily_probe_verifies_usage_without_sending_a_search_query() {
-    let server = MockServer::start().await;
-    Mock::given(method("GET"))
-        .respond_with(crate::claude::test::reply(json!({"key":{"usage":3}})))
-        .expect(1)
-        .mount(&server)
-        .await;
-    let result = probe_connection(
-        &reqwest::Client::new(),
-        &server.uri(),
-        "fixture-key",
-        "tavily",
-        None,
-    )
-    .await
-    .unwrap();
-    assert_eq!(result.model_available, None);
-    assert!(result.message.contains("search access has not been tested"));
-    let requests = server.received_requests().await.unwrap();
-    assert!(requests[0].body.is_empty());
-    assert!(!result.message.contains("fixture-key"));
 }

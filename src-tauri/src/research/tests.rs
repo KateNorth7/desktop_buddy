@@ -80,8 +80,12 @@ async fn synthesis(server: &MockServer, n: u64) {
         .respond_with(response(json!({"summary":"Keep borrowed data alive for the async task.","next_action":"Move an owned value into the task and run the example.","source_indices":[0]}))).expect(n).mount(server).await;
 }
 async fn search(server: &MockServer, results: Value, n: u64) {
-    Mock::given(method("POST")).and(body_partial_json(json!({"query":"Rust async lifetime official guide","search_depth":"advanced","include_raw_content":false})))
-        .respond_with(crate::claude::test::reply(json!({"results":results}))).expect(n).mount(server).await;
+    Mock::given(method("POST"))
+        .and(body_partial_json(json!({"tools":[{"name":"web_search"}]})))
+        .respond_with(crate::claude::test::search_reply(results))
+        .expect(n)
+        .mount(server)
+        .await;
 }
 fn sources() -> Value {
     json!([{"title":"Rust async guide","url":"https://rust-lang.org/async","content":"Owned values can outlive the borrowed scope."}])
@@ -97,21 +101,13 @@ fn authorize(state: &AppState, goal: i64, step: &str) -> i64 {
 }
 async fn complete(state: &AppState, goal: i64, step: &str) -> Attachment {
     let claude = MockServer::start().await;
-    let tavily = MockServer::start().await;
     intent(&claude, 1).await;
     synthesis(&claude, 1).await;
-    search(&tavily, sources(), 1).await;
+    search(&claude, sources(), 1).await;
     let id = authorize(state, goal, step);
-    run_with_service(
-        state,
-        goal,
-        id,
-        &service(state, &claude),
-        &tavily.uri(),
-        "fixture",
-    )
-    .await
-    .unwrap()
+    run_with_service(state, goal, id, &service(state, &claude))
+        .await
+        .unwrap()
 }
 fn plan(snap: &skills::Snapshot, goal: i64, step: Option<&str>) -> skills::Plan {
     skills::Plan {
@@ -126,13 +122,13 @@ fn plan(snap: &skills::Snapshot, goal: i64, step: Option<&str>) -> skills::Plan 
     }
 }
 #[tokio::test]
-async fn stuck_without_consent_never_calls_tavily_or_enqueues_network_work() {
+async fn stuck_without_consent_never_calls_web_search_or_enqueues_network_work() {
     let (state, goal, step) = state();
-    let tavily = MockServer::start().await;
+    let claude = MockServer::start().await;
     Mock::given(method("POST"))
         .respond_with(ResponseTemplate::new(500))
         .expect(0)
-        .mount(&tavily)
+        .mount(&claude)
         .await;
     let mut inner = state.inner.lock().unwrap();
     let offer = stuck_offer(&inner, Some(goal), Some(&step)).unwrap();
@@ -160,30 +156,22 @@ async fn stuck_without_consent_never_calls_tavily_or_enqueues_network_work() {
     assert!(respond_offer(&mut inner, &offer, true).is_err());
 }
 #[tokio::test]
-async fn confirmation_to_tavily_to_work_context_mocked_end_to_end() {
+async fn confirmation_to_web_search_to_work_context_mocked_end_to_end() {
     let (state, goal, step) = state();
     let claude = MockServer::start().await;
-    let tavily = MockServer::start().await;
     intent(&claude, 1).await;
     synthesis(&claude, 1).await;
     let mut candidates = sources();
     candidates.as_array_mut().unwrap().push(json!({"title":"Another useful guide","url":"https://rust-lang.org/other","content":"Another approach"}));
-    search(&tavily, candidates, 1).await;
+    search(&claude, candidates, 1).await;
     let id = {
         let mut inner = state.inner.lock().unwrap();
         let offer = stuck_offer(&inner, Some(goal), Some(&step)).unwrap();
         respond_offer(&mut inner, &offer, true).unwrap().unwrap()
     };
-    let result = run_with_service(
-        &state,
-        goal,
-        id,
-        &service(&state, &claude),
-        &tavily.uri(),
-        "fixture",
-    )
-    .await
-    .unwrap();
+    let result = run_with_service(&state, goal, id, &service(&state, &claude))
+        .await
+        .unwrap();
     let mut inner = state.inner.lock().unwrap();
     let context = inner.storage.work_context(goal).unwrap().unwrap();
     assert_eq!(context.context.step_id.as_deref(), Some(step.as_str()));
@@ -216,7 +204,7 @@ async fn confirmation_to_tavily_to_work_context_mocked_end_to_end() {
         .any(|m| m.event_kind == Some(memory::EventKind::ResearchAccepted)));
     println!(
         "RESEARCH_E2E {}",
-        json!({"flow":"stuck -> offer -> explicit consent -> intent -> Tavily -> synthesis -> WorkContext -> helpful feedback","goal_id":goal,"step_id":step,"claude_calls":3,"tavily_calls":1,"attached_sources":result.sources.len(),"completed_step":false})
+        json!({"flow":"stuck -> offer -> explicit consent -> intent -> web search -> synthesis -> WorkContext -> helpful feedback","goal_id":goal,"step_id":step,"claude_calls":3,"tavily_calls":1,"attached_sources":result.sources.len(),"completed_step":false})
     );
 }
 #[tokio::test]
@@ -248,24 +236,19 @@ async fn correct_goal_step_and_only_relevant_memory_reach_claude() {
             .unwrap();
     }
     let claude = MockServer::start().await;
-    let tavily = MockServer::start().await;
     intent(&claude, 1).await;
     synthesis(&claude, 1).await;
-    search(&tavily, sources(), 1).await;
+    search(&claude, sources(), 1).await;
     let id = authorize(&state, goal, &step);
-    run_with_service(
-        &state,
-        goal,
-        id,
-        &service(&state, &claude),
-        &tavily.uri(),
-        "fixture",
-    )
-    .await
-    .unwrap();
+    run_with_service(&state, goal, id, &service(&state, &claude))
+        .await
+        .unwrap();
     let requests = claude.received_requests().await.unwrap();
     for r in requests {
         let body: Value = serde_json::from_slice(&r.body).unwrap();
+        if body.get("tools").is_some() {
+            continue; // the web search request carries only the generated query
+        }
         let text = body["messages"][0]["content"].as_str().unwrap();
         assert!(!text.contains("payroll"));
         if crate::claude::test::operation(&body) == "buddy_research_evidence" {
@@ -276,9 +259,20 @@ async fn correct_goal_step_and_only_relevant_memory_reach_claude() {
         assert!(text.contains(&step));
         assert!(text.contains("Rust workspace"));
     }
-    let body: Value =
-        serde_json::from_slice(&tavily.received_requests().await.unwrap()[0].body).unwrap();
-    assert_eq!(body.as_object().unwrap().len(), 5); // query + existing advanced-search options only
+    let body: Value = claude
+        .received_requests()
+        .await
+        .unwrap()
+        .iter()
+        .map(|r| serde_json::from_slice::<Value>(&r.body).unwrap())
+        .find(|b| b.get("tools").is_some())
+        .unwrap();
+    // The query is the only user content of the search request.
+    assert_eq!(body["messages"].as_array().unwrap().len(), 1);
+    assert_eq!(
+        body["messages"][0]["content"],
+        "Rust async lifetime official guide"
+    );
     assert!(!body.to_string().contains("memory"));
     assert!(!body.to_string().contains(&step));
     let inner = state.inner.lock().unwrap();
@@ -382,7 +376,6 @@ fn invalid_goal_step_and_cross_goal_step_are_rejected() {
 async fn source_validation_and_duplicate_resources_preserve_real_destinations() {
     let (state, goal, step) = state();
     let claude = MockServer::start().await;
-    let tavily = MockServer::start().await;
     state
         .inner
         .lock()
@@ -392,7 +385,7 @@ async fn source_validation_and_duplicate_resources_preserve_real_destinations() 
         .unwrap();
     intent(&claude, 1).await;
     synthesis(&claude, 1).await;
-    search(&tavily,json!([
+    search(&claude,json!([
         {"title":"Old guide","url":"https://rust-lang.org/old?utm_source=mail","content":"old"},
         {"title":"Unsafe","url":"javascript:alert(1)","content":"bad"},
         {"title":"Credentials","url":"https://name:pass@example.com/","content":"bad"},
@@ -400,16 +393,9 @@ async fn source_validation_and_duplicate_resources_preserve_real_destinations() 
         {"title":"Duplicate","url":"https://rust-lang.org/new?id=2#part","content":"duplicate"}
     ]),1).await;
     let id = authorize(&state, goal, &step);
-    let result = run_with_service(
-        &state,
-        goal,
-        id,
-        &service(&state, &claude),
-        &tavily.uri(),
-        "fixture",
-    )
-    .await
-    .unwrap();
+    let result = run_with_service(&state, goal, id, &service(&state, &claude))
+        .await
+        .unwrap();
     assert_eq!(result.sources.len(), 1);
     assert_eq!(
         result.sources[0].url,
@@ -425,22 +411,16 @@ async fn duplicate_only_results_do_not_call_synthesis_or_attach() {
     let (state, goal, step) = state();
     let result = complete(&state, goal, &step).await;
     let claude = MockServer::start().await;
-    let tavily = MockServer::start().await;
     intent(&claude, 1).await;
     synthesis(&claude, 0).await;
-    search(&tavily, sources(), 1).await;
+    search(&claude, sources(), 1).await;
     let id = authorize(&state, goal, &step);
-    assert!(run_with_service(
-        &state,
-        goal,
-        id,
-        &service(&state, &claude),
-        &tavily.uri(),
-        "fixture"
-    )
-    .await
-    .unwrap_err()
-    .contains("No new"));
+    assert!(
+        run_with_service(&state, goal, id, &service(&state, &claude),)
+            .await
+            .unwrap_err()
+            .contains("No new")
+    );
     assert_eq!(
         state
             .inner
@@ -456,28 +436,21 @@ async fn duplicate_only_results_do_not_call_synthesis_or_attach() {
     );
 }
 #[tokio::test]
-async fn tavily_unavailable_has_no_synthesis_or_attached_result() {
+async fn web_search_unavailable_has_no_synthesis_or_attached_result() {
     let (state, goal, step) = state();
     let claude = MockServer::start().await;
-    let tavily = MockServer::start().await;
     intent(&claude, 1).await;
     synthesis(&claude, 0).await;
     Mock::given(method("POST"))
+        .and(body_partial_json(json!({"tools":[{"name":"web_search"}]})))
         .respond_with(ResponseTemplate::new(401).set_body_string("PRIVATE_PROVIDER_BODY"))
         .expect(1)
-        .mount(&tavily)
+        .mount(&claude)
         .await;
     let id = authorize(&state, goal, &step);
-    let error = run_with_service(
-        &state,
-        goal,
-        id,
-        &service(&state, &claude),
-        &tavily.uri(),
-        "fixture",
-    )
-    .await
-    .unwrap_err();
+    let error = run_with_service(&state, goal, id, &service(&state, &claude))
+        .await
+        .unwrap_err();
     assert!(!error.contains("PRIVATE_PROVIDER_BODY"));
     let inner = state.inner.lock().unwrap();
     assert!(inner
@@ -493,58 +466,46 @@ async fn tavily_unavailable_has_no_synthesis_or_attached_result() {
     );
 }
 #[tokio::test]
-async fn claude_unavailable_prevents_tavily() {
+async fn claude_unavailable_prevents_web_search() {
     let (state, goal, step) = state();
     let claude = MockServer::start().await;
-    let tavily = MockServer::start().await;
     Mock::given(method("POST"))
         .respond_with(ResponseTemplate::new(401))
         .expect(1)
         .mount(&claude)
         .await;
-    search(&tavily, sources(), 0).await;
+    search(&claude, sources(), 0).await;
     let id = authorize(&state, goal, &step);
-    assert!(run_with_service(
-        &state,
-        goal,
-        id,
-        &service(&state, &claude),
-        &tavily.uri(),
-        "fixture"
-    )
-    .await
-    .is_err());
+    assert!(
+        run_with_service(&state, goal, id, &service(&state, &claude),)
+            .await
+            .is_err()
+    );
 }
 #[tokio::test]
 async fn malformed_intent_and_hallucinated_source_indices_never_attach() {
     for bad_intent in [true, false] {
         let (state, goal, step) = state();
         let claude = MockServer::start().await;
-        let tavily = MockServer::start().await;
         if bad_intent {
             Mock::given(method("POST"))
                 .respond_with(response(json!({"query":"api_key=must-not-leave"})))
                 .expect(2)
                 .mount(&claude)
                 .await;
-            search(&tavily, sources(), 0).await;
+            search(&claude, sources(), 0).await;
         } else {
             intent(&claude, 1).await;
-            search(&tavily, sources(), 1).await;
+            search(&claude, sources(), 1).await;
             Mock::given(method("POST")).and(body_partial_json(json!({"output_config":{"format":{"schema":{"description":"buddy_contextual_research_result"}}}})))
                 .respond_with(response(json!({"summary":"A guess","next_action":"Do a thing","source_indices":[99]}))).expect(2).mount(&claude).await;
         }
         let id = authorize(&state, goal, &step);
-        assert!(run_with_service(
-            &state,
-            goal,
-            id,
-            &service(&state, &claude),
-            &tavily.uri(),
-            "fixture"
-        )
-        .await
-        .is_err());
+        assert!(
+            run_with_service(&state, goal, id, &service(&state, &claude),)
+                .await
+                .is_err()
+        );
         assert!(state
             .inner
             .lock()
@@ -562,9 +523,8 @@ async fn malformed_intent_and_hallucinated_source_indices_never_attach() {
 async fn synthesis_repairs_with_source_bounds_without_chat_action_instructions() {
     let (state, goal, step) = state();
     let claude = MockServer::start().await;
-    let tavily = MockServer::start().await;
     intent(&claude, 1).await;
-    search(&tavily, sources(), 1).await;
+    search(&claude, sources(), 1).await;
     let calls = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
     let observed = calls.clone();
     Mock::given(method("POST"))
@@ -585,24 +545,16 @@ async fn synthesis_repairs_with_source_bounds_without_chat_action_instructions()
             response(json!({"summary":"Use an owned value for the async task.","next_action":"Try the documented example.","source_indices":[if first {99}else{0}]}))
         }).expect(2).mount(&claude).await;
     let id = authorize(&state, goal, &step);
-    let result = run_with_service(
-        &state,
-        goal,
-        id,
-        &service(&state, &claude),
-        &tavily.uri(),
-        "fixture",
-    )
-    .await
-    .unwrap();
+    let result = run_with_service(&state, goal, id, &service(&state, &claude))
+        .await
+        .unwrap();
     assert_eq!(result.sources.len(), 1);
     assert_eq!(calls.load(std::sync::atomic::Ordering::SeqCst), 2);
 }
 #[tokio::test]
-async fn privacy_revoked_during_intent_cancels_before_tavily() {
+async fn privacy_revoked_during_intent_cancels_before_web_search() {
     let (state, goal, step) = state();
     let claude = MockServer::start().await;
-    let tavily = MockServer::start().await;
     Mock::given(method("POST"))
         .respond_with(
             response(json!({"query":"Public search"}))
@@ -611,11 +563,10 @@ async fn privacy_revoked_during_intent_cancels_before_tavily() {
         .expect(1)
         .mount(&claude)
         .await;
-    search(&tavily, sources(), 0).await;
+    search(&claude, sources(), 0).await;
     let id = authorize(&state, goal, &step);
     let service = service(&state, &claude);
-    let tavily_url = tavily.uri();
-    let request = run_with_service(&state, goal, id, &service, &tavily_url, "fixture");
+    let request = run_with_service(&state, goal, id, &service);
     let revoke = async {
         tokio::time::sleep(std::time::Duration::from_millis(100)).await;
         state.inner.lock().unwrap().privacy_revision += 1;

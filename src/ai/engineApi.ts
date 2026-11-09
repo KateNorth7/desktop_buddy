@@ -47,7 +47,7 @@ export interface PersonalAiEngine {
     hourly_disclosures: number;
     hourly_limit: number;
   };
-  tavily_status: string;
+  web_search_status: string;
   runtime: {
     status: string;
     pending_events: number;

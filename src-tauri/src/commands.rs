@@ -1,4 +1,4 @@
-use crate::{collector, http, models::*, focus, storage::Storage, tavily};
+use crate::{collector, focus, http, models::*, storage::Storage, web_search};
 use std::{
     sync::Mutex,
     time::{Duration, Instant},
@@ -114,7 +114,7 @@ impl AppState {
                     demo,
                     mock_ai: http::enabled("AI_MOCK"),
                     anthropic_configured: http::configured("ANTHROPIC_API_KEY"),
-                    tavily_configured: http::configured("TAVILY_API_KEY"),
+                    web_search_configured: http::configured("ANTHROPIC_API_KEY"),
                 },
                 last_analysis: None,
                 last_nudge: None,
@@ -166,7 +166,7 @@ pub fn set_provider_key(
         inner.storage.connection.execute("UPDATE core_goal_analyses SET state='queued',message=NULL,attempts=0 WHERE state='failed'",[]).map_err(|_| "Could not resume goal suggestions")?;
     }
     inner.status.anthropic_configured = http::configured("ANTHROPIC_API_KEY");
-    inner.status.tavily_configured = http::configured("TAVILY_API_KEY");
+    inner.status.web_search_configured = http::configured("ANTHROPIC_API_KEY");
     inner.last_error = None;
     crate::frontend_events::changed(
         window.app_handle(),
@@ -382,7 +382,7 @@ pub async fn search_web(
     query: String,
     state: State<'_, AppState>,
 ) -> Result<Vec<SearchResult>, String> {
-    tavily::tavily_search(&state.client, valid_text(&query)?).await
+    web_search::search(&state.client, valid_text(&query)?).await
 }
 #[tauri::command(async)]
 pub async fn analyze_focus(app: AppHandle, state: State<'_, AppState>) -> Result<Decision, String> {
@@ -756,7 +756,7 @@ mod tests {
             demo: false,
             mock_ai: false,
             anthropic_configured: true,
-            tavily_configured: true,
+            web_search_configured: true,
         };
         let mut decision = Decision {
             id: None,
