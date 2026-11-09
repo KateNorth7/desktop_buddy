@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased — Claude as the inference provider
+## 0.51.0 — Claude as the inference provider
 
 - Replace Nebius Token Factory with the Claude Messages API (Anthropic). All
   reasoning, dialogue, goal matching, screen understanding and image description

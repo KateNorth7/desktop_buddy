@@ -1,6 +1,6 @@
 [package]
 name = "desktop-buddy"
-version = "0.50.0"
+version = "0.51.0"
 description = "A local-first focus companion for Windows and macOS"
 license = "MIT"
 edition = "2021"
