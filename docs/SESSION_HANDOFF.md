@@ -1,5 +1,9 @@
 # sumi session handoff
 
+## Rebased onto 0.51.0 with Claude — 9 November 2026
+
+`claude/tracking-diagnostics` was rebased onto fork `main` at `8f678cf` (Claude Messages API, Claude web search, $1 shared daily built-in budget). Only the handoff conflicted; the replay test now sets `anthropic_configured`. Evidence on the rebased branch: `cargo test --locked` 802 passed / 5 ignored; Clippy `-D warnings` and `cargo fmt --check` clean; `npm test` 349 passed, `npm run lint` and `npm run build` clean. More episode questions (stage 2) spend more of the shared $1 daily budget; watch `provider_rate_limit` in `tracking_attempts`.
+
 ## Unreleased — local completion signals and episode-end close offers, 9 November 2026
 
 Stage 3 on `claude/tracking-diagnostics`. New `src-tauri/src/completion_signals.rs`, called from `commands::collect` after goal matching with the sample's counted goal (attribution at or above `relevance::THRESHOLD`); state lives in `goal_matching::Runtime.signals` and is session-only.

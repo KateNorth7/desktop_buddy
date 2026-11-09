@@ -116,7 +116,7 @@ fn replay(case: &Case) -> Replay {
     let mut inner = state.inner.lock().unwrap();
     inner.status.tracking = true;
     crate::tracking::allow_notifications(&mut inner);
-    inner.status.nebius_configured = true;
+    inner.status.anthropic_configured = true;
     inner.status.mock_ai = false;
     // The oracle knows each window's real goal by its metadata.
     let truth: HashMap<String, Option<i64>> = case
