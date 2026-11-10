@@ -241,6 +241,10 @@ pub(crate) fn offer(
     now: i64,
 ) -> Result<(), String> {
     queue::enqueue(inner, prompt, now);
+    deliver_now(app, inner, now)
+}
+/// Delivers the next queued prompt at once, as `offer` does, unless delivery is paused.
+pub(crate) fn deliver_now(app: &AppHandle, inner: &mut Inner, now: i64) -> Result<(), String> {
     if let Some(prompt) = queue::deliver(inner, now)? {
         emit(
             app,

@@ -390,6 +390,7 @@ fn offer_unlinked(inner: &mut Inner, goal: i64, now: Instant) -> Result<(), Stri
             source: "fast_signal".into(),
             text: None,
             place: None,
+            plan_revision: Some(revision),
         },
         now,
     )?;
@@ -520,6 +521,7 @@ fn close(
             source: "fast_signal".into(),
             text: None,
             place: Some(sample.process_name.clone()),
+            plan_revision: Some(revision),
         },
         now,
     )?;
@@ -596,6 +598,7 @@ fn offer_ended_episodes(
                 source: "episode_time".into(),
                 text: None,
                 place: None,
+                plan_revision: None,
             },
             now,
         )?;

@@ -47,6 +47,25 @@ fn at(s: &str) -> DateTime<Utc> {
     DateTime::parse_from_rfc3339(s).unwrap().with_timezone(&Utc)
 }
 fn record(i: &Inner, app: &str, title: &str, from: &str, seconds: i64, goal: Option<i64>) {
+    record_as(
+        i,
+        app,
+        title,
+        from,
+        seconds,
+        goal,
+        crate::tracking::ActivityState::Focused,
+    );
+}
+fn record_as(
+    i: &Inner,
+    app: &str,
+    title: &str,
+    from: &str,
+    seconds: i64,
+    goal: Option<i64>,
+    state: crate::tracking::ActivityState,
+) {
     let mut t = at(from);
     let end = t + chrono::Duration::seconds(seconds);
     while t < end {
@@ -63,7 +82,7 @@ fn record(i: &Inner, app: &str, title: &str, from: &str, seconds: i64, goal: Opt
                     start: t,
                     end: t + chrono::Duration::seconds(3),
                     activity,
-                    state: crate::tracking::ActivityState::Focused,
+                    state,
                 },
                 &crate::relevance::ActivityMatch {
                     goal_id: goal.map(|g| g.to_string()),
@@ -360,4 +379,99 @@ fn substantial_unlisted_work_is_offered_as_a_new_goal() {
     finish(&mut i, &job, Ok(answer), base).unwrap();
     assert_eq!(codes(&i), vec!["episode_reviewed", "proposal_queued"]);
     assert_eq!(i.storage.relevant_seconds(ids[0], None).unwrap(), 0);
+}
+
+#[test]
+fn a_plan_edited_during_the_review_drops_the_stale_proposal() {
+    let (state, ids) = setup(&["Sort out the interview"]);
+    let mut i = state.inner.lock().unwrap();
+    i.storage.transition_goal(ids[0], "resume").unwrap();
+    let base = Instant::now();
+    record(
+        &i,
+        "Mail",
+        "Interview availability",
+        "2026-11-10T09:00:00Z",
+        120,
+        Some(ids[0]),
+    );
+    let job = claim(&mut i, base, at("2026-11-10T09:10:00Z"))
+        .unwrap()
+        .unwrap();
+    // The user changes what done means while the model is still answering.
+    let mut plan = i.storage.goal_plan(ids[0]).unwrap();
+    plan.done_when = "The recruiter confirmed a slot".into();
+    i.storage
+        .save_goal_plan("Sort out the interview", plan)
+        .unwrap();
+    let answer = Answer {
+        windows: vec![],
+        outcomes: vec![achieved(ids[0], vec![0], 0.9)],
+        new_goal: None,
+    };
+    finish(&mut i, &job, Ok(answer), base).unwrap();
+    // No outcome_probable: the card for the old plan is never queued.
+    assert_eq!(codes(&i), vec!["episode_reviewed", "evidence_expired"]);
+}
+
+#[test]
+fn locking_the_screen_ends_the_episode_and_locked_time_is_never_reviewed() {
+    let (state, ids) = setup(&["Sort out the interview"]);
+    let mut i = state.inner.lock().unwrap();
+    let base = Instant::now();
+    record(
+        &i,
+        "Mail",
+        "Interview availability",
+        "2026-11-10T09:00:00Z",
+        90,
+        Some(ids[0]),
+    );
+    // While the session is locked the collector reports a paused state; it is not stored.
+    record_as(
+        &i,
+        "loginwindow",
+        "",
+        "2026-11-10T09:01:30Z",
+        1200,
+        None,
+        crate::tracking::ActivityState::Paused,
+    );
+    let job = claim(&mut i, base, at("2026-11-10T09:21:30Z"))
+        .unwrap()
+        .unwrap();
+    assert_eq!(job.windows.len(), 1);
+    assert_eq!(job.windows[0].app.to_lowercase(), "mail");
+    assert_eq!(job.unassigned_seconds, 0);
+    finish(
+        &mut i,
+        &job,
+        Ok(Answer {
+            windows: vec![],
+            outcomes: vec![],
+            new_goal: None,
+        }),
+        base,
+    )
+    .unwrap();
+    // Work after unlocking is a new episode, reviewed on its own.
+    record(
+        &i,
+        "Mail",
+        "Interview availability",
+        "2026-11-10T09:21:30Z",
+        90,
+        Some(ids[0]),
+    );
+    let later = base + MIN_INTERVAL;
+    let job = claim(&mut i, later, at("2026-11-10T09:30:00Z"))
+        .unwrap()
+        .unwrap();
+    assert_eq!(job.windows.len(), 1);
+    assert!(job.windows[0].at.starts_with("2026-11-10T09:21"));
+    assert!(
+        claim(&mut i, later + MIN_INTERVAL, at("2026-11-10T09:31:00Z"))
+            .unwrap()
+            .is_none()
+    );
 }

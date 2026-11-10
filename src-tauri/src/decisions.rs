@@ -55,6 +55,9 @@ pub(crate) struct Decision {
     /// Where the result was observed, recorded with an automatic completion.
     #[serde(default)]
     pub place: Option<String>,
+    /// The goal's plan revision the analyser saw; a finding about an older plan is dropped.
+    #[serde(default)]
+    pub plan_revision: Option<u64>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -148,6 +151,17 @@ pub(crate) fn submit_at(
         );
         return Ok(Applied::Rejected("goal_changed"));
     }
+    if let (Some(goal), Some(seen)) = (goal, decision.plan_revision) {
+        if decision.kind != DecisionKind::Attribute && goal.plan.revision != seen {
+            note(
+                inner,
+                "evidence_expired",
+                decision.goal_id,
+                decision.confidence,
+            );
+            return Ok(Applied::Rejected("plan_changed"));
+        }
+    }
     if let (Some(goal), Some(step)) = (goal, decision.step_id.as_ref()) {
         if !goal.plan.steps.iter().any(|s| &s.id == step && !s.done) {
             note(
@@ -226,7 +240,10 @@ pub(crate) fn submit_at(
             } else {
                 note(
                     inner,
-                    if decision.source == "episode_time" {
+                    if matches!(
+                        decision.source.as_str(),
+                        "episode_time" | "semantic_observation"
+                    ) {
                         "completion_proposed"
                     } else {
                         "outcome_probable"
@@ -316,6 +333,19 @@ pub(crate) fn submit_at(
         inner.decisions.applied.insert(decision.dedupe_key, now);
     }
     Ok(result)
+}
+/// Records a completion applied outside this path (the verified screen observation), so
+/// no other analyser offers the same goal or step again within the cooldown.
+pub(crate) fn completed_elsewhere(
+    inner: &mut Inner,
+    goal_id: Option<i64>,
+    step_id: Option<String>,
+    now: Instant,
+) {
+    inner
+        .decisions
+        .cooldown
+        .insert((goal_id, step_id, "complete"), now);
 }
 /// Automatic completion through the existing receipt path, which keeps a durable Undo and
 /// refuses a plan the user already undid.

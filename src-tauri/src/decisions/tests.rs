@@ -48,6 +48,7 @@ fn decision(goal: Option<i64>, kind: DecisionKind, key: &str, source: &str) -> D
         source: source.into(),
         text: None,
         place: None,
+        plan_revision: None,
     }
 }
 fn codes(inner: &Inner) -> Vec<String> {
@@ -180,6 +181,25 @@ fn changed_goals_done_steps_open_steps_and_missing_consent_are_rejected() {
     );
     real.step_id = Some(step);
     assert_eq!(submit_at(&mut i, real, now).unwrap(), Applied::Queued);
+    // A finding about an older plan revision is dropped.
+    let mut old = decision(
+        Some(ids[0]),
+        DecisionKind::ProposeComplete,
+        "r",
+        "episode_review",
+    );
+    old.step_id = i
+        .storage
+        .goal_plan(ids[0])
+        .unwrap()
+        .steps
+        .first()
+        .map(|s| s.id.clone());
+    old.plan_revision = Some(i.storage.goal_plan(ids[0]).unwrap().revision - 1);
+    assert_eq!(
+        submit_at(&mut i, old, now).unwrap(),
+        Applied::Rejected("plan_changed")
+    );
     // A closed goal is no longer a target.
     i.storage.core_transition(ids[1], "complete").unwrap();
     assert_eq!(

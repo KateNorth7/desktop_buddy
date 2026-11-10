@@ -55,6 +55,8 @@ pub(crate) struct Job {
     pub windows: Vec<EpisodeEvidence>,
     pub goals: Vec<i64>,
     pub steps: Vec<(i64, String)>,
+    /// Each goal's plan revision when the review was prepared.
+    pub revisions: std::collections::HashMap<i64, u64>,
     pub unassigned_seconds: i64,
     pub context: Value,
 }
@@ -228,6 +230,7 @@ pub(crate) fn claim(
         key,
         windows: shown,
         goals: open.iter().map(|g| g.id).collect(),
+        revisions: open.iter().map(|g| (g.id, g.plan.revision)).collect(),
         steps,
         unassigned_seconds: unassigned,
         context,
@@ -359,6 +362,7 @@ pub(crate) fn finish(
                         source: "episode_review".into(),
                         text: None,
                         place: None,
+                        plan_revision: None,
                     },
                     now,
                 )?;
@@ -400,6 +404,7 @@ pub(crate) fn finish(
                 source: "episode_review".into(),
                 text: None,
                 place: None,
+                plan_revision: job.revisions.get(&o.goal_id).copied(),
             },
             now,
         )?;
@@ -426,6 +431,7 @@ pub(crate) fn finish(
                 source: "episode_review".into(),
                 text: Some(goal.title.clone()),
                 place: None,
+                plan_revision: None,
             },
             now,
         )?;
@@ -469,5 +475,7 @@ pub async fn run_due(app: &tauri::AppHandle) {
     };
 }
 
+#[cfg(test)]
+mod benchmark;
 #[cfg(test)]
 mod tests;

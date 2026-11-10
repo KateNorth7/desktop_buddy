@@ -348,3 +348,35 @@ async fn understanding_live_benchmark() {
     }
     eprintln!("{passed}/{} passed", cases.len());
 }
+
+#[test]
+fn what_the_user_said_about_the_goal_in_chat_is_part_of_its_context() {
+    let (state, ids) = setup(&["разобраться с собесом", "Plan the trip"]);
+    let mut i = state.inner.lock().unwrap();
+    let conversation = i.storage.create_conversation().unwrap();
+    i.storage
+        .save_question_to(
+            conversation,
+            "Payoneer asked for my availability next week, I need to answer the recruiter",
+            Some(ids[0]),
+        )
+        .unwrap();
+    i.storage
+        .save_question_to(conversation, "Book flights to Lisbon", Some(ids[1]))
+        .unwrap();
+    i.storage
+        .save_question_to(conversation, "   ", Some(ids[0]))
+        .unwrap();
+    let base = Instant::now();
+    claim(&mut i, base).unwrap();
+    let job = claim(&mut i, base + DEBOUNCE).unwrap().unwrap();
+    let chat = job.context["chat_about_goal"].as_array().unwrap();
+    assert_eq!(chat.len(), 1, "only this goal's non-empty messages");
+    assert!(job.provenance.contains(&"chat".to_string()));
+    let other = if job.goal_id == ids[0] {
+        "Lisbon"
+    } else {
+        "Payoneer"
+    };
+    assert!(!chat[0]["text"].as_str().unwrap().contains(other));
+}
