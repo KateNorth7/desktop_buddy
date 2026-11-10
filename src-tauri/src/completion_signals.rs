@@ -1,11 +1,15 @@
 //! Local completion signals. Some goals are done the moment something observable happens:
-//! joining a call, opening a site. Those close automatically from window metadata, with a
-//! notice and Undo, and no model call. Every other goal is offered for closing once a work
-//! episode on it ends: the user confirms, nothing changes on its own. All decisions use the
-//! foreground app, title and site the collector already keeps; nothing new is captured.
+//! joining a call, opening a site, sending an email, submitting a form. A result closes a
+//! goal automatically (with a notice and Undo, and no model call) only when it connects to
+//! the goal's own target from its understanding: the requested site, the named meeting,
+//! the right recipient, the right form. A visible result with no known target is only
+//! offered; one that contradicts the target (another meeting, another recipient) is
+//! ignored. Every other goal is offered for closing once a work episode on it ends. All
+//! decisions use the foreground app, title, site and already read interface text.
 use crate::{
     commands::Inner,
     companion::engine::{Intervention, Kind},
+    goal_understanding::FastKind,
     models::ActivitySnapshot,
 };
 use std::{
@@ -264,6 +268,184 @@ fn site_matches(a: &ActivitySnapshot, target: &str) -> bool {
             .any(|label| label == target || label.trim_end_matches("-app") == target)
     }
 }
+/// Phrases a meeting shows before joining, and once in the call, in English and Russian.
+const PRE_JOIN: &[&str] = &[
+    "join now",
+    "ask to join",
+    "ready to join",
+    "присоединиться",
+    "готовы присоединиться",
+];
+const IN_CALL: &[&str] = &[
+    "leave call",
+    "end call",
+    "leave meeting",
+    "покинуть звонок",
+    "завершить звонок",
+    "выйти из встречи",
+];
+/// A submitted form's confirmation, and signs that the submission failed.
+const FORM_DONE: &[&str] = &[
+    "thank you for applying",
+    "application submitted",
+    "application has been submitted",
+    "thanks for submitting",
+    "submission received",
+    "successfully submitted",
+    "your response has been recorded",
+    "заявка отправлена",
+    "спасибо за отклик",
+    "ответ записан",
+];
+const FORM_ERROR: &[&str] = &[
+    "error",
+    "required field",
+    "please correct",
+    "something went wrong",
+    "ошибка",
+    "обязательное поле",
+];
+fn says(text: Option<&str>, phrases: &[&str]) -> bool {
+    text.is_some_and(|t| phrases.iter().any(|p| t.contains(p)))
+}
+/// Kind and targets: the stored understanding first, the title classifier as fallback.
+fn shape(
+    inner: &Inner,
+    goal: &crate::core::CoreGoal,
+) -> Result<(Option<FastKind>, Vec<String>), String> {
+    if let Some(u) = inner.storage.understanding_for(goal)? {
+        let mut targets = u.targets.clone();
+        targets.extend(u.entities.iter().cloned());
+        return Ok((u.kind, targets));
+    }
+    Ok(match classify(&goal.title, &goal.description) {
+        GoalKind::JoinCall => (Some(FastKind::JoinCall), vec![]),
+        GoalKind::VisitSite(site) => (Some(FastKind::VisitSite), vec![site]),
+        GoalKind::SendEmail => (Some(FastKind::SendEmail), vec![]),
+        GoalKind::Other => (None, vec![]),
+    })
+}
+/// Whether the window or its text names one of the goal's targets.
+fn names_target(sample: &ActivitySnapshot, text: Option<&str>, targets: &[String]) -> bool {
+    let title = sample.window_title.to_lowercase();
+    let site = sample
+        .browser
+        .as_ref()
+        .and_then(|b| b.domain.as_deref())
+        .unwrap_or_default()
+        .to_lowercase();
+    targets
+        .iter()
+        .map(|t| t.trim().to_lowercase())
+        .filter(|t| t.chars().count() >= 2)
+        .any(|t| title.contains(&t) || site.contains(&t) || text.is_some_and(|x| x.contains(&t)))
+}
+/// The observed result for one goal: its signal, how long it must hold, and whether it
+/// connects to the goal's own target. `None` when nothing relevant is visible or the
+/// evidence contradicts the target (another meeting, another recipient).
+fn evidence(
+    inner: &Inner,
+    goal: &crate::core::CoreGoal,
+    sample: &ActivitySnapshot,
+    text: Option<&str>,
+    fresh: &Fresh,
+) -> Result<Option<(&'static str, Duration, bool)>, String> {
+    let (kind, targets) = shape(inner, goal)?;
+    let linked = names_target(sample, text, &targets);
+    // Known targets must match; without any, the result can only be offered.
+    let result = |signal, needed| {
+        if targets.is_empty() {
+            Some((signal, needed, false))
+        } else if linked {
+            Some((signal, needed, true))
+        } else {
+            None
+        }
+    };
+    Ok(match kind {
+        Some(FastKind::JoinCall)
+            if in_meeting(sample) && !(says(text, PRE_JOIN) && !says(text, IN_CALL)) =>
+        {
+            result("meeting", CALL_DWELL)
+        }
+        Some(FastKind::VisitSite) if targets.iter().any(|t| site_matches(sample, t)) => {
+            Some(("site", SITE_DWELL, true))
+        }
+        Some(FastKind::SendEmail) if fresh.sent && mail_window(sample) => {
+            result("email_sent", Duration::ZERO)
+        }
+        Some(FastKind::SubmitForm) if fresh.submitted && sample.browser.is_some() => {
+            result("form_submitted", Duration::ZERO)
+        }
+        _ => None,
+    })
+}
+/// Result phrases that appeared in this window since its previous sample. A confirmation
+/// already on screen at the first sample (an old or quoted one) does not count.
+#[derive(Default)]
+struct Fresh {
+    sent: bool,
+    submitted: bool,
+}
+fn fresh_signals(inner: &mut Inner, sample: &ActivitySnapshot, text: Option<&str>) -> Fresh {
+    let key = format!(
+        "{}|{:?}|{:?}",
+        sample.process_name.to_lowercase(),
+        sample.window_id,
+        sample.browser.as_ref().and_then(|b| b.domain.clone())
+    );
+    let sent = text.is_some_and(email_sent);
+    let submitted = says(text, FORM_DONE) && !says(text, FORM_ERROR);
+    let seen = &mut inner.goal_matching.signals.seen_text;
+    let previous = text.and_then(|_| seen.insert(key.clone(), (sent, submitted)));
+    if seen.len() > 64 {
+        seen.retain(|k, _| *k == key);
+    }
+    match previous {
+        Some((was_sent, was_submitted)) => Fresh {
+            sent: sent && !was_sent,
+            submitted: submitted && !was_submitted,
+        },
+        None => Fresh::default(),
+    }
+}
+/// A visible result that cannot be tied to the goal's target is offered, never closed.
+fn offer_unlinked(inner: &mut Inner, goal: i64, now: Instant) -> Result<(), String> {
+    inner.goal_matching.signals.dwell = None;
+    if inner
+        .goal_matching
+        .signals
+        .offered
+        .get(&goal)
+        .is_some_and(|at| now.saturating_duration_since(*at) < OFFER_COOLDOWN)
+    {
+        return Ok(());
+    }
+    let Some(found) = inner
+        .storage
+        .core_work_snapshot()?
+        .goals
+        .into_iter()
+        .find(|g| g.id == goal && g.status == "open")
+    else {
+        return Ok(());
+    };
+    let wall = chrono::Utc::now().timestamp();
+    let prompt = Intervention {
+        id: format!("signal-offer-{goal}-{}", found.plan.revision),
+        kind: Kind::GoalCompletion,
+        text: found.title.clone(),
+        confidence: 0.7,
+        goal_id: Some(goal),
+        plan_revision: Some(found.plan.revision),
+        step_id: None,
+        expires_at: wall + 3600,
+    };
+    note(inner, "outcome_probable", goal, prompt.confidence);
+    inner.goal_matching.signals.offered.insert(goal, now);
+    crate::companion::queue_prompt(inner, prompt, wall);
+    Ok(())
+}
 #[derive(Clone)]
 struct Dwell {
     goal: i64,
@@ -283,6 +465,8 @@ pub struct Tracker {
     dwell: Option<Dwell>,
     episodes: HashMap<i64, Episode>,
     offered: HashMap<i64, Instant>,
+    /// Per window: whether the sent and submitted phrases were already visible.
+    seen_text: HashMap<String, (bool, bool)>,
 }
 fn note(inner: &Inner, outcome: &str, goal: i64, confidence: f64) {
     let _ = inner.storage.note_attempt(
@@ -315,40 +499,33 @@ pub(crate) fn observe(
         .filter(|g| g.status == "open")
         .collect();
     if allowed {
-        // Exactly one open goal of a kind may close from a signal; two would be a guess.
-        let call_goals: Vec<_> = goals
-            .iter()
-            .filter(|g| classify(&g.title, &g.description) == GoalKind::JoinCall)
-            .collect();
-        let site_goals: Vec<_> = goals
-            .iter()
-            .filter(|g| {
-                matches!(classify(&g.title, &g.description), GoalKind::VisitSite(t) if site_matches(sample, &t))
-            })
-            .collect();
-        let email_goals: Vec<_> = goals
-            .iter()
-            .filter(|g| classify(&g.title, &g.description) == GoalKind::SendEmail)
-            .collect();
-        let sent = email_goals.len() == 1
-            && mail_window(sample)
-            && crate::companion::screen_context::cached_text(inner, sample).is_some_and(email_sent);
-        let candidate = if in_meeting(sample) && call_goals.len() == 1 {
-            Some((call_goals[0].id, "meeting", CALL_DWELL))
-        } else if site_goals.len() == 1 {
-            Some((site_goals[0].id, "site", SITE_DWELL))
-        } else if sent {
-            Some((email_goals[0].id, "email_sent", Duration::ZERO))
-        } else {
-            None
+        let text =
+            crate::companion::screen_context::cached_text(inner, sample).map(str::to_lowercase);
+        let fresh = fresh_signals(inner, sample, text.as_deref());
+        let mut found: Vec<(i64, &'static str, Duration, bool)> = Vec::new();
+        for goal in &goals {
+            if let Some((signal, needed, connected)) =
+                evidence(inner, goal, sample, text.as_deref(), &fresh)?
+            {
+                found.push((goal.id, signal, needed, connected));
+            }
+        }
+        // A connected result decides alone; otherwise exactly one candidate may be offered.
+        let connected: Vec<_> = found.iter().filter(|f| f.3).cloned().collect();
+        let candidate = match (connected.as_slice(), found.as_slice()) {
+            ([one], _) => Some(*one),
+            ([], [one]) => Some(*one),
+            _ => None,
         };
         let tracker = &mut inner.goal_matching.signals;
         let dwell = match (candidate, tracker.dwell.take()) {
-            (Some((goal, signal, _)), Some(d)) if d.goal == goal && d.signal == signal => Dwell {
-                since: d.since + step,
-                ..d
-            },
-            (Some((goal, signal, _)), _) => Dwell {
+            (Some((goal, signal, _, _)), Some(d)) if d.goal == goal && d.signal == signal => {
+                Dwell {
+                    since: d.since + step,
+                    ..d
+                }
+            }
+            (Some((goal, signal, _, _)), _) => Dwell {
                 goal,
                 signal,
                 since: Duration::ZERO,
@@ -358,9 +535,13 @@ pub(crate) fn observe(
                 return offer_ended_episodes(inner, sample, attributed, step, now);
             }
         };
-        let needed = candidate.map(|c| c.2).unwrap_or(CALL_DWELL);
+        let (_, _, needed, linked) = candidate.unwrap_or((0, "", CALL_DWELL, false));
         if dwell.since >= needed {
-            close(inner, dwell.goal, dwell.signal, sample)?;
+            if linked {
+                close(inner, dwell.goal, dwell.signal, sample)?;
+            } else {
+                offer_unlinked(inner, dwell.goal, now)?;
+            }
         } else {
             inner.goal_matching.signals.dwell = Some(dwell);
         }

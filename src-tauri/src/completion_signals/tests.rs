@@ -17,7 +17,13 @@ fn setup(titles: &[&str]) -> (AppState, Vec<i64>) {
     let snap = s.core_snapshot(None).unwrap();
     let ids = titles
         .iter()
-        .map(|t| snap.goals.iter().find(|g| &g.title == t).unwrap().id)
+        .map(|t| {
+            snap.goals
+                .iter()
+                .find(|g| g.title.to_lowercase() == t.to_lowercase())
+                .unwrap()
+                .id
+        })
         .collect();
     (AppState::new(s).unwrap(), ids)
 }
@@ -139,9 +145,72 @@ fn meeting_windows_are_recognised_but_chat_windows_are_not() {
     )));
 }
 
+/// Stores an understanding as Prompt A's producer would, at the goal's current revision.
+fn understand(inner: &Inner, id: i64, kind: FastKind, targets: &[&str]) {
+    let goal = inner
+        .storage
+        .core_work_snapshot()
+        .unwrap()
+        .goals
+        .into_iter()
+        .find(|g| g.id == id)
+        .unwrap();
+    inner
+        .storage
+        .save_goal_understanding(&crate::goal_understanding::GoalUnderstanding {
+            goal_id: id,
+            plan_revision: goal.plan.revision,
+            meaning: "test".into(),
+            outcomes: vec!["done".into()],
+            entities: vec![],
+            targets: targets.iter().map(|t| t.to_string()).collect(),
+            kind: Some(kind),
+            uncertainty: 0.1,
+            provenance: vec!["goal_text".into()],
+            updated_at: chrono::Utc::now().to_rfc3339(),
+            input_fingerprint: crate::goal_understanding::fingerprint(&goal),
+        })
+        .unwrap();
+}
+
 #[test]
-fn a_join_call_goal_closes_after_a_minute_in_the_meeting_with_a_notice() {
-    let (state, ids) = setup(&["Зайти на созвон", "Write the launch notes"]);
+fn the_named_meeting_closes_a_call_goal_but_a_lobby_or_another_meeting_never_does() {
+    let (state, ids) = setup(&["быть на созвоне с Anna в 5", "Write the launch notes"]);
+    let mut inner = state.inner.lock().unwrap();
+    inner.companion.view.preferences.automatic_completion = true;
+    understand(&inner, ids[0], FastKind::JoinCall, &["Anna"]);
+    let base = Instant::now();
+    // Another meeting is not the requested one, however long it lasts.
+    let other = window("zoom.us", "Zoom Meeting - Board review", None);
+    run(&mut inner, &other, None, base, 0, 120);
+    assert_eq!(status(&inner, ids[0]), "open");
+    // The pre-join screen of the right meeting is not joining it.
+    let meet = window(
+        "Google Chrome",
+        "Meet - Sync with Anna",
+        Some("meet.google.com"),
+    );
+    crate::companion::screen_context::cache_for_test(
+        &mut inner,
+        &meet,
+        "Ready to join?\nJoin now\nAsk to join",
+    );
+    run(&mut inner, &meet, None, base, 123, 300);
+    assert_eq!(status(&inner, ids[0]), "open");
+    assert!(outcomes(&inner).is_empty());
+    // In the call for a minute: closed once, with the notice.
+    crate::companion::screen_context::cache_for_test(&mut inner, &meet, "Anna\nLeave call\nMute");
+    run(&mut inner, &meet, None, base, 303, 366);
+    assert_eq!(status(&inner, ids[0]), "completed");
+    assert_eq!(status(&inner, ids[1]), "open");
+    assert_eq!(outcomes(&inner), vec!["completion_applied"]);
+    run(&mut inner, &meet, None, base, 369, 450);
+    assert_eq!(outcomes(&inner), vec!["completion_applied"]);
+}
+
+#[test]
+fn a_call_goal_without_a_known_meeting_is_only_offered() {
+    let (state, ids) = setup(&["Зайти на созвон"]);
     let mut inner = state.inner.lock().unwrap();
     inner.companion.view.preferences.automatic_completion = true;
     let base = Instant::now();
@@ -150,19 +219,11 @@ fn a_join_call_goal_closes_after_a_minute_in_the_meeting_with_a_notice() {
         "Meet - abc-defg-hij",
         Some("meet.google.com"),
     );
-    run(&mut inner, &meet, None, base, 0, 45);
-    assert_eq!(
-        status(&inner, ids[0]),
-        "open",
-        "the lobby moment is not enough"
-    );
-    run(&mut inner, &meet, None, base, 48, 66);
-    assert_eq!(status(&inner, ids[0]), "completed");
-    assert_eq!(status(&inner, ids[1]), "open");
-    assert_eq!(outcomes(&inner), vec!["completion_applied"]);
-    // Staying in the call does not close it again.
-    run(&mut inner, &meet, None, base, 69, 150);
-    assert_eq!(outcomes(&inner), vec!["completion_applied"]);
+    run(&mut inner, &meet, None, base, 0, 66);
+    assert_eq!(status(&inner, ids[0]), "open");
+    assert_eq!(outcomes(&inner), vec!["outcome_probable"]);
+    run(&mut inner, &meet, None, base, 69, 300);
+    assert_eq!(outcomes(&inner), vec!["outcome_probable"], "offered once");
 }
 
 #[test]
@@ -214,26 +275,100 @@ fn leaving_a_goal_after_real_work_offers_to_close_it_once() {
 }
 
 #[test]
-fn an_email_goal_closes_when_the_mail_client_shows_the_message_was_sent() {
+fn an_email_closes_its_goal_only_when_newly_sent_to_the_right_recipient() {
     let (state, ids) = setup(&["Написать письмо HR"]);
     let mut inner = state.inner.lock().unwrap();
     inner.companion.view.preferences.automatic_completion = true;
+    understand(&inner, ids[0], FastKind::SendEmail, &["hr@acme.example"]);
     let base = Instant::now();
     let gmail = window("Google Chrome", "Inbox - Gmail", Some("mail.google.com"));
     let chat = window("Telegram", "Telegram", None);
-    crate::companion::screen_context::cache_for_test(&mut inner, &gmail, "Compose\nTo: HR");
-    run(&mut inner, &gmail, None, base, 0, 9);
+    // An old confirmation already on screen at the first sample is not a new send.
+    crate::companion::screen_context::cache_for_test(&mut inner, &gmail, "Message sent. Undo");
+    run(&mut inner, &gmail, None, base, 0, 3);
+    assert_eq!(status(&inner, ids[0]), "open");
+    // A draft is not sending.
+    crate::companion::screen_context::cache_for_test(
+        &mut inner,
+        &gmail,
+        "Compose\nTo: hr@acme.example",
+    );
+    run(&mut inner, &gmail, None, base, 6, 9);
     assert_eq!(status(&inner, ids[0]), "open", "composing is not sending");
     // The same phrase in a chat app is not a sent email.
     crate::companion::screen_context::cache_for_test(&mut inner, &chat, "Message sent");
     run(&mut inner, &chat, None, base, 12, 18);
-    assert_eq!(status(&inner, ids[0]), "open");
+    // Sent to someone else: nothing.
     crate::companion::screen_context::cache_for_test(
         &mut inner,
         &gmail,
-        "Inbox\nMessage sent. Undo View message",
+        "Message sent. To: lena@other.example",
     );
     run(&mut inner, &gmail, None, base, 21, 24);
+    assert_eq!(status(&inner, ids[0]), "open");
+    assert!(outcomes(&inner).is_empty());
+    // Newly sent to the right recipient: closed.
+    crate::companion::screen_context::cache_for_test(
+        &mut inner,
+        &gmail,
+        "Compose\nTo: hr@acme.example",
+    );
+    run(&mut inner, &gmail, None, base, 27, 30);
+    crate::companion::screen_context::cache_for_test(
+        &mut inner,
+        &gmail,
+        "Message sent. Undo View message\nTo: hr@acme.example",
+    );
+    run(&mut inner, &gmail, None, base, 33, 36);
     assert_eq!(status(&inner, ids[0]), "completed");
     assert_eq!(outcomes(&inner), vec!["completion_applied"]);
+}
+
+#[test]
+fn a_form_closes_its_goal_on_a_fresh_confirmation_but_not_on_an_error_or_search_results() {
+    let (state, ids) = setup(&["Указать доступность для интервью", "Visit linear.app"]);
+    let mut inner = state.inner.lock().unwrap();
+    inner.companion.view.preferences.automatic_completion = true;
+    understand(&inner, ids[0], FastKind::SubmitForm, &["Payoneer"]);
+    let base = Instant::now();
+    // Search results mentioning the site are not the site.
+    let search = window(
+        "Google Chrome",
+        "linear.app - Google Search",
+        Some("www.google.com"),
+    );
+    run(&mut inner, &search, None, base, 0, 30);
+    assert_eq!(status(&inner, ids[1]), "open");
+    let form = window(
+        "Google Chrome",
+        "Payoneer | Finance Transformation Specialist",
+        Some("app.greenhouse.io"),
+    );
+    crate::companion::screen_context::cache_for_test(
+        &mut inner,
+        &form,
+        "Interview availability\nSubmit",
+    );
+    run(&mut inner, &form, None, base, 33, 36);
+    crate::companion::screen_context::cache_for_test(
+        &mut inner,
+        &form,
+        "Something went wrong. Please correct the errors. Thank you for applying",
+    );
+    run(&mut inner, &form, None, base, 39, 42);
+    assert_eq!(status(&inner, ids[0]), "open", "a failed submission");
+    crate::companion::screen_context::cache_for_test(
+        &mut inner,
+        &form,
+        "Interview availability\nSubmit",
+    );
+    run(&mut inner, &form, None, base, 45, 48);
+    crate::companion::screen_context::cache_for_test(
+        &mut inner,
+        &form,
+        "Thank you for applying. Your availability was received.",
+    );
+    run(&mut inner, &form, None, base, 51, 54);
+    assert_eq!(status(&inner, ids[0]), "completed");
+    assert_eq!(status(&inner, ids[1]), "open");
 }

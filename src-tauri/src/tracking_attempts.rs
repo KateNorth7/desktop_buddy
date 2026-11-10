@@ -11,6 +11,8 @@ use serde::Serialize;
 pub(crate) const MATCHING: &str = "goal_matching";
 /// Outcome checks: whether the activity shows a goal or step is done.
 pub(crate) const OUTCOME: &str = "outcome_check";
+/// Goal understanding: what a goal means and which results would achieve it.
+pub(crate) const UNDERSTANDING: &str = "goal_understanding";
 /// The same outcome within this many seconds extends the previous row.
 const FOLD_SECONDS: i64 = 300;
 /// Rows older than this are removed on write; retention and Clear local history also apply.

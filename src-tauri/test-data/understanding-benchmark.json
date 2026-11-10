@@ -1,0 +1,145 @@
+[
+  {
+    "id": "interview-casual-ru",
+    "goal": "разобраться с собесом от payoneer",
+    "context": {
+      "creation_source": {
+        "app": "google chrome",
+        "title": "Interview availability - Finance Transformation Specialist: Payoneer"
+      }
+    },
+    "expect": {
+      "kind": null,
+      "mention_any": ["interview", "availability", "payoneer"],
+      "min_outcomes": 2
+    }
+  },
+  {
+    "id": "call-ru-person",
+    "goal": "быть на созвоне с Анной в 17:00",
+    "context": {},
+    "expect": {
+      "kind": "join_call",
+      "mention_any": ["анн", "anna", "call", "meeting"],
+      "min_outcomes": 1
+    }
+  },
+  {
+    "id": "prepare-call-not-join",
+    "goal": "Prepare talking points for Thursday's investor call",
+    "context": {},
+    "expect": {
+      "kind": null,
+      "mention_any": ["talking points", "investor", "prepare"],
+      "min_outcomes": 1
+    }
+  },
+  {
+    "id": "email-he",
+    "goal": "לשלוח לרואה החשבון את הקבלות של אוקטובר",
+    "context": {},
+    "expect": {
+      "kind": "send_email",
+      "mention_any": ["accountant", "receipts", "october"],
+      "min_outcomes": 1
+    }
+  },
+  {
+    "id": "site-terse",
+    "goal": "check linear.app pricing",
+    "context": {},
+    "expect": {
+      "kind": "visit_site",
+      "mention_any": ["linear", "pricing"],
+      "min_outcomes": 1
+    }
+  },
+  {
+    "id": "nurse-shift-swap",
+    "goal": "swap the 14th night shift with someone",
+    "context": {},
+    "expect": {
+      "kind": null,
+      "mention_any": ["shift", "swap"],
+      "min_outcomes": 2
+    }
+  },
+  {
+    "id": "teacher-grades-de",
+    "goal": "Noten für die 7b eintragen",
+    "context": {},
+    "expect": {
+      "kind": null,
+      "mention_any": ["grade", "7b", "enter"],
+      "min_outcomes": 1
+    }
+  },
+  {
+    "id": "form-visa",
+    "goal": "подать анкету на визу",
+    "context": {},
+    "expect": {
+      "kind": "submit_form",
+      "mention_any": ["visa", "application", "form"],
+      "min_outcomes": 1
+    }
+  },
+  {
+    "id": "vague-sort-out-bank",
+    "goal": "bank thing",
+    "context": {
+      "recent_work": [
+        {
+          "app": "google chrome",
+          "title": "Dispute a transaction - Chase",
+          "site": "chase.com",
+          "seconds": 420
+        }
+      ]
+    },
+    "expect": {
+      "kind": null,
+      "mention_any": ["dispute", "transaction", "bank"],
+      "min_outcomes": 1
+    }
+  },
+  {
+    "id": "user-done-when-precedence",
+    "goal": "Fix the onboarding copy",
+    "context": { "user_done_when": "PR merged" },
+    "expect": {
+      "kind": null,
+      "mention_any": ["merged", "pull request", "pr"],
+      "min_outcomes": 1
+    }
+  },
+  {
+    "id": "parent-errand-es",
+    "goal": "pedir cita con la pediatra para Lucas",
+    "context": {},
+    "expect": {
+      "kind": null,
+      "mention_any": ["appointment", "pediatric", "lucas"],
+      "min_outcomes": 1
+    }
+  },
+  {
+    "id": "designer-handoff",
+    "goal": "handoff v2 to devs",
+    "context": {
+      "recent_work": [
+        {
+          "app": "figma",
+          "title": "Checkout v2 – Figma",
+          "site": null,
+          "seconds": 1800
+        }
+      ]
+    },
+    "expect": {
+      "kind": null,
+      "mention_any": ["handoff", "checkout", "design"],
+      "min_outcomes": 1
+    }
+  }
+]
