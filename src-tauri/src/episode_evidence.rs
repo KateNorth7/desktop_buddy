@@ -104,7 +104,13 @@ pub(crate) fn result_signal(text: &str) -> Option<&'static str> {
 /// raw text never travels in this type.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub(crate) struct EpisodeEvidence {
+    /// The review period the window belongs to; with `context_key` it names the window.
+    #[serde(default)]
+    pub period_id: i64,
     pub at: String,
+    /// When the window was last seen within the range.
+    #[serde(default)]
+    pub last_at: String,
     pub context_key: String,
     pub app: String,
     pub site: Option<String>,
@@ -162,7 +168,8 @@ impl Storage {
                     (SELECT x.goal_id FROM review_intervals x WHERE x.period_id=i.period_id AND x.context_key=i.context_key AND x.status='assigned' AND x.goal_id IS NOT NULL GROUP BY x.goal_id ORDER BY SUM(x.milliseconds) DESC LIMIT 1),
                     (SELECT x.source_step FROM review_intervals x WHERE x.period_id=i.period_id AND x.context_key=i.context_key AND x.source_step<>'' ORDER BY x.id DESC LIMIT 1),
                     EXISTS(SELECT 1 FROM review_evidence e WHERE e.period_id=i.period_id AND e.context_key=i.context_key AND e.kind='text'),
-                    (SELECT e.result_signal FROM review_evidence e WHERE e.period_id=i.period_id AND e.context_key=i.context_key AND e.result_signal IS NOT NULL ORDER BY e.id DESC LIMIT 1)
+                    (SELECT e.result_signal FROM review_evidence e WHERE e.period_id=i.period_id AND e.context_key=i.context_key AND e.result_signal IS NOT NULL ORDER BY e.id DESC LIMIT 1),
+                    MAX(i.ended_at)
                  FROM review_intervals i
                  WHERE julianday(i.ended_at)>julianday(?1) AND julianday(i.started_at)<julianday(?2)
                  GROUP BY i.period_id,i.context_key ORDER BY MIN(i.started_at) LIMIT ?3",
@@ -180,7 +187,9 @@ impl Storage {
                     let key: String = r.get(1)?;
                     let text: bool = r.get(9)?;
                     Ok(EpisodeEvidence {
+                        period_id: period,
                         at: r.get(2)?,
+                        last_at: r.get(11)?,
                         excerpt_ref: text.then(|| format!("review_text:{period}:{key}")),
                         context_key: key,
                         app: r.get(3)?,

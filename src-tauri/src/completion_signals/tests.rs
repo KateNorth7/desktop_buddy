@@ -223,7 +223,11 @@ fn a_call_goal_without_a_known_meeting_is_only_offered() {
     assert_eq!(status(&inner, ids[0]), "open");
     assert_eq!(outcomes(&inner), vec!["outcome_probable"]);
     run(&mut inner, &meet, None, base, 69, 300);
-    assert_eq!(outcomes(&inner), vec!["outcome_probable"], "offered once");
+    assert_eq!(
+        outcomes(&inner),
+        vec!["outcome_probable", "proposal_deduplicated"],
+        "offered once; the repeats are recognised as duplicates"
+    );
 }
 
 #[test]
@@ -266,7 +270,10 @@ fn leaving_a_goal_after_real_work_offers_to_close_it_once() {
     assert_eq!(outcomes(&inner), vec!["completion_proposed"]);
     run(&mut inner, &editor, Some(ids[0]), base, 623, 713);
     run(&mut inner, &chat, None, base, 716, 900);
-    assert_eq!(outcomes(&inner), vec!["completion_proposed"]);
+    assert_eq!(
+        outcomes(&inner),
+        vec!["completion_proposed", "proposal_deduplicated"]
+    );
     assert_eq!(
         status(&inner, ids[0]),
         "open",

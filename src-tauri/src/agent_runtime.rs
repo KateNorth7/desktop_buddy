@@ -728,6 +728,10 @@ pub async fn tick(app: &AppHandle) {
         tauri::async_runtime::spawn(async move {
             crate::goal_understanding::run_due(&handle).await;
         });
+        let handle = app.clone();
+        tauri::async_runtime::spawn(async move {
+            crate::episode_review::run_due(&handle).await;
+        });
     }
     // Goal attribution is background accounting, not a prompt: it is the primary way
     // measured time reaches a goal and continues through quiet hours.

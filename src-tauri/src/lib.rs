@@ -28,6 +28,7 @@ mod dialogue_benchmark;
 mod dialogue_context;
 mod engine_observability;
 mod episode_evidence;
+mod episode_review;
 mod focus;
 mod frontend_events;
 mod goal_analysis;

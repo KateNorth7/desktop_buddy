@@ -53,8 +53,13 @@ fn same_question(a: &Intervention, b: &Intervention) -> bool {
                 _ => false,
             })
 }
+/// A receipt for a change already made (an automatic completion with Undo) must reach the
+/// user; quiet mode postpones it instead of discarding it. Questions are still dropped.
+fn survives_quiet(p: &Intervention) -> bool {
+    p.kind == Kind::AutomaticCompletion
+}
 pub(super) fn enqueue(inner: &mut Inner, prompt: Intervention, now: i64) {
-    if super::quiet_mode(inner)
+    if (super::quiet_mode(inner) && !survives_quiet(&prompt))
         || prompt.expires_at <= now
         || matches!(prompt.kind, Kind::Midday | Kind::Research)
         || inner.companion.memory.seen.contains(&prompt.id)
@@ -230,8 +235,28 @@ pub(super) fn deliver(inner: &mut Inner, now: i64) -> Result<Option<Intervention
         inner.companion.view.intervention = None;
     }
     if super::quiet_mode(inner) {
-        queue.clear();
-        inner.companion.view.intervention = None;
+        queue.items.retain(|p| survives_quiet(&p.prompt));
+        // A receipt on screen when quiet mode starts is shown again afterwards.
+        if let Some(prompt) = inner
+            .companion
+            .view
+            .intervention
+            .take()
+            .filter(survives_quiet)
+        {
+            if !queue.items.iter().any(|p| p.prompt.id == prompt.id) {
+                queue.items.push(Pending {
+                    prompt,
+                    // Already counted as shown; it returns without a second reservation.
+                    delivered: true,
+                    consent: inner.last_consent_change,
+                    queued_at: now,
+                });
+            }
+        }
+        if queue.items.is_empty() {
+            queue.current_consent = None;
+        }
         inner.companion.queue = queue;
         return Ok(None);
     }
@@ -593,6 +618,40 @@ mod tests {
         assert!(deliver(&mut i, now).unwrap().is_none());
         i.status.dnd = false;
         assert!(deliver(&mut i, now + 1).unwrap().is_none());
+    }
+    #[test]
+    fn a_completion_receipt_waits_for_quiet_mode_to_end_instead_of_being_dropped() {
+        let state = state();
+        let mut i = state.inner.lock().unwrap();
+        let now = now();
+        i.storage
+            .connection
+            .execute(
+                "INSERT INTO work_events(evidence_key,title,app,occurred_at,source,status) VALUES('receipt','Join the call','zoom.us','2026-11-10T10:00:00Z','automatic_verified','completed')",
+                [],
+            )
+            .unwrap();
+        let id = i.storage.connection.last_insert_rowid();
+        let receipt = Intervention {
+            expires_at: now + 86400,
+            ..prompt(Kind::AutomaticCompletion, &format!("work-event-{id}"), now)
+        };
+        // Queued during Do not disturb, and shown on screen when quiet mode starts.
+        i.status.dnd = true;
+        enqueue(&mut i, receipt.clone(), now);
+        enqueue(&mut i, prompt(Kind::Movement, "stretch", now), now);
+        assert!(deliver(&mut i, now).unwrap().is_none());
+        i.status.dnd = false;
+        let shown = deliver(&mut i, now + 1).unwrap().unwrap();
+        assert_eq!(
+            shown.id, receipt.id,
+            "the receipt survived; the question did not"
+        );
+        i.status.dnd = true;
+        assert!(deliver(&mut i, now + 2).unwrap().is_none());
+        assert!(i.companion.view.intervention.is_none());
+        i.status.dnd = false;
+        assert_eq!(deliver(&mut i, now + 3).unwrap().unwrap().id, receipt.id);
     }
     #[test]
     fn all_card_types_have_one_explicit_priority_order() {

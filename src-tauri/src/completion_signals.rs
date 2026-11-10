@@ -8,7 +8,7 @@
 //! decisions use the foreground app, title, site and already read interface text.
 use crate::{
     commands::Inner,
-    companion::engine::{Intervention, Kind},
+    decisions::{Decision, DecisionKind},
     episode_evidence::{FORM_DONE, FORM_ERROR, IN_CALL, MESSAGE_SENT, PRE_JOIN},
     goal_understanding::FastKind,
     models::ActivitySnapshot,
@@ -26,8 +26,6 @@ const SITE_DWELL: Duration = Duration::from_secs(5);
 const EPISODE_END: Duration = Duration::from_secs(150);
 /// Attributed time an episode needs before closing the goal is offered.
 const EPISODE_MIN: Duration = Duration::from_secs(60);
-/// A goal offered for closing is not offered again sooner than this.
-const OFFER_COOLDOWN: Duration = Duration::from_secs(30 * 60);
 /// Samples further apart than this are a pause, not continuous time.
 const MAX_TICK: Duration = Duration::from_secs(15);
 
@@ -363,41 +361,38 @@ fn fresh_signals(inner: &mut Inner, sample: &ActivitySnapshot, text: Option<&str
         None => Fresh::default(),
     }
 }
-/// A visible result that cannot be tied to the goal's target is offered, never closed.
-fn offer_unlinked(inner: &mut Inner, goal: i64, now: Instant) -> Result<(), String> {
-    inner.goal_matching.signals.dwell = None;
-    if inner
-        .goal_matching
-        .signals
-        .offered
-        .get(&goal)
-        .is_some_and(|at| now.saturating_duration_since(*at) < OFFER_COOLDOWN)
-    {
-        return Ok(());
-    }
-    let Some(found) = inner
+/// The goal's current plan revision, or `None` when it is no longer open.
+fn revision(inner: &Inner, goal: i64) -> Result<Option<u64>, String> {
+    Ok(inner
         .storage
         .core_work_snapshot()?
         .goals
         .into_iter()
         .find(|g| g.id == goal && g.status == "open")
-    else {
+        .map(|g| g.plan.revision))
+}
+/// A visible result that cannot be tied to the goal's target is offered, never closed.
+fn offer_unlinked(inner: &mut Inner, goal: i64, now: Instant) -> Result<(), String> {
+    inner.goal_matching.signals.dwell = None;
+    let Some(revision) = revision(inner, goal)? else {
         return Ok(());
     };
-    let wall = chrono::Utc::now().timestamp();
-    let prompt = Intervention {
-        id: format!("signal-offer-{goal}-{}", found.plan.revision),
-        kind: Kind::GoalCompletion,
-        text: found.title.clone(),
-        confidence: 0.7,
-        goal_id: Some(goal),
-        plan_revision: Some(found.plan.revision),
-        step_id: None,
-        expires_at: wall + 3600,
-    };
-    note(inner, "outcome_probable", goal, prompt.confidence);
-    inner.goal_matching.signals.offered.insert(goal, now);
-    crate::companion::queue_prompt(inner, prompt, wall);
+    crate::decisions::submit_at(
+        inner,
+        Decision {
+            goal_id: Some(goal),
+            step_id: None,
+            kind: DecisionKind::ProposeComplete,
+            evidence: vec![],
+            reason: String::new(),
+            confidence: 0.7,
+            dedupe_key: format!("fast_offer:{goal}:{revision}"),
+            source: "fast_signal".into(),
+            text: None,
+            place: None,
+        },
+        now,
+    )?;
     Ok(())
 }
 #[derive(Clone)]
@@ -418,17 +413,8 @@ pub struct Tracker {
     last_tick: Option<Instant>,
     dwell: Option<Dwell>,
     episodes: HashMap<i64, Episode>,
-    offered: HashMap<i64, Instant>,
     /// Per window: whether the sent and submitted phrases were already visible.
     seen_text: HashMap<String, (bool, bool)>,
-}
-fn note(inner: &Inner, outcome: &str, goal: i64, confidence: f64) {
-    let _ = inner.storage.note_attempt(
-        crate::tracking_attempts::OUTCOME,
-        outcome,
-        Some(goal),
-        Some(confidence),
-    );
 }
 /// One collection tick. `attributed` is the goal the current sample counts toward, if any.
 pub(crate) fn observe(
@@ -492,7 +478,7 @@ pub(crate) fn observe(
         let (_, _, needed, linked) = candidate.unwrap_or((0, "", CALL_DWELL, false));
         if dwell.since >= needed {
             if linked {
-                close(inner, dwell.goal, dwell.signal, sample)?;
+                close(inner, dwell.goal, dwell.signal, sample, now)?;
             } else {
                 offer_unlinked(inner, dwell.goal, now)?;
             }
@@ -504,78 +490,43 @@ pub(crate) fn observe(
     }
     offer_ended_episodes(inner, sample, attributed, step, now)
 }
-/// Closes a goal whose own words name the observed event, keeping a durable Undo.
+/// Closes a goal whose result connects to its target, through the shared decision path,
+/// which keeps a durable Undo and respects the automatic-completion setting.
 fn close(
     inner: &mut Inner,
     goal: i64,
     signal: &str,
     sample: &ActivitySnapshot,
+    now: Instant,
 ) -> Result<(), String> {
-    let title: String = inner
-        .storage
-        .connection
-        .query_row("SELECT text FROM goals WHERE id=?1", [goal], |r| r.get(0))
-        .map_err(|e| e.to_string())?;
-    let plan = inner.storage.goal_plan(goal)?;
-    let now = chrono::Utc::now().timestamp();
-    let prompt = Intervention {
-        id: format!("signal-close-{goal}-{}", plan.revision),
-        kind: Kind::GoalCompletion,
-        text: title.clone(),
-        confidence: crate::work_journal::MIN_VERIFIED_CONFIDENCE,
-        goal_id: Some(goal),
-        plan_revision: Some(plan.revision),
-        step_id: None,
-        expires_at: now + 600,
-    };
-    if !inner.companion.view.preferences.automatic_completion {
-        note(
-            inner,
-            "automatic_completion_disabled",
-            goal,
-            prompt.confidence,
-        );
-        crate::companion::queue_prompt(inner, prompt, now);
+    let Some(revision) = revision(inner, goal)? else {
         return Ok(());
-    }
+    };
     let place = sample
         .browser
         .as_ref()
         .and_then(|b| b.domain.clone())
         .unwrap_or_else(|| sample.process_name.to_lowercase());
-    match inner.storage.automatically_complete(
-        &prompt,
-        &sample.process_name,
-        &format!("{signal}:{place}"),
-    ) {
-        Ok(event) => {
-            note(inner, "completion_applied", goal, prompt.confidence);
-            inner.goal_matching.signals.episodes.remove(&goal);
-            crate::companion::queue_prompt(
-                inner,
-                Intervention {
-                    id: format!("work-event-{event}"),
-                    kind: Kind::AutomaticCompletion,
-                    text: format!("Closed “{title}”."),
-                    confidence: 1.0,
-                    goal_id: Some(goal),
-                    plan_revision: None,
-                    step_id: None,
-                    expires_at: now + 86400,
-                },
-                now,
-            );
-            Ok(())
-        }
-        // An undone or already reviewed close is the user's decision; never repeat it.
-        Err(error)
-            if error == "Automatic completion was undone for this plan"
-                || error == "This receipt was already reviewed" =>
-        {
-            Ok(())
-        }
-        Err(error) => Err(error),
+    let applied = crate::decisions::submit_at(
+        inner,
+        Decision {
+            goal_id: Some(goal),
+            step_id: None,
+            kind: DecisionKind::AutoComplete,
+            evidence: vec![],
+            reason: String::new(),
+            confidence: crate::work_journal::MIN_VERIFIED_CONFIDENCE,
+            dedupe_key: format!("fast:{goal}:{revision}:{signal}:{place}"),
+            source: "fast_signal".into(),
+            text: None,
+            place: Some(sample.process_name.clone()),
+        },
+        now,
+    )?;
+    if applied == crate::decisions::Applied::Changed {
+        inner.goal_matching.signals.episodes.remove(&goal);
     }
+    Ok(())
 }
 /// Tracks attributed time per goal and, once the user has been away from a goal long
 /// enough, offers to close it. The user decides; "Not yet" simply lets it go.
@@ -622,45 +573,32 @@ fn offer_ended_episodes(
         .filter(|(_, e)| now.saturating_duration_since(e.last) >= EPISODE_END)
         .map(|(id, e)| (*id, e.clone()))
         .collect();
+    // With the model available, the end-of-episode review decides with a factual reason;
+    // the time-based offer is the fallback when it is not.
+    let reviewed = crate::episode_review::reviews_episodes(inner);
     for (goal, episode) in ended {
         inner.goal_matching.signals.episodes.remove(&goal);
-        let recently = inner
-            .goal_matching
-            .signals
-            .offered
-            .get(&goal)
-            .is_some_and(|at| now.saturating_duration_since(*at) < OFFER_COOLDOWN);
-        if episode.attributed < EPISODE_MIN || recently {
-            continue;
-        }
-        let Some(found) = inner
-            .storage
-            .core_work_snapshot()?
-            .goals
-            .into_iter()
-            .find(|g| g.id == goal && g.status == "open")
-        else {
-            continue;
-        };
-        // A goal with unfinished steps is offered step by step elsewhere, not closed whole.
-        if found.plan.steps.iter().any(|s| !s.done) {
+        if episode.attributed < EPISODE_MIN || reviewed {
             continue;
         }
         let wall = chrono::Utc::now().timestamp();
         let started = wall - now.saturating_duration_since(episode.started).as_secs() as i64;
-        let prompt = Intervention {
-            id: format!("episode-close-{goal}-{started}"),
-            kind: Kind::GoalCompletion,
-            text: found.title.clone(),
-            confidence: 0.7,
-            goal_id: Some(goal),
-            plan_revision: Some(found.plan.revision),
-            step_id: None,
-            expires_at: wall + 3600,
-        };
-        note(inner, "completion_proposed", goal, prompt.confidence);
-        inner.goal_matching.signals.offered.insert(goal, now);
-        crate::companion::queue_prompt(inner, prompt, wall);
+        crate::decisions::submit_at(
+            inner,
+            Decision {
+                goal_id: Some(goal),
+                step_id: None,
+                kind: DecisionKind::ProposeComplete,
+                evidence: vec![],
+                reason: String::new(),
+                confidence: 0.7,
+                dedupe_key: format!("episode_time:{goal}:{started}"),
+                source: "episode_time".into(),
+                text: None,
+                place: None,
+            },
+            now,
+        )?;
     }
     Ok(())
 }

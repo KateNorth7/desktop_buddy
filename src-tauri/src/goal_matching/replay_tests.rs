@@ -118,6 +118,22 @@ fn replay(case: &Case) -> Replay {
     crate::tracking::allow_notifications(&mut inner);
     inner.status.anthropic_configured = true;
     inner.status.mock_ai = false;
+    inner.companion.view.preferences.screen_task_detection = true;
+    // The review oracle knows each stored window's real goal by app and title.
+    let places: HashMap<(String, String), Option<i64>> = case
+        .windows
+        .iter()
+        .map(|w| {
+            (
+                (
+                    w.app.to_lowercase(),
+                    crate::browser::minimize_title(&w.title),
+                ),
+                w.goal.as_ref().map(|key| ids[key]),
+            )
+        })
+        .collect();
+    let mut finished = false;
     // The oracle knows each window's real goal by its metadata.
     let truth: HashMap<String, Option<i64>> = case
         .windows
@@ -165,6 +181,54 @@ fn replay(case: &Case) -> Replay {
                 .and_then(|id| id.parse::<i64>().ok())
                 .filter(|_| attribution.confidence >= crate::relevance::THRESHOLD);
             crate::completion_signals::observe(&mut inner, &a, true, counted, instant).unwrap();
+            // A perfect episode reviewer: right goal per window, and the result only once
+            // the finishing window has actually happened.
+            if let Some(job) = crate::episode_review::claim(&mut inner, instant, wall).unwrap() {
+                let windows = job
+                    .windows
+                    .iter()
+                    .enumerate()
+                    .map(|(index, w)| {
+                        let goal = places
+                            .get(&(w.app.clone(), w.title.clone()))
+                            .copied()
+                            .flatten();
+                        crate::episode_review::WindowAnswer {
+                            index,
+                            goal_id: goal,
+                            confidence: if goal.is_some() { 0.9 } else { 0.2 },
+                        }
+                    })
+                    .collect::<Vec<_>>();
+                let evidence: Vec<usize> = windows
+                    .iter()
+                    .filter(|w| w.goal_id == Some(target))
+                    .map(|w| w.index)
+                    .collect();
+                let outcomes = if finished && !evidence.is_empty() {
+                    vec![crate::episode_review::OutcomeAnswer {
+                        goal_id: target,
+                        step_id: None,
+                        status: "achieved".into(),
+                        outcome: "finished it".into(),
+                        evidence,
+                        confidence: 0.9,
+                    }]
+                } else {
+                    vec![]
+                };
+                crate::episode_review::finish(
+                    &mut inner,
+                    &job,
+                    Ok(crate::episode_review::Answer {
+                        windows,
+                        outcomes,
+                        new_goal: None,
+                    }),
+                    instant,
+                )
+                .unwrap();
+            }
             if offered_at.is_none() && offered(&inner, target) {
                 offered_at = Some(clock);
             }
@@ -208,6 +272,7 @@ fn replay(case: &Case) -> Replay {
             }
         }
         if window.done {
+            finished = true;
             done_at = Some(clock);
         }
     }
@@ -256,7 +321,7 @@ fn offered(inner: &crate::commands::Inner, goal: i64) -> bool {
         .storage
         .connection
         .query_row(
-            "SELECT EXISTS(SELECT 1 FROM tracking_attempts WHERE outcome='completion_proposed' AND goal_id=?1)",
+            "SELECT EXISTS(SELECT 1 FROM tracking_attempts WHERE outcome IN ('completion_proposed','outcome_probable') AND goal_id=?1)",
             [goal],
             |r| r.get(0),
         )
