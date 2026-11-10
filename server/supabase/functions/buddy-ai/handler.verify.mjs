@@ -1,21 +1,26 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import {
-  actualMicrousd,
-  createGateway,
-  validateMessages,
-} from "./handler.ts";
+import { actualMicrousd, createGateway, validateMessages } from "./handler.ts";
 
 const jwt = "aaa.bbb.ccc";
 const user = "11111111-1111-4111-8111-111111111111";
 const chat = () => ({
   model: "claude-haiku-5-5",
   max_tokens: 1024,
-  system: [{ type: "text", text: "Synthetic instructions", cache_control: { type: "ephemeral" } }],
+  system: [
+    {
+      type: "text",
+      text: "Synthetic instructions",
+      cache_control: { type: "ephemeral" },
+    },
+  ],
   messages: [{ role: "user", content: "Summarize the fictional checklist" }],
   output_config: {
     effort: "low",
-    format: { type: "json_schema", schema: { type: "object", additionalProperties: false } },
+    format: {
+      type: "json_schema",
+      schema: { type: "object", additionalProperties: false },
+    },
   },
   fallbacks: "default",
 });
@@ -23,7 +28,14 @@ const search = () => ({
   model: "claude-haiku-5-5",
   max_tokens: 2048,
   messages: [{ role: "user", content: "official application workflow" }],
-  tools: [{ type: "web_search_20260209", name: "web_search", max_uses: 2, allowed_callers: ["direct"] }],
+  tools: [
+    {
+      type: "web_search_20260209",
+      name: "web_search",
+      max_uses: 2,
+      allowed_callers: ["direct"],
+    },
+  ],
   output_config: { effort: "low" },
   fallbacks: "default",
 });
@@ -38,6 +50,9 @@ function fixture({
   reserved = true,
   providerStatus = 200,
   settleStatus = 200,
+  recordStatus = 200,
+  recorded = { blocked: false, alert: false },
+  telegram = false,
 } = {}) {
   const calls = [];
   const env = {
@@ -45,6 +60,12 @@ function fixture({
     SUPABASE_SERVICE_ROLE_KEY: "server-role-fixture",
     SUPABASE_ANON_KEY: "public-anon-fixture",
     ANTHROPIC_API_KEY: "private-anthropic-fixture",
+    ...(telegram
+      ? {
+          TELEGRAM_BOT_TOKEN: "123456:fixture-token",
+          TELEGRAM_ALERT_CHAT_ID: "-100200",
+        }
+      : {}),
   };
   const fetch = async (url, options) => {
     calls.push({ url, options });
@@ -56,6 +77,10 @@ function fixture({
     if (url.endsWith("/rpc/buddy_reserve_ai")) return Response.json(reserved);
     if (url.endsWith("/rpc/buddy_settle_ai"))
       return Response.json(true, { status: settleStatus });
+    if (url.endsWith("/rpc/buddy_record_ai_usage"))
+      return Response.json(recorded, { status: recordStatus });
+    if (url.startsWith("https://api.telegram.org/"))
+      return Response.json({ ok: true });
     if (url.includes("/v1/models/"))
       return Response.json({
         id: "claude-haiku-5-5",
@@ -77,11 +102,7 @@ function fixture({
   };
   return { calls, handler: createGateway({ env: (name) => env[name], fetch }) };
 }
-function request(
-  path = "/anthropic/v1/messages",
-  body = chat(),
-  token = jwt,
-) {
+function request(path = "/anthropic/v1/messages", body = chat(), token = jwt) {
   return new Request(
     "https://project.supabase.co/functions/v1/buddy-ai" + path,
     {
@@ -98,7 +119,7 @@ test("a verified user is billed atomically before a fixed upstream request and s
   const { handler, calls } = fixture();
   const response = await handler(request());
   assert.equal(response.status, 200);
-  assert.equal(calls.length, 4);
+  assert.equal(calls.length, 5);
   assert.equal(
     calls[1].url,
     "https://project.supabase.co/rest/v1/rpc/buddy_reserve_ai",
@@ -133,7 +154,10 @@ test("costs are estimated from the request and settled from reported usage in mi
   // 1000 input × $0.10/M + 200 cache writes × $0.125/M + 500 cache reads × $0.01/M + 300 output × $0.50/M
   assert.equal(actualMicrousd("claude-haiku-5-5", usage), 100 + 25 + 5 + 150);
   assert.equal(
-    actualMicrousd("claude-haiku-5-5", { ...usage, server_tool_use: { web_search_requests: 2 } }),
+    actualMicrousd("claude-haiku-5-5", {
+      ...usage,
+      server_tool_use: { web_search_requests: 2 },
+    }),
     280 + 20000,
   );
   assert.equal(actualMicrousd("claude-haiku-5-5", undefined), 0);
@@ -169,12 +193,25 @@ test("web search runs through the same route with a bounded tool and the search 
   for (const tools of [
     [{ type: "web_search_20260209", name: "web_search", max_uses: 10 }],
     [{ type: "web_fetch_20260209", name: "web_fetch" }],
-    [{ type: "web_search_20260209", name: "web_search", max_uses: 1 }, { type: "web_search_20260209", name: "web_search", max_uses: 1 }],
-    [{ type: "web_search_20260209", name: "web_search", max_uses: 1, allowed_domains: ["example.com"] }],
+    [
+      { type: "web_search_20260209", name: "web_search", max_uses: 1 },
+      { type: "web_search_20260209", name: "web_search", max_uses: 1 },
+    ],
+    [
+      {
+        type: "web_search_20260209",
+        name: "web_search",
+        max_uses: 1,
+        allowed_domains: ["example.com"],
+      },
+    ],
     [{ name: "custom", description: "x", input_schema: { type: "object" } }],
   ]) {
     const bad = fixture();
-    assert.equal((await bad.handler(request(undefined, { ...search(), tools }))).status, 400);
+    assert.equal(
+      (await bad.handler(request(undefined, { ...search(), tools }))).status,
+      400,
+    );
     assert.equal(bad.calls.length, 1);
   }
 });
@@ -230,7 +267,11 @@ test("image input permits bounded base64 images, never provider-side remote imag
             { type: "text", text: "What is visible?" },
             {
               type: "image",
-              source: { type: "base64", media_type: "image/jpeg", data: "YQ==" },
+              source: {
+                type: "base64",
+                media_type: "image/jpeg",
+                data: "YQ==",
+              },
             },
           ],
         },
@@ -258,7 +299,10 @@ test("health checks reach the provider once, filter private fields and are not s
   assert.equal(response.status, 200);
   assert.deepEqual(await response.json(), { id: "claude-haiku-5-5" });
   assert.equal(f.calls.length, 3);
-  assert.equal(f.calls[2].url, "https://api.anthropic.com/v1/models/claude-haiku-5-5");
+  assert.equal(
+    f.calls[2].url,
+    "https://api.anthropic.com/v1/models/claude-haiku-5-5",
+  );
   assert.equal(JSON.parse(f.calls[1].options.body).p_microusd, 0);
 });
 test("provider failures are sanitized, never replayed and keep the reserved estimate", async () => {
@@ -272,5 +316,92 @@ test("a failed settlement does not fail the delivered response", async () => {
   const f = fixture({ settleStatus: 500 });
   const response = await f.handler(request());
   assert.equal(response.status, 200);
-  assert.equal(f.calls.length, 4);
+  // Settlement, then the per-user usage record, both after the provider answered.
+  assert.equal(f.calls.length, 5);
+});
+
+test("each response is recorded per user with tokens and cost, and content never leaves", async () => {
+  const { handler, calls } = fixture();
+  const response = await handler(request());
+  assert.equal(response.status, 200);
+  const record = calls.find((c) =>
+    c.url.endsWith("/rpc/buddy_record_ai_usage"),
+  );
+  const body = JSON.parse(record.options.body);
+  assert.deepEqual(
+    {
+      user: body.p_user,
+      route: body.p_route,
+      model: body.p_model,
+      input: body.p_input,
+      output: body.p_output,
+      write: body.p_cache_write,
+      read: body.p_cache_read,
+      searches: body.p_searches,
+      cost: body.p_microusd,
+    },
+    {
+      user,
+      route: "ai",
+      model: "claude-haiku-5-5",
+      input: 1000,
+      output: 300,
+      write: 200,
+      read: 500,
+      searches: 0,
+      cost: actualMicrousd("claude-haiku-5-5", usage),
+    },
+  );
+  assert.ok(!record.options.body.includes("fictional checklist"));
+  assert.ok(!calls.some((c) => c.url.startsWith("https://api.telegram.org/")));
+});
+test("a newly blocked user alerts the developers once, with counters and no content", async () => {
+  const blocked = {
+    blocked: true,
+    alert: true,
+    reason: "spend_spike",
+    today_microusd: 450000,
+    average_microusd: 20000,
+    calls_10min: 12,
+  };
+  const { handler, calls } = fixture({ recorded: blocked, telegram: true });
+  const response = await handler(request());
+  assert.equal(response.status, 200, "the delivered answer is not withdrawn");
+  const alerts = calls.filter((c) =>
+    c.url.startsWith("https://api.telegram.org/"),
+  );
+  assert.equal(alerts.length, 1);
+  assert.equal(
+    alerts[0].url,
+    "https://api.telegram.org/bot123456:fixture-token/sendMessage",
+  );
+  const message = JSON.parse(alerts[0].options.body);
+  assert.equal(message.chat_id, "-100200");
+  assert.ok(
+    message.text.includes(user) && message.text.includes("spend_spike"),
+  );
+  assert.ok(
+    message.text.includes("USD 0.45") && message.text.includes("USD 0.02"),
+  );
+  assert.ok(!message.text.includes("fictional checklist"));
+  // Without a configured bot nothing is sent, and an already blocked user is not re-alerted.
+  const quiet = fixture({ recorded: blocked });
+  await quiet.handler(request());
+  assert.ok(
+    !quiet.calls.some((c) => c.url.startsWith("https://api.telegram.org/")),
+  );
+  const again = fixture({
+    recorded: { ...blocked, alert: false },
+    telegram: true,
+  });
+  await again.handler(request());
+  assert.ok(
+    !again.calls.some((c) => c.url.startsWith("https://api.telegram.org/")),
+  );
+});
+test("a failed usage record does not fail the delivered response", async () => {
+  const { handler } = fixture({ recordStatus: 500 });
+  const response = await handler(request());
+  assert.equal(response.status, 200);
+  assert.ok((await response.text()).includes("Synthetic answer"));
 });

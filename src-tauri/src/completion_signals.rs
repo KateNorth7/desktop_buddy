@@ -9,6 +9,7 @@
 use crate::{
     commands::Inner,
     companion::engine::{Intervention, Kind},
+    episode_evidence::{FORM_DONE, FORM_ERROR, IN_CALL, MESSAGE_SENT, PRE_JOIN},
     goal_understanding::FastKind,
     models::ActivitySnapshot,
 };
@@ -236,19 +237,9 @@ fn mail_window(a: &ActivitySnapshot) -> bool {
     .iter()
     .any(|name| app.contains(name))
 }
-/// Confirmation phrases mail clients show once a message has left, in English and Russian.
+/// Whether a mail client shows that a message has left.
 fn email_sent(text: &str) -> bool {
-    let text = text.to_lowercase();
-    [
-        "message sent",
-        "email sent",
-        "your message has been sent",
-        "письмо отправлено",
-        "сообщение отправлено",
-        "ваше письмо отправлено",
-    ]
-    .iter()
-    .any(|phrase| text.contains(phrase))
+    crate::episode_evidence::says(text, MESSAGE_SENT)
 }
 fn site_matches(a: &ActivitySnapshot, target: &str) -> bool {
     let Some(domain) = a
@@ -268,43 +259,6 @@ fn site_matches(a: &ActivitySnapshot, target: &str) -> bool {
             .any(|label| label == target || label.trim_end_matches("-app") == target)
     }
 }
-/// Phrases a meeting shows before joining, and once in the call, in English and Russian.
-const PRE_JOIN: &[&str] = &[
-    "join now",
-    "ask to join",
-    "ready to join",
-    "присоединиться",
-    "готовы присоединиться",
-];
-const IN_CALL: &[&str] = &[
-    "leave call",
-    "end call",
-    "leave meeting",
-    "покинуть звонок",
-    "завершить звонок",
-    "выйти из встречи",
-];
-/// A submitted form's confirmation, and signs that the submission failed.
-const FORM_DONE: &[&str] = &[
-    "thank you for applying",
-    "application submitted",
-    "application has been submitted",
-    "thanks for submitting",
-    "submission received",
-    "successfully submitted",
-    "your response has been recorded",
-    "заявка отправлена",
-    "спасибо за отклик",
-    "ответ записан",
-];
-const FORM_ERROR: &[&str] = &[
-    "error",
-    "required field",
-    "please correct",
-    "something went wrong",
-    "ошибка",
-    "обязательное поле",
-];
 fn says(text: Option<&str>, phrases: &[&str]) -> bool {
     text.is_some_and(|t| phrases.iter().any(|p| t.contains(p)))
 }
