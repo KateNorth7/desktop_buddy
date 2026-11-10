@@ -1,5 +1,9 @@
 # sumi session handoff
 
+## Goal understanding contract — 10 November 2026
+
+`claude/tracking-diagnostics` rebased onto fork `main` at `f40ef7b` (published 0.51.0, Claude Haiku 5.5 default). Step 0 of `docs/GOAL_UNDERSTANDING_PROMPTS.md` added the shared contract: `goal_understanding.rs` (type, `goal_understandings` table keyed by goal and plan revision, read/save, purged by Clear local history, cascades with the goal), `episode_evidence.rs` (types and empty reads; storage is Prompt B's choice) and `decisions.rs` (one decision type and a `submit` stub that changes nothing). No behaviour change. The plan now holds the branch names, the file ownership map and per-prompt handoff files. The branch is not pushed: `rev-oss` has read-only access to `KateNorth7/desktop_buddy` (403), so A, B and C cannot start from the fork yet.
+
 ## Rebased onto 0.51.0 with Claude — 9 November 2026
 
 `claude/tracking-diagnostics` was rebased onto fork `main` at `8f678cf` (Claude Messages API, Claude web search, $1 shared daily built-in budget). Only the handoff conflicted; the replay test now sets `anthropic_configured`. Evidence on the rebased branch: `cargo test --locked` 802 passed / 5 ignored; Clippy `-D warnings` and `cargo fmt --check` clean; `npm test` 349 passed, `npm run lint` and `npm run build` clean. More episode questions (stage 2) spend more of the shared $1 daily budget; watch `provider_rate_limit` in `tracking_attempts`.

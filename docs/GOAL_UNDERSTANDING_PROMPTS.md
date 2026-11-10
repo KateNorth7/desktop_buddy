@@ -2,11 +2,22 @@
 
 ## Order
 
-1. **Step 0 — contract (one developer, about half a day).** Run the contract prompt below on `claude/tracking-diagnostics` (rebased onto 0.51.0). It adds only shared types, empty tables, function signatures with stubbed bodies and this file's ownership map, then commits and pushes. Nothing else starts before it lands.
-2. **Prompts A, B and C in parallel**, each on its own branch cut from the contract commit, each touching only the files it owns.
+1. **Step 0 — contract: done.** Commit "Add shared contract for goal understanding" on `claude/tracking-diagnostics`, on top of the published 0.51.0 (Claude Haiku 5.5 default). It adds `goal_understanding.rs`, `episode_evidence.rs` and `decisions.rs` with shared types, the empty `goal_understandings` table and safe stubs, registers them in `lib.rs` and `storage.rs`, and changes no behaviour. The branch must be pushed to the fork before A, B and C start.
+2. **Prompts A, B and C in parallel**, each on its own branch cut from the contract commit, each touching only the files it owns (map below).
 3. **Integration (one developer).** Merge A, B and C, resolve conflicts, run the full suites, the scorecard, the opt-in real-model benchmark and the live rehearsal, update the privacy page, record results. Only after the scorecard passes and live behaviour is confirmed is an installer built.
 
 No prompt builds installers, bumps the version or publishes a release. Commit in small milestones; push the working branch to the fork `KateNorth7/desktop_buddy` only.
+
+## Branches and file ownership
+
+| Prompt      | Branch                               | Owns                                                                                                                                                                                                                                                          |
+| ----------- | ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A           | `goal-understanding/a-understanding` | `src-tauri/src/goal_understanding.rs` (+ `goal_understanding/`), `completion_signals.rs` (+ `completion_signals/`), the goal-analysis trigger in `goal_analysis.rs` and `automatic_goals.rs`, `src-tauri/test-data/understanding-benchmark.json`              |
+| B           | `goal-understanding/b-evidence`      | `src-tauri/src/episode_evidence.rs` (+ `episode_evidence/`), evidence storage in `activity_review.rs` and `activity_review/`, evidence capture hooks in `companion/screen_context.rs`, `server/supabase/**`, `docs/SUPABASE_GATEWAY.md`                       |
+| C           | `goal-understanding/c-decisions`     | `src-tauri/src/decisions.rs` (+ `decisions/`), `semantic_observation.rs` (+ dir), `unplanned_work.rs` (+ dir), `goal_matching.rs` and `goal_matching/`, `companion/mod.rs`, `companion/queue.rs`, `src/companion/**`, `src-tauri/test-data/replay-cases.json` |
+| Integration | `goal-understanding/integration`     | everything above when merging, `docs/privacy.html`, `docs/SESSION_HANDOFF.md`                                                                                                                                                                                 |
+
+Shared files (`lib.rs`, `storage.rs`, `commands.rs`, `models.rs`, shared types in the three contract files) change only by small additive edits that the prompt states in its handoff; never reformat or reorder them. A change to another prompt's contract type is a stop-and-ask point. Each prompt records its results in `docs/handoff/<a|b|c>-goal-understanding.md`, not in `SESSION_HANDOFF.md`; integration merges them there.
 
 ## Shared rules (apply to every prompt)
 
@@ -36,18 +47,9 @@ Do not invent results. Mocked tests are not proof of model understanding; a live
 
 ---
 
-## Step 0 — contract prompt
+## Step 0 — contract (done)
 
-```
-Create the shared contract for the goal understanding work described in docs/GOAL_UNDERSTANDING_PROMPTS.md. Follow its shared rules.
-
-Add only interfaces, empty storage and stubs; no behaviour change, all existing tests green.
-
-1. Types (new module src-tauri/src/understanding_contract.rs or inside the future owners' modules, re-exported): GoalUnderstanding { goal_id, plan_revision, meaning, outcomes: Vec<String>, entities: Vec<String>, kind: Option<FastKind>, targets: Vec<String>, uncertainty, provenance }; EpisodeEvidence { at, context_key, app, site, excerpt_ref, result_signal, goal_id, step_id, provenance, consent_revision }; EpisodeSummary; Decision { goal_id, step_id, kind (propose_complete | auto_complete | propose_goal | propose_step | attribute | none), evidence refs, reason, confidence, dedupe_key }.
-2. Storage: empty tables with retention, goal-deletion cascade and Clear local history hooks: goal_understandings (A), episode_evidence and episode_summaries (B, extending the existing encrypted review_evidence/review_contexts where they fit instead of duplicating them).
-3. Function signatures with todo-free stub bodies returning safe defaults: goal_understanding::current(goal) -> Option<GoalUnderstanding>; episode_evidence::for_episode(range) -> Vec<EpisodeEvidence>; decisions::submit(inner, Decision) -> Result<Applied>, which the stub routes to today's existing mutation paths unchanged.
-4. Write the file ownership map into this document (who owns which files in A, B and C) and the exact branch names. Commit "Add shared contract for goal understanding" and push.
-```
+The contract is in the repository; there is nothing to run. Read the three contract files before starting A, B or C.
 
 ---
 
@@ -66,7 +68,7 @@ Goal: sumi understands each goal the way a human assistant would, from the goal 
 3. Safe fast paths (completion_signals.rs). Fix the unsafe assumptions: one open email goal does not make every sent email relevant; one open call goal does not make every meeting the requested one. Close only when the result connects to the target from the understanding: the relevant recipient or subject for email, the relevant meeting (title, participants or link) for calls, the requested site (not search results) for visits, the relevant form for submissions. A pre-join screen, a draft, an old or quoted confirmation, another recipient, another meeting, a form error never close anything. Without a connectable target, propose instead of closing.
 4. Mixed languages: a goal in one language with an interface in another behaves identically.
 5. Tests with a scripted provider: storage, debounce, revision invalidation, migration, consent, and every negative fast-path case above; plus an opt-in real-model benchmark file (like test-data/matching-cases.json, real HTTP only when explicitly run) with varied goals in different wording and languages and meaning-based expected outcomes.
-Run targeted tests per milestone; at the end the full suites from AGENTS.md. Record evidence and limits in docs/SESSION_HANDOFF.md. Push your branch.
+Run targeted tests per milestone; at the end the full suites from AGENTS.md. Record evidence and limits in docs/handoff/<your prompt>-goal-understanding.md. Push your branch.
 ```
 
 ---
@@ -89,7 +91,7 @@ Part 2 — usage accounting in the Supabase gateway (server/supabase).
 8. Spike detection: block a user until the end of the UTC day (or until manually unblocked) and alert the developers when today's spend exceeds three times their 7-day average and $0.10, or calls in 10 minutes exceed a configurable ceiling. Alerts go to a developer Telegram chat through a bot token kept as a Supabase secret (fallback: email); include only the user ID, counters and thresholds. Add a manual unblock function.
 9. A read-only view or SQL report "spend per user per day" for developers, and docs in docs/SUPABASE_GATEWAY.md, including how to deploy and how to set a monthly hard limit in the Anthropic Console as a backstop (the Console has no daily limit).
 10. Tests: gateway handler tests for caps, settlement, spike detection, block and unblock; Rust tests for evidence limits, persistence, purge and consent.
-Do not deploy the gateway; prepare migrations and instructions. At the end run the full suites from AGENTS.md plus npm run test:gateway. Record evidence in docs/SESSION_HANDOFF.md. Push your branch.
+Do not deploy the gateway; prepare migrations and instructions. At the end run the full suites from AGENTS.md plus npm run test:gateway. Record evidence in docs/handoff/b-goal-understanding.md. Push your branch.
 ```
 
 ---
@@ -107,7 +109,7 @@ Implement Prompt C from docs/GOAL_UNDERSTANDING_PROMPTS.md on your own branch cu
 6. Unlisted work: substantial understood work outside the goal list is offered as a new task; already finished work is offered as completed only when evidence verification passes; brief episodes do not interrupt. Messengers (Telegram, WhatsApp and others) are judged by visible content and goal meaning, never excluded by app category; never infer hidden conversations.
 7. A clarifying question only when existing cards cannot express it: a card with up to three options plus "Other", in both the workspace and the companion window, asked at most once per goal revision; the answer updates the stored understanding. New visual baselines need the owner's review.
 8. Tests with a scripted provider. Positive: availability submitted through a form, a context-supported decline, a referral path, related work across email, browser and a messenger, goal and step completion, a new task from an incoming message, useful unlisted work, mixed languages, uncertain time later linked by new evidence. Negative: pre-join screen, a different meeting, a draft, another recipient, an old or quoted confirmation, a form error, search results instead of the site, partial work, an unrelated conversation, a goal edited during analysis, revoked consent, an excluded window, a locked session, repeated evidence, a previously rejected proposal, an undone completion. Measure separately: attribution, false proposals, false automatic closures, missed outcomes, duplicate prompts, latency, provider calls and cost.
-At the end run the full suites from AGENTS.md. Record evidence and limits in docs/SESSION_HANDOFF.md. Push your branch.
+At the end run the full suites from AGENTS.md. Record evidence and limits in docs/handoff/<your prompt>-goal-understanding.md. Push your branch.
 ```
 
 ---
@@ -121,5 +123,5 @@ Integrate branches A, B and C from docs/GOAL_UNDERSTANDING_PROMPTS.md into one b
 3. Run the opt-in real-model benchmark on the configured model and record accuracy, latency, calls and cost per case.
 4. Live rehearsal on a locally signed macOS build (internal signing per AGENTS.md, version above the latest release only in a temporary config): foreground app -> collection -> analysis -> intervention -> acceptance or verified completion -> restart persistence. Windows through CI and, if available, a live Windows run. Ask the user before installing over their app.
 5. Update docs/privacy.html and the privacy source check for the new stored items (understanding, episode evidence and summaries, usage accounting) and their lifecycle.
-6. Record source state, checks, scorecard, benchmark and live results, and every unverified item in docs/SESSION_HANDOFF.md. Report briefly: what changed, what was verified, what remains unverified. No installer for release until the user confirms.
+6. Merge docs/handoff/*-goal-understanding.md into docs/SESSION_HANDOFF.md, then record source state, checks, scorecard, benchmark and live results, and every unverified item there. Report briefly: what changed, what was verified, what remains unverified. No installer for release until the user confirms.
 ```
