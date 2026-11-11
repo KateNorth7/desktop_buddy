@@ -48,7 +48,7 @@ interface GoalTime {
   steps?: Array<{ step_id: string; seconds: number }>;
 }
 /** Recorded activity for a day and how much of it reached a goal. */
-export interface TrackingDay {
+interface TrackingDay {
   recorded_seconds: number;
   attributed_seconds: number;
   waiting_seconds: number;
