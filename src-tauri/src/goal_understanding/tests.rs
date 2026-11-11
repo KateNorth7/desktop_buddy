@@ -380,3 +380,19 @@ fn what_the_user_said_about_the_goal_in_chat_is_part_of_its_context() {
     };
     assert!(!chat[0]["text"].as_str().unwrap().contains(other));
 }
+
+#[test]
+fn a_goal_settles_and_becomes_due_without_the_shared_lane_and_nothing_is_reserved() {
+    let (state, ids) = setup(&["Тест: написать Анне письмо-благодарность"]);
+    let mut i = state.inner.lock().unwrap();
+    let base = Instant::now();
+    // The background tick checks readiness before it waits for the lane, so the
+    // settling period runs even while other calls hold the lane.
+    assert!(!due(&mut i, base), "first sighting waits");
+    assert!(due(&mut i, base + DEBOUNCE));
+    assert!(due(&mut i, base + DEBOUNCE), "checking reserves nothing");
+    assert!(codes(&i).is_empty());
+    let job = claim(&mut i, base + DEBOUNCE).unwrap().unwrap();
+    assert_eq!(job.goal_id, ids[0]);
+    assert!(!due(&mut i, base + DEBOUNCE), "one request at a time");
+}

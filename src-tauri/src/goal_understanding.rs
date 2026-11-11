@@ -61,6 +61,8 @@ const DEBOUNCE: Duration = Duration::from_secs(20);
 const MIN_INTERVAL: Duration = Duration::from_secs(30);
 /// A failed request for one goal revision waits this long, then gives up after three tries.
 const RETRY_AFTER: Duration = Duration::from_secs(5 * 60);
+/// How long a due goal waits for the shared AI lane, as goal matching does.
+const LANE_WAIT: Duration = Duration::from_secs(45);
 const MAX_ATTEMPTS: u32 = 3;
 /// At or above this, the interpretation is journaled as uncertain.
 const UNCERTAIN: f64 = 0.6;
@@ -207,6 +209,7 @@ pub struct Runtime {
     attempts: HashMap<(i64, String), (u32, Instant)>,
     last_request: Option<Instant>,
     in_flight: bool,
+    lane_waiting: bool,
 }
 
 /// One interpretation request, prepared under the state lock and sent without it.
@@ -240,9 +243,14 @@ fn allowed(inner: &Inner) -> bool {
             .user_settings()
             .is_ok_and(|s| s.onboarding.completed)
 }
-/// Picks the next goal to understand: Today first, then the newest, each only after its
-/// edits have settled and within the retry rules. Nothing is reserved until a job exists.
-pub(crate) fn claim(inner: &mut Inner, now: Instant) -> Result<Option<Job>, String> {
+/// The next goal ready to be understood: Today first, then the newest, each only after its
+/// edits have settled and within the retry rules. Returns the goal and the revision key it was
+/// seen under; only marks when that revision was first seen.
+fn next_goal(
+    inner: &mut Inner,
+    snapshot: &crate::core::CoreSnapshot,
+    now: Instant,
+) -> Result<Option<(i64, String)>, String> {
     if !allowed(inner) || inner.goal_understanding.in_flight {
         return Ok(None);
     }
@@ -253,14 +261,12 @@ pub(crate) fn claim(inner: &mut Inner, now: Instant) -> Result<Option<Job>, Stri
     {
         return Ok(None);
     }
-    let snapshot = inner.storage.core_work_snapshot()?;
     let mut open: Vec<&CoreGoal> = snapshot
         .goals
         .iter()
         .filter(|g| g.status == "open")
         .collect();
     open.sort_by_key(|g| (!snapshot.today.contains(&g.id), std::cmp::Reverse(g.id)));
-    let mut chosen = None;
     for goal in open {
         if inner.storage.understanding_for(goal)?.is_some() {
             continue;
@@ -279,12 +285,25 @@ pub(crate) fn claim(inner: &mut Inner, now: Instant) -> Result<Option<Job>, Stri
                 continue;
             }
         }
-        chosen = Some((goal.id, key));
-        break;
+        return Ok(Some(key));
     }
-    let Some((id, key)) = chosen else {
+    Ok(None)
+}
+/// Whether a goal is ready to be understood now. Nothing is reserved.
+fn due(inner: &mut Inner, now: Instant) -> bool {
+    inner
+        .storage
+        .core_work_snapshot()
+        .and_then(|snapshot| next_goal(inner, &snapshot, now))
+        .is_ok_and(|next| next.is_some())
+}
+/// Picks the next goal to understand. Nothing is reserved until a job exists.
+pub(crate) fn claim(inner: &mut Inner, now: Instant) -> Result<Option<Job>, String> {
+    let snapshot = inner.storage.core_work_snapshot()?;
+    let Some(key) = next_goal(inner, &snapshot, now)? else {
         return Ok(None);
     };
+    let id = key.0;
     let Some(goal) = snapshot.goals.iter().find(|g| g.id == id) else {
         return Ok(None);
     };
@@ -480,11 +499,28 @@ async fn request(state: &crate::commands::AppState, job: &Job) -> Result<Answer,
     .await
 }
 /// Background tick: understands at most one goal, never holding the state lock across
-/// the network call and never waiting for the shared AI lane.
+/// the network call. A due goal waits for the shared AI lane (one waiter at a time) instead
+/// of losing every turn to the observation and review calls that hold it.
 pub async fn run_due(app: &tauri::AppHandle) {
     use tauri::Manager;
     let state = app.state::<crate::commands::AppState>();
-    let Ok(_lane) = state.companion_request.try_lock() else {
+    {
+        let Ok(mut inner) = state.inner.lock() else {
+            return;
+        };
+        if inner.goal_understanding.lane_waiting || !due(&mut inner, Instant::now()) {
+            return;
+        }
+        inner.goal_understanding.lane_waiting = true;
+    }
+    let lane = tokio::time::timeout(LANE_WAIT, state.companion_request.lock()).await;
+    if let Ok(mut inner) = state.inner.lock() {
+        inner.goal_understanding.lane_waiting = false;
+        if lane.is_err() {
+            note(&inner, "skipped_lane_busy", None);
+        }
+    }
+    let Ok(_lane) = lane else {
         return;
     };
     let job = state

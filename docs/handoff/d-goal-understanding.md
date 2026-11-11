@@ -32,3 +32,16 @@ Branch `goal-understanding/d-hardening`, on top of `goal-understanding/c-decisio
 - Settings text, the Privacy preview and `docs/privacy.html` describe this.
 - Tests: Vision on the existing fixture (macOS), Windows OCR on the same fixture (Windows CI only), consent and thin-text gates. `cargo test` 833 passed / 7 ignored on macOS.
 - Not verified: Windows compile and OCR (CI), visual baselines for Settings (Windows CI), live speed on a signed build.
+
+## Live run on a signed local build (11 November)
+
+An internally signed 0.51.0 build of this branch ran on the Mac with a test goal ("Тест: написать Анне письмо-благодарность после собеседования"), a draft in TextEdit, the fixture image in Preview and unrelated work in Calculator. It found four defects, all fixed:
+
+- **Crash loop on launch** (`12b1b64`): the collector walked sumi's own window through Accessibility from a background thread and WebKit terminated the process. `focusedWindow` now returns nothing for sumi's own process. The code dates from 0.50.0, so the published 0.51.0 is likely affected on this macOS.
+- **Recognition hang** (`7d1913d`): Vision text recognition waited forever on the Neural Engine in the signed app and held the AI lane, so nothing reached a goal. Recognition now runs on the CPU, gives up after 4 s and never starts while a stuck call is still running.
+- **Goal understanding never ran**: its tick only tried the busy AI lane and also needed the lane to start the 20 s settling period. A due goal now waits for the lane up to 45 s (one waiter, like goal matching); settling runs without the lane; a missed wait is journalled as `skipped_lane_busy`.
+- **Goal understanding always failed** (`provider_error`): a nullable enum (`kind`, also `difficulty` in goal analysis) kept `null` inside the string variant after `claude::sanitize` split the type. The typed variant now drops `null` from `enum`/`const`.
+
+Results after the fixes: TextEdit 119 s and Preview 98 s attributed to the test goal (matching confidence 0.93 and 0.8; the Preview text came from recognition), Calculator 125 s correctly unassigned (`answered_no_goal`, 0.15); the goal's understanding was saved within 25 s of launch (`send_email`, uncertainty 0.2, provenance goal text, recent work, personal memory). No crash reports. `cargo test --locked` 835 passed / 7 ignored, Clippy `-D warnings` and `cargo fmt --check` clean.
+
+Still not verified live: automatic completion (no real email was sent), Windows runtime. The outcome check still skips about 100 turns per 5 minutes on the busy lane.
