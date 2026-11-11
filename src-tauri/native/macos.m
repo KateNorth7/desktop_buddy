@@ -55,7 +55,11 @@ static NSString *text(id value, NSUInteger limit) {
     NSString *string = value;
     return [string substringToIndex:MIN(limit, string.length)];
 }
+// sumi's own windows are never read through Accessibility: the collector runs on background
+// threads, and WebKit terminates the process when its accessibility tree is queried off the
+// main thread. Without a window, callers report sumi by name and refuse text or capture.
 static AXUIElementRef focusedWindow(pid_t pid) {
+    if (pid == getpid()) return NULL;
     AXUIElementRef application = AXUIElementCreateApplication(pid);
     AXUIElementSetMessagingTimeout(application, 0.08);
     CFTypeRef window = NULL;
