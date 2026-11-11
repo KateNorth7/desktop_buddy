@@ -17,6 +17,8 @@ use tauri::{Manager, WebviewWindow};
 #[link(name = "Speech", kind = "framework")]
 #[link(name = "CoreAudio", kind = "framework")]
 #[link(name = "ScreenCaptureKit", kind = "framework")]
+#[link(name = "Vision", kind = "framework")]
+#[link(name = "ImageIO", kind = "framework")]
 extern "C" {
     fn buddy_free(value: *mut c_char);
     fn buddy_accessibility(prompt: bool) -> bool;
@@ -29,6 +31,7 @@ extern "C" {
     fn buddy_context(window: u64, selected: bool) -> *mut c_char;
     fn buddy_screen_permission(request: bool) -> bool;
     fn buddy_capture_window(window: u64) -> *mut c_char;
+    fn buddy_recognize_text(base64: *const c_char) -> *mut c_char;
     #[cfg(not(test))]
     fn buddy_review_key(secret: *const c_char) -> *mut c_char;
     fn buddy_apps() -> *mut c_char;
@@ -428,6 +431,11 @@ pub(crate) fn capture_detail(detail: &str) -> &'static str {
         .copied()
         .unwrap_or("native_stage_unknown")
 }
+/// Recognizes the text of one captured window image on this device (Vision).
+pub(crate) fn recognize_text(base64_jpeg: &str) -> Result<String, String> {
+    let image = string(base64_jpeg)?;
+    decode(unsafe { buddy_recognize_text(image.as_ptr()) })
+}
 pub(crate) fn capture_window(window: u64) -> Result<String, CaptureFailure> {
     if window & 0xFFFF_FFFF == 0 {
         return Err(CaptureFailure::new(
@@ -455,6 +463,21 @@ pub(crate) fn capture_window(window: u64) -> Result<String, CaptureFailure> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn window_text_is_recognized_on_device_in_reading_order() {
+        use base64::Engine;
+        let image =
+            base64::engine::general_purpose::STANDARD.encode(include_bytes!("vision/fixture.jpg"));
+        let text = recognize_text(&image).unwrap();
+        let lower = text.to_lowercase();
+        let title = lower.find("interview follow-up").expect("title recognized");
+        let status = lower
+            .find("has not been sent")
+            .expect("status line recognized");
+        assert!(title < status, "top line comes first");
+        assert!(lower.contains("recruiter@example.test"));
+        assert!(recognize_text("not an image").is_err());
+    }
     #[test]
     fn native_inventory_does_not_return_paths() {
         for app in installed_apps().unwrap() {

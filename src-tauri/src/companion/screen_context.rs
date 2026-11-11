@@ -123,17 +123,55 @@ pub(crate) fn matching_excerpt(
         .filter(|s| !s.trim().is_empty())
         .map(|s| bounded(&s, EXCERPT_CHARS))
 }
+/// Interface text this short (letters and digits) is supplemented by on-device recognition.
+const THIN_TEXT: usize = 80;
+fn thin(text: &Result<String, String>) -> bool {
+    text.as_ref().map_or(true, |t| {
+        t.chars().filter(|c| c.is_alphanumeric()).count() < THIN_TEXT
+    })
+}
+/// Recognition needs the screenshot consent; the image stays on the device and is not kept.
+fn recognition_allowed(inner: &Inner) -> bool {
+    inner.companion.view.preferences.use_screenshots
+}
 pub(crate) async fn read(
     state: &AppState,
     activity: &ActivitySnapshot,
 ) -> Result<Option<String>, String> {
-    read_at(state, activity, Instant::now(), super::sample).await
+    read_with(
+        state,
+        activity,
+        Instant::now(),
+        super::sample,
+        |expected| async move {
+            tauri::async_runtime::spawn_blocking(move || crate::vision::recognize_window(&expected))
+                .await
+                .map_err(|_| "Text recognition unavailable".to_string())?
+        },
+    )
+    .await
 }
+#[cfg(test)]
 async fn read_at<F: Future<Output = Result<String, String>>>(
     state: &AppState,
     activity: &ActivitySnapshot,
     now: Instant,
     sample: impl FnOnce(usize) -> F,
+) -> Result<Option<String>, String> {
+    read_with(state, activity, now, sample, |_| async {
+        Err("Text recognition unavailable".to_string())
+    })
+    .await
+}
+async fn read_with<
+    F: Future<Output = Result<String, String>>,
+    R: Future<Output = Result<String, String>>,
+>(
+    state: &AppState,
+    activity: &ActivitySnapshot,
+    now: Instant,
+    sample: impl FnOnce(usize) -> F,
+    recognize: impl FnOnce(ActivitySnapshot) -> R,
 ) -> Result<Option<String>, String> {
     // Neither caller holds Inner across an await. Concurrent consumers share one read,
     // including unavailable samples; the cache is never serialized or persisted.
@@ -166,9 +204,29 @@ async fn read_at<F: Future<Output = Result<String, String>>>(
             inner.companion.screen_context_epoch,
         )
     };
-    let text = sample(activity.window_id.ok_or("No foreground window")? as usize)
+    let mut text = sample(activity.window_id.ok_or("No foreground window")? as usize)
         .await
         .map(|raw| redact_sample(&raw));
+    // Apps without an accessible text tree (many messengers, canvases, remote screens) are
+    // read from the window's own pixels on this device instead.
+    let recognize_now = thin(&text) && {
+        let inner = state
+            .inner
+            .lock()
+            .map_err(|_| "Application state unavailable".to_string())?;
+        recognition_allowed(&inner)
+    };
+    if recognize_now {
+        if let Ok(seen) = recognize(activity.clone()).await {
+            let seen = redact_sample(&seen);
+            if !seen.trim().is_empty() {
+                text = Ok(match text {
+                    Ok(own) if !own.trim().is_empty() => format!("{own}\n{seen}"),
+                    _ => seen,
+                });
+            }
+        }
+    }
     let mut inner = state
         .inner
         .lock()

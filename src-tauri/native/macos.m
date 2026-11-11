@@ -5,6 +5,8 @@
 #import <Speech/Speech.h>
 #import <CoreAudio/CoreAudio.h>
 #import <ScreenCaptureKit/ScreenCaptureKit.h>
+#import <Vision/Vision.h>
+#import <ImageIO/ImageIO.h>
 #import "visible_text_walk.h"
 #include <sys/stat.h>
 #include <libproc.h>
@@ -544,5 +546,40 @@ char *buddy_capture_window(uint64_t identity) {
         if (dispatch_group_wait(group, dispatch_time(DISPATCH_TIME_NOW, 5 * NSEC_PER_SEC)) != 0) return captureFailure(@"capture_timeout", @"screenshot_wait_timed_out");
         if (!jpeg) return captureFailure(code, detail);
         return json([jpeg base64EncodedStringWithOptions:0]);
+    }
+}
+
+// On-device text recognition of one captured window image (base64 JPEG). Nothing leaves the
+// device here: lines come back in reading order (top to bottom, then left to right).
+char *buddy_recognize_text(const char *base64) {
+    @autoreleasepool {
+        if (!base64) return failure(@"No image");
+        NSData *data = [[NSData alloc] initWithBase64EncodedString:@(base64) options:0];
+        if (!data.length) return failure(@"Invalid image");
+        CGImageSourceRef source = CGImageSourceCreateWithData((__bridge CFDataRef)data, NULL);
+        CGImageRef image = source ? CGImageSourceCreateImageAtIndex(source, 0, NULL) : NULL;
+        if (source) CFRelease(source);
+        if (!image) return failure(@"Invalid image");
+        VNRecognizeTextRequest *request = [VNRecognizeTextRequest new];
+        request.recognitionLevel = VNRequestTextRecognitionLevelAccurate;
+        request.usesLanguageCorrection = YES;
+        request.automaticallyDetectsLanguage = YES;
+        VNImageRequestHandler *handler = [[VNImageRequestHandler alloc] initWithCGImage:image options:@{}];
+        NSError *error = nil;
+        BOOL ok = [handler performRequests:@[request] error:&error];
+        CGImageRelease(image);
+        if (!ok) return failure(@"Text recognition failed");
+        // Vision boxes are normalized with the origin at the bottom left.
+        NSArray<VNRecognizedTextObservation *> *ordered = [request.results sortedArrayUsingComparator:^NSComparisonResult(VNRecognizedTextObservation *a, VNRecognizedTextObservation *b) {
+            CGFloat ay = CGRectGetMidY(a.boundingBox), by = CGRectGetMidY(b.boundingBox);
+            if (fabs(ay - by) > 0.01) return ay > by ? NSOrderedAscending : NSOrderedDescending;
+            return a.boundingBox.origin.x < b.boundingBox.origin.x ? NSOrderedAscending : NSOrderedDescending;
+        }];
+        NSMutableArray<NSString *> *lines = [NSMutableArray array];
+        for (VNRecognizedTextObservation *observation in ordered) {
+            VNRecognizedText *best = [observation topCandidates:1].firstObject;
+            if (best.string.length && best.confidence >= 0.3) [lines addObject:best.string];
+        }
+        return json([lines componentsJoinedByString:@"\n"]);
     }
 }

@@ -24,3 +24,11 @@ Branch `goal-understanding/d-hardening`, on top of `goal-understanding/c-decisio
 ## Not verified
 
 - Real-model results of both benchmarks (no Claude key on this Mac), Windows build (CI), live delivery.
+
+## On-device text recognition (follow-up commit)
+
+- `native/macos.m` `buddy_recognize_text` (Apple Vision, accurate level, automatic language) and `vision/windows_text.rs` (Windows.Media.Ocr with the user's profile languages) read one captured window image in reading order. `vision::recognize_window` captures the foreground window with the existing guarded capture and recognizes it; the image is neither kept nor sent.
+- `companion/screen_context.rs`: when interface text has fewer than 80 letters or digits (messengers, canvases, remote screens) and Use screenshots is on, the recognized text is redacted and appended, then flows through the same cache, review evidence, fast signals and episode review as interface text.
+- Settings text, the Privacy preview and `docs/privacy.html` describe this.
+- Tests: Vision on the existing fixture (macOS), Windows OCR on the same fixture (Windows CI only), consent and thin-text gates. `cargo test` 833 passed / 7 ignored on macOS.
+- Not verified: Windows compile and OCR (CI), visual baselines for Settings (Windows CI), live speed on a signed build.
