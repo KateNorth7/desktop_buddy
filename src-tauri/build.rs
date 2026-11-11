@@ -16,6 +16,7 @@ fn main() {
             "ScreenCaptureKit",
             "Vision",
             "ImageIO",
+            "CoreML",
         ] {
             println!("cargo:rustc-link-lib=framework={framework}");
         }

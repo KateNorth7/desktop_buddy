@@ -19,6 +19,7 @@ use tauri::{Manager, WebviewWindow};
 #[link(name = "ScreenCaptureKit", kind = "framework")]
 #[link(name = "Vision", kind = "framework")]
 #[link(name = "ImageIO", kind = "framework")]
+#[link(name = "CoreML", kind = "framework")]
 extern "C" {
     fn buddy_free(value: *mut c_char);
     fn buddy_accessibility(prompt: bool) -> bool;
