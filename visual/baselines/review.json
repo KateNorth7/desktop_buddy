@@ -1,19 +1,20 @@
 {
   "schemaVersion": 1,
   "applicationBase": "e9f7468a329cbdbb9fe48d24aef6add982797e97",
-  "captureCommit": "4b3c6feadf21a22410cffded0ae85f0728f13ce4",
-  "workflowRun": "https://github.com/KateNorth7/desktop_buddy/actions/runs/42688898014",
-  "approvedOn": "2026-11-09",
-  "approvedBy": "Release assistant on the owner's instruction to publish 0.51.0; the owner was shown the wide-light Settings AI and Privacy captures in chat",
-  "approval": "Settings AI/Privacy captures changed only by the requested provider text: Claude replaces Nebius, the Tavily row is removed, web search runs through Claude, and the Vision model note names the claude-haiku-5-5 default. The 26 other baselines are unchanged.",
+  "captureCommit": "cebb968a34c5b09b0843d910971fd699384eb37f",
+  "workflowRun": "https://github.com/KateNorth7/desktop_buddy/actions/runs/42976677930",
+  "approvedOn": "2026-11-13",
+  "approvedBy": "Ekaterina",
+  "approval": "The four Settings Privacy captures changed only by the new Use screenshots description: when an app exposes little text, its active window is read on this device first and the image is not kept. The rows below it move down accordingly; nothing is cut horizontally. The 30 other baselines are unchanged.",
   "knownExistingIssues": [
-    "The previous narrow Privacy working-hours overflow is superseded by the intentional removal of those controls, included in this approval. Native WebView rendering and physical-device interactions are not established by browser screenshots."
+    "The previous narrow Privacy working-hours overflow is superseded by the intentional removal of those controls, included in this approval. Native WebView rendering and physical-device interactions are not established by browser screenshots.",
+    "In the wide Privacy captures the taller Use screenshots row pushes the action buttons (See the activity log, See what sumi remembers, Raw data, Privacy policy) partly under the Changes save automatically footer; the panel scrolls, so they remain reachable. The narrow captures were already clipped by the footer in the previous baselines."
   ],
   "environment": {
-    "commit": "4b3c6feadf21a22410cffded0ae85f0728f13ce4",
+    "commit": "cebb968a34c5b09b0843d910971fd699384eb37f",
     "runner": "Windows",
-    "image": "20261022.344.1",
-    "node": "v24.22.1",
+    "image": "20261101.353.1",
+    "node": "v24.22.2",
     "reused": ""
   },
   "screenshots": {
@@ -48,7 +49,7 @@
       "height": 873
     },
     "narrow-dark/settings-privacy.png": {
-      "sha256": "5a296ee36e0ec918151882d44a196932b52782cf961543044f4df5c38a50a532",
+      "sha256": "78b1470dd105790dd0ac8b1d8021c447b055cbf2c8606f16ede470feceaae4b5",
       "width": 720,
       "height": 873
     },
@@ -88,7 +89,7 @@
       "height": 873
     },
     "narrow-light/settings-privacy.png": {
-      "sha256": "4b817d2f4f9ebed8d981fcabe7d0f7934b5de5439012a81ec2ce4f305c2ff4ab",
+      "sha256": "88d8e75fc309cd2a8af90effc865e45616397509e645ffa99464cc6e8c9fe914",
       "width": 720,
       "height": 873
     },
@@ -133,7 +134,7 @@
       "height": 873
     },
     "wide-dark/settings-privacy.png": {
-      "sha256": "dc0462a2deefce6493b2bfcaa06d9d510b2fdb63f5f6570fd2b81db828d01349",
+      "sha256": "e6f427d63712f0b1abdf200abb2425555d209cd4d294bcc16793086484922dbc",
       "width": 1280,
       "height": 873
     },
@@ -178,7 +179,7 @@
       "height": 873
     },
     "wide-light/settings-privacy.png": {
-      "sha256": "5acb4f9da1980033857f76b88091be90afe49eb90a52d8617b9c8bf1b39bf213",
+      "sha256": "d89d29856385e9cf648b0bee58b400211a6ce73dd5b5db32456911663e6d47e5",
       "width": 1280,
       "height": 873
     },
@@ -231,8 +232,8 @@
       }
     }
   ],
-  "previousReviewCommit": "7ddd1937067456bf30d6834a2f501dd524ca149d",
-  "changeReason": "Claude replaces Nebius and Tavily in Settings → AI (one Claude row, Vision model note naming claude-haiku-5-5) and in the Privacy data-sharing text.",
+  "previousReviewCommit": "4b3c6feadf21a22410cffded0ae85f0728f13ce4",
+  "changeReason": "On-device text recognition for windows that expose little text, described in the Settings → Privacy Use screenshots row.",
   "history": [
     {
       "date": "2026-10-22",
@@ -338,19 +339,48 @@
           "reused": ""
         }
       }
+    },
+    {
+      "date": "2026-11-13",
+      "reason": "Preserve the 0.51.0 review before the Settings Privacy captures describing on-device text recognition.",
+      "previousReview": {
+        "captureCommit": "4b3c6feadf21a22410cffded0ae85f0728f13ce4",
+        "workflowRun": "https://github.com/KateNorth7/desktop_buddy/actions/runs/42688898014",
+        "approvedOn": "2026-11-09",
+        "approvedBy": "Release assistant on the owner's instruction to publish 0.51.0; the owner was shown the wide-light Settings AI and Privacy captures in chat",
+        "approval": "Settings AI/Privacy captures changed only by the requested provider text: Claude replaces Nebius, the Tavily row is removed, web search runs through Claude, and the Vision model note names the claude-haiku-5-5 default. The 26 other baselines are unchanged.",
+        "environment": {
+          "commit": "4b3c6feadf21a22410cffded0ae85f0728f13ce4",
+          "runner": "Windows",
+          "image": "20261022.344.1",
+          "node": "v24.22.1",
+          "reused": ""
+        }
+      }
     }
   ],
   "updatedScreenshots": [
-    "wide-light/settings-ai.png",
     "wide-light/settings-privacy.png",
-    "wide-dark/settings-ai.png",
     "wide-dark/settings-privacy.png",
-    "narrow-light/settings-ai.png",
     "narrow-light/settings-privacy.png",
-    "narrow-dark/settings-ai.png",
     "narrow-dark/settings-privacy.png"
   ],
-  "retainedScreenshots": 26,
+  "retainedScreenshots": 30,
   "repeatability": "Both canonical Windows capture/compare passes succeeded in the recorded run. No masks, thresholds or tolerance changes.",
-  "retainedMinorRasterDifferences": []
+  "retainedMinorRasterDifferences": [
+    {
+      "screenshot": "narrow-dark/settings-general.png",
+      "differingPixels": 10,
+      "maxChannelDelta": 1,
+      "region": "settings gear button, x 128-158, y 821-851",
+      "decision": "Approved baseline kept unchanged; runner image 20261101.353.1 antialiasing only."
+    },
+    {
+      "screenshot": "narrow-light/settings-ai.png",
+      "differingPixels": 12,
+      "maxChannelDelta": 1,
+      "region": "settings gear button, x 128-158, y 821-851",
+      "decision": "Approved baseline kept unchanged; runner image 20261101.353.1 antialiasing only."
+    }
+  ]
 }

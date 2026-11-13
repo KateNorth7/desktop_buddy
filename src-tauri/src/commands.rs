@@ -11,6 +11,9 @@ pub struct Inner {
     pub engine: crate::engine_observability::Telemetry,
     pub agent: crate::agent_runtime::AgentRuntime,
     pub goal_matching: crate::goal_matching::Runtime,
+    pub goal_understanding: crate::goal_understanding::Runtime,
+    pub decisions: crate::decisions::Runtime,
+    pub episode_review: crate::episode_review::Runtime,
     pub companion: crate::companion::Runtime,
     pub tracking_settings: crate::tracking::TrackingSettings,
     pub activity_state: crate::tracking::StateTracker,
@@ -89,6 +92,9 @@ impl AppState {
                 engine: Default::default(),
                 agent: crate::agent_runtime::AgentRuntime::load(&storage)?,
                 goal_matching: Default::default(),
+                goal_understanding: Default::default(),
+                decisions: Default::default(),
+                episode_review: Default::default(),
                 companion,
                 tracking_settings: storage.tracking_settings()?,
                 activity_state: Default::default(),
@@ -457,6 +463,25 @@ pub fn collect(state: &AppState) -> Result<(), String> {
             inner.companion.semantic.invalidate_evidence();
         }
         crate::goal_matching::observe_inner(&mut inner, &snapshot, allowed && !in_sumi)?;
+        let attributed = if allowed && !in_sumi {
+            let matched = crate::goal_matching::attribution(&inner, &snapshot)?;
+            matched
+                .goal_id
+                .and_then(|id| id.parse::<i64>().ok())
+                .filter(|_| matched.confidence >= crate::relevance::THRESHOLD)
+        } else {
+            None
+        };
+        // Completion signals never block collection; a failure is reported, not raised.
+        if let Err(error) = crate::completion_signals::observe(
+            &mut inner,
+            &snapshot,
+            allowed && !in_sumi,
+            attributed,
+            Instant::now(),
+        ) {
+            inner.last_error = Some(error);
+        }
         inner.buddy.foreground = (allowed && !in_sumi).then(|| snapshot.clone());
         crate::companion::observe(&mut inner, &snapshot, allowed && !in_sumi);
         let selected_goal = if in_sumi {

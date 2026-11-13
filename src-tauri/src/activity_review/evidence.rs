@@ -239,7 +239,11 @@ impl Storage {
             text.to_string()
         };
         let encrypted = seal(content.as_bytes(), &format!("{period}:{context}:{kind}"))?;
-        self.connection.execute("INSERT OR IGNORE INTO review_evidence(period_id,context_key,kind,fingerprint,captured_at,encrypted) VALUES(?1,?2,?3,?4,?5,?6)",params![period,context,kind,fingerprint,a.timestamp,encrypted]).map_err(db)?;
+        // Only the fixed result code is kept in clear; the text itself stays sealed.
+        let signal = (kind == "text")
+            .then(|| crate::episode_evidence::result_signal(&content))
+            .flatten();
+        self.connection.execute("INSERT OR IGNORE INTO review_evidence(period_id,context_key,kind,fingerprint,captured_at,encrypted,result_signal) VALUES(?1,?2,?3,?4,?5,?6,?7)",params![period,context,kind,fingerprint,a.timestamp,encrypted,signal]).map_err(db)?;
         Ok(())
     }
     pub(super) fn review_image(&self, id: i64) -> Result<String, String> {
@@ -247,6 +251,18 @@ impl Storage {
         let bytes = open(encrypted, &format!("{period}:{context}:{kind}"))?;
         let image = String::from_utf8(bytes).map_err(|_| "Review screenshot is unavailable")?;
         Ok(format!("data:image/jpeg;base64,{image}"))
+    }
+    /// The newest retained text of one episode window, redacted when it was sealed and
+    /// bounded here. `None` once the daily summary has deleted the evidence.
+    pub(crate) fn episode_excerpt(
+        &self,
+        period: i64,
+        context: &str,
+        chars: usize,
+    ) -> Result<Option<String>, String> {
+        let text = self.review_text(period, context)?;
+        Ok((!text.trim().is_empty())
+            .then(|| crate::companion::screen_context::bounded(&text, chars)))
     }
     pub(super) fn review_text(&self, period: i64, context: &str) -> Result<String, String> {
         let mut q=self.connection.prepare("SELECT encrypted FROM review_evidence WHERE period_id=?1 AND context_key=?2 AND kind='text' ORDER BY id DESC LIMIT 2").map_err(db)?;

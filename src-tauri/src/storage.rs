@@ -29,6 +29,8 @@ impl Storage {
         store.initialize_unplanned_work()?;
         store.initialize_activity_review()?;
         store.initialize_work_journal()?;
+        store.initialize_tracking_attempts()?;
+        store.initialize_goal_understanding()?;
         if first_launch {
             store.initialize_first_launch_ai()?;
         }
@@ -155,6 +157,14 @@ impl Storage {
         // Learned lane profiles are aggregates, kept by retention and removed by an explicit clear.
         tx.execute("DELETE FROM goal_lane_profiles WHERE ?1 IS NULL", [cutoff])
             .map_err(|e| e.to_string())?;
+        // Goal interpretations are not time-based history: only an explicit clear removes them.
+        tx.execute("DELETE FROM goal_understandings WHERE ?1 IS NULL", [cutoff])
+            .map_err(|e| e.to_string())?;
+        tx.execute(
+            "DELETE FROM tracking_attempts WHERE ?1 IS NULL OR julianday(last_at)<julianday(?1)",
+            [cutoff],
+        )
+        .map_err(|e| e.to_string())?;
         tx.execute(
             "DELETE FROM deleted_goal_backups WHERE ?1 IS NULL OR deleted_at<?1",
             [cutoff_unix],

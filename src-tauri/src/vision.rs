@@ -426,6 +426,35 @@ pub(crate) fn capture(window: u64) -> Result<String, CaptureFailure> {
         ))
     }
 }
+/// Captures the identified foreground window and recognizes its text on this device. The
+/// image is neither kept nor sent; the foreground must be unchanged before and after.
+pub(crate) fn recognize_window(expected: &ActivitySnapshot) -> Result<String, String> {
+    let window = expected.window_id.ok_or("No foreground window")?;
+    if !crate::collector::matches_foreground(expected) {
+        return Err("Foreground changed".into());
+    }
+    let image = capture(window).map_err(|f| f.message().to_string())?;
+    if !crate::collector::matches_foreground(expected) {
+        return Err("Foreground changed".into());
+    }
+    recognize_text(&image)
+}
+/// Recognizes the text of one captured window image on this device; the image is not kept.
+pub(crate) fn recognize_text(base64_jpeg: &str) -> Result<String, String> {
+    #[cfg(target_os = "macos")]
+    {
+        crate::macos::recognize_text(base64_jpeg)
+    }
+    #[cfg(windows)]
+    {
+        windows_text::recognize_text(base64_jpeg)
+    }
+    #[cfg(not(any(windows, target_os = "macos")))]
+    {
+        let _ = base64_jpeg;
+        Err("On-device text recognition is unavailable".into())
+    }
+}
 #[tauri::command(async)]
 pub fn screenshot_permission(request: bool, window: WebviewWindow) -> Result<bool, String> {
     if window.label() != "main" {
@@ -449,6 +478,8 @@ pub fn screenshot_permission(request: bool, window: WebviewWindow) -> Result<boo
 pub(crate) mod geometry;
 #[cfg(windows)]
 mod windows;
+#[cfg(windows)]
+mod windows_text;
 
 #[cfg(test)]
 mod tests {

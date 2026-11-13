@@ -46,8 +46,10 @@ export function ObservationSettings({
         <span>
           Use screenshots
           <small>
-            Optional active-window images are sent to Claude to help understand
-            layouts when text is insufficient. Images and interface-text samples
+            When an app exposes little text, its active window is read on this
+            device first; the image is not kept. Optional active-window images
+            are sent to Claude to help understand layouts when text is
+            insufficient. Images and interface-text samples
             are encrypted locally for review until the daily summary is saved at
             the configured Daily summary time, then deleted. Excluded and
             detected private windows are skipped. Sensitive content detection

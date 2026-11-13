@@ -1,5 +1,52 @@
 # sumi session handoff
 
+## Goal understanding contract — 10 November 2026
+
+`claude/tracking-diagnostics` rebased onto fork `main` at `f40ef7b` (published 0.51.0, Claude Haiku 5.5 default). Step 0 of `docs/GOAL_UNDERSTANDING_PROMPTS.md` added the shared contract: `goal_understanding.rs` (type, `goal_understandings` table keyed by goal and plan revision, read/save, purged by Clear local history, cascades with the goal), `episode_evidence.rs` (types and empty reads; storage is Prompt B's choice) and `decisions.rs` (one decision type and a `submit` stub that changes nothing). No behaviour change. The plan now holds the branch names, the file ownership map and per-prompt handoff files. The branch is not pushed: `rev-oss` has read-only access to `KateNorth7/desktop_buddy` (403), so A, B and C cannot start from the fork yet.
+
+## Rebased onto 0.51.0 with Claude — 9 November 2026
+
+`claude/tracking-diagnostics` was rebased onto fork `main` at `8f678cf` (Claude Messages API, Claude web search, $1 shared daily built-in budget). Only the handoff conflicted; the replay test now sets `anthropic_configured`. Evidence on the rebased branch: `cargo test --locked` 802 passed / 5 ignored; Clippy `-D warnings` and `cargo fmt --check` clean; `npm test` 349 passed, `npm run lint` and `npm run build` clean. More episode questions (stage 2) spend more of the shared $1 daily budget; watch `provider_rate_limit` in `tracking_attempts`.
+
+## Unreleased — local completion signals and episode-end close offers, 9 November 2026
+
+Stage 3 on `claude/tracking-diagnostics`. New `src-tauri/src/completion_signals.rs`, called from `commands::collect` after goal matching with the sample's counted goal (attribution at or above `relevance::THRESHOLD`); state lives in `goal_matching::Runtime.signals` and is session-only.
+
+- **Simple goals** are classified from their own title and description in English or Russian: join a call (join verb plus call noun, never "prepare/schedule"), visit a site (visit verb plus a domain, or "site <name>"), send an email (classified only; no automatic signal yet). A meeting surface (`in_meeting`: Meet, Jitsi, Whereby, Webex, Gather, Around, Zoom/Teams meeting titles, FaceTime, and Teams/Slack/Discord/Skype/Telegram/WhatsApp/Viber/Signal windows titled as a call or huddle, same rules on macOS and Windows) for 60 s closes the only open join-call goal; 5 s on the named site closes the only matching visit goal. Two candidate goals of one kind never close. Closing goes through `automatically_complete` (durable Undo, receipt `signal:place`) and queues the existing automatic-completion card ("Closed “…”." with Undo). With automatic completion off, the confirmation card is queued instead.
+- **Episode-end offers**: attributed time per goal; once the user has been away for 150 s after at least 60 s of work, the existing goal-completion card ("Mark this goal complete?" / Not yet) is queued for a goal without unfinished steps, at most once per 30 minutes per goal. A window sharing the goal's words keeps the episode open, so a not-yet-matched return (Life OS web app) is not read as leaving. Offers never change anything until confirmed.
+- `companion::queue_prompt` exposes the queue for the regular delivery pass (quiet hours and pauses still apply). Journal codes: `completion_applied`, `completion_proposed`, `automatic_completion_disabled`.
+- Replay: both real cases now get a close offer after the finishing window and never during the work (`finishing_a_goal_and_moving_on_offers_to_close_it`).
+
+An email goal closes when the cached Accessibility text of a mail window (web mail by site, desktop mail by app name) shows a sent confirmation in English or Russian and exactly one open email goal exists; `screen_context::cached_text` exposes the existing cache for this local phrase check only (no new reads, nothing sent). Closing depends on a sample having been read while the confirmation was visible, so it is opportunistic; the episode-end offer covers the rest.
+
+Not done: a done criterion written at goal creation by the agent (needs the analysis prompt, which the provider swap also touches); screen-text call controls for unknown apps; goals with unfinished steps still get no whole-goal offer. Open product question: the review panel for waiting time was removed from Progress on 24 October (`dff8476`); bringing a one-tap assignment list back needs the owner's decision.
+
+Evidence: `cargo test --locked` 797 passed / 5 ignored; Clippy `-D warnings` and `cargo fmt --check` clean. Frontend unchanged (existing cards). Not done: Windows build, live run, release.
+
+## Unreleased — episode attribution and lane priority, 9 November 2026
+
+Stage 2 on `claude/tracking-diagnostics`, on top of the attempt journal below. Three changes in `goal_matching.rs`:
+
+- A local match (keywords, unique user rule, learned profile) that settles after `LOCAL_STABLE` now assigns the whole stable context through `attribute_context`, as an AI answer already did; its first half minute no longer stays pending.
+- Returning to a window that the trail already ties to the same locally resolved goal skips the stability wait, so short revisits of a form or an email count.
+- `EPISODE_ASK` drops from 180 s to 45 s of unassigned time across two or more windows, so hops between an email, a ChatGPT draft and a form are asked about as one episode.
+- Goal matching waits up to `LANE_WAIT` (45 s) for the shared `companion_request` lane instead of skipping the turn; `Runtime.lane_waiting` keeps a second task from queueing, and a timeout is journaled as `skipped_lane_busy`.
+
+Replay with the oracle matcher: Payoneer 252 s of 261 s (97%, was 52%) with five matcher calls, Life OS unchanged at full coverage with nine calls; no unrelated goal credited. The 90% target test is now enabled. More episode questions spend more of the daily gateway allowance; watch `provider_rate_limit` in `tracking_attempts`. Real model accuracy on these episodes is not yet measured.
+
+Evidence: `cargo test --locked` 790 passed / 5 ignored; Clippy `-D warnings` and `cargo fmt --check` clean. Frontend unchanged since stage 1 (349 passed, lint and build clean). Not done: Windows build, live run, release.
+
+## Unreleased — tracking diagnostics and replay cases, 9 November 2026
+
+Branch `claude/tracking-diagnostics` (from fork `main` at 0.50.0, no version bump yet). Stage 1 of the tracking and completion plan; nothing in the attribution or completion logic changed.
+
+- Audit of the installed 0.50.0 (read-only copy of `buddy.db`): from 1 to 8 November no row reached `goal_relevant_daily`; over 99% of recorded time stayed `pending`. The matcher answered four times in four days. Causes: every background AI task `try_lock`s the shared `companion_request` lane and goal matching is spawned last in `agent_runtime`, losing turns silently; the built-in gateway allows 1000 AI calls per user per day while the client budget allows 120 background calls per hour; Russian goal titles without description never match English window titles locally; explicit focus is zeroed without a keyword match. Outcome checks have never completed a real goal (only the synthetic fixture).
+- **Attempt journal** (`src-tauri/src/tracking_attempts.rs`, table `tracking_attempts`): fixed outcome codes per stage (`goal_matching`, `outcome_check`) with goal ID and confidence, never titles or text. Repeats within five minutes fold into one row; rows older than 14 days are dropped on write; retention and Clear local history purge it. Recorded in `goal_matching` (lane busy, hourly budget, no candidates, context changed, provider errors, assigned / below threshold / no goal) and `semantic_observation` (lane busy when due, budget, provider errors, observed status, not verified, completion applied / proposed / disabled).
+- **My progress**: `DayProgress.tracking` (recorded, attributed, waiting seconds from `review_intervals`, plus the most frequent matching issue on days with waiting time) renders one line under the overview headline.
+- **Replay cases** (`src-tauri/test-data/replay-cases.json`, `goal_matching/replay_tests.rs`): the sanitized Payoneer and Life OS sequences run through the real pipeline with an oracle matcher that always answers correctly. Baseline: Payoneer 135 s of 261 s (52%) reached the goal with three matcher calls; Life OS all of it. The ignored target test requires at least 90% for every case.
+
+Evidence on this branch: `cargo test --locked` 788 passed / 6 ignored; `cargo clippy --locked --all-targets -- -D warnings` and `cargo fmt --check` clean; frontend `npm test` 349 passed, `npm run lint` and `npm run build` clean. `tracking_day` returns zeros while an older database migrates before the review tables exist (two migration tests caught this). `cmake` was installed with Homebrew on this Mac for the whisper build. Not done: Windows build, a live run of the installed app, release.
+
 ## 0.51.0 published — 9 November 2026
 
 [sumi 0.51.0](https://github.com/KateNorth7/desktop_buddy/releases/tag/v0.51.0) was published at `2026-11-09T21:34:20Z` from commit 26c9d8e by [run 42702118226](https://github.com/KateNorth7/desktop_buddy/actions/runs/42702118226). Do not rerun this completed release. Notes: `docs/RELEASE_0.51.0.md`.

@@ -7,7 +7,7 @@ import {
   within,
 } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
-import { Progress } from "./Progress";
+import { Progress, trackingLine } from "./Progress";
 import { emptyCore, type CoreSnapshot, type ProgressPeriod } from "./types";
 
 afterEach(cleanup);
@@ -229,4 +229,55 @@ it("keeps more than six goals distinguishable and a crowded stack inside the plo
       gaps,
     ),
   ).toBeLessThanOrEqual(110.01);
+});
+
+it("explains recorded time that has not reached a goal and why", () => {
+  const snapshot = emptyCore();
+  snapshot.date = "2026-10-24";
+  snapshot.summary = {
+    day: snapshot.date,
+    completed: [],
+    goals: [],
+    tracking: {
+      recorded_seconds: 3600,
+      attributed_seconds: 600,
+      waiting_seconds: 3000,
+      issue: "skipped_lane_busy",
+    },
+  };
+  snapshot.week = [snapshot.summary];
+  render(view(snapshot, "day"));
+  expect(screen.getByLabelText("Tracking status").textContent).toBe(
+    "Recorded 1h 0m · 10m matched to goals · 50m waiting for a goal. Goal matching often waited for other AI checks.",
+  );
+});
+
+it("hides the tracking line when nothing was recorded or an issue code is unknown", () => {
+  expect(trackingLine([])).toBeNull();
+  expect(
+    trackingLine([
+      {
+        day: "2026-10-24",
+        completed: [],
+        goals: [],
+        tracking: {
+          recorded_seconds: 120,
+          attributed_seconds: 120,
+          waiting_seconds: 0,
+          issue: "skipped_lane_busy",
+        },
+      },
+      {
+        day: "2026-10-25",
+        completed: [],
+        goals: [],
+        tracking: {
+          recorded_seconds: 60,
+          attributed_seconds: 0,
+          waiting_seconds: 60,
+          issue: "unknown_code",
+        },
+      },
+    ]),
+  ).toBe("Recorded 3m · 2m matched to goals · 1m waiting for a goal");
 });

@@ -11,6 +11,45 @@ import {
   type ProgressPeriod,
 } from "./types";
 
+const trackingIssues: Record<string, string> = {
+  skipped_lane_busy: "Goal matching often waited for other AI checks.",
+  skipped_hourly_budget: "The hourly AI limit was reached.",
+  provider_rate_limit: "The built-in AI allowance ran out.",
+  provider_timeout_or_network: "The AI service timed out.",
+  provider_error: "The AI service returned errors.",
+  answered_no_goal: "The AI found no matching goal.",
+  answered_below_threshold: "The AI was not sure enough to assign it.",
+};
+
+/** Recorded time, the part that reached a goal, and why the rest is still waiting. */
+export function trackingLine(days: DayProgress[]): string | null {
+  let recorded = 0;
+  let attributed = 0;
+  let waiting = 0;
+  const issues = new Map<string, number>();
+  for (const day of days) {
+    const tracking = day.tracking;
+    if (!tracking) continue;
+    recorded += tracking.recorded_seconds;
+    attributed += tracking.attributed_seconds;
+    waiting += tracking.waiting_seconds;
+    if (tracking.issue && tracking.waiting_seconds > 0)
+      issues.set(
+        tracking.issue,
+        (issues.get(tracking.issue) ?? 0) + tracking.waiting_seconds,
+      );
+  }
+  if (recorded <= 0) return null;
+  const parts = [
+    `Recorded ${duration(recorded)}`,
+    `${duration(attributed)} matched to goals`,
+  ];
+  if (waiting > 0) parts.push(`${duration(waiting)} waiting for a goal`);
+  const issue = [...issues.entries()].sort((a, b) => b[1] - a[1])[0]?.[0];
+  const reason = issue ? trackingIssues[issue] : undefined;
+  return `${parts.join(" · ")}${reason ? `. ${reason}` : ""}`;
+}
+
 const periodOptions: Array<{
   value: ProgressPeriod;
   label: string;
@@ -300,6 +339,7 @@ export function Progress({
     0,
   );
   const other = Math.max(0, total - listed);
+  const tracking = trackingLine(days);
   const step = periodDays(period);
   const shiftPeriod = (direction: -1 | 1) => {
     const base = new Date(`${newest}T12:00:00`);
@@ -362,6 +402,11 @@ export function Progress({
                 .filter(Boolean)
                 .join(" · ")}
         </p>
+        {!focus && tracking && (
+          <p className="progress-sub" aria-label="Tracking status">
+            {tracking}
+          </p>
+        )}
       </div>
       <div className="progress-bar">
         <div className="segmented-control" role="tablist" aria-label="Period">

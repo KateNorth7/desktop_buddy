@@ -5,6 +5,10 @@
 #import <Speech/Speech.h>
 #import <CoreAudio/CoreAudio.h>
 #import <ScreenCaptureKit/ScreenCaptureKit.h>
+#import <Vision/Vision.h>
+#import <ImageIO/ImageIO.h>
+#import <CoreML/CoreML.h>
+#import <stdatomic.h>
 #import "visible_text_walk.h"
 #include <sys/stat.h>
 #include <libproc.h>
@@ -53,7 +57,11 @@ static NSString *text(id value, NSUInteger limit) {
     NSString *string = value;
     return [string substringToIndex:MIN(limit, string.length)];
 }
+// sumi's own windows are never read through Accessibility: the collector runs on background
+// threads, and WebKit terminates the process when its accessibility tree is queried off the
+// main thread. Without a window, callers report sumi by name and refuse text or capture.
 static AXUIElementRef focusedWindow(pid_t pid) {
+    if (pid == getpid()) return NULL;
     AXUIElementRef application = AXUIElementCreateApplication(pid);
     AXUIElementSetMessagingTimeout(application, 0.08);
     CFTypeRef window = NULL;
@@ -544,5 +552,61 @@ char *buddy_capture_window(uint64_t identity) {
         if (dispatch_group_wait(group, dispatch_time(DISPATCH_TIME_NOW, 5 * NSEC_PER_SEC)) != 0) return captureFailure(@"capture_timeout", @"screenshot_wait_timed_out");
         if (!jpeg) return captureFailure(code, detail);
         return json([jpeg base64EncodedStringWithOptions:0]);
+    }
+}
+
+// On-device text recognition of one captured window image (base64 JPEG). Nothing leaves the
+// device here: lines come back in reading order (top to bottom, then left to right).
+char *buddy_recognize_text(const char *base64) {
+    @autoreleasepool {
+        if (!base64) return failure(@"No image");
+        NSData *data = [[NSData alloc] initWithBase64EncodedString:@(base64) options:0];
+        if (!data.length) return failure(@"Invalid image");
+        CGImageSourceRef source = CGImageSourceCreateWithData((__bridge CFDataRef)data, NULL);
+        CGImageRef image = source ? CGImageSourceCreateImageAtIndex(source, 0, NULL) : NULL;
+        if (source) CFRelease(source);
+        if (!image) return failure(@"Invalid image");
+        // One recognition at a time, bounded in time. Vision has been seen to wait forever on
+        // the Neural Engine inside a signed app; a stuck request must never hold the caller.
+        static atomic_bool busy = false;
+        bool idle = false;
+        if (!atomic_compare_exchange_strong(&busy, &idle, true)) { CGImageRelease(image); return failure(@"Text recognition busy"); }
+        VNRecognizeTextRequest *request = [VNRecognizeTextRequest new];
+        request.recognitionLevel = VNRequestTextRecognitionLevelAccurate;
+        request.usesLanguageCorrection = YES;
+        request.automaticallyDetectsLanguage = YES;
+        // Run on the CPU only: the Neural Engine path is the one that stalled.
+        NSDictionary<VNComputeStage, NSArray<id<MLComputeDeviceProtocol>> *> *stages = [request supportedComputeStageDevicesAndReturnError:nil];
+        for (VNComputeStage stage in stages) {
+            for (id<MLComputeDeviceProtocol> device in stages[stage]) {
+                if ([(id)device isKindOfClass:MLCPUComputeDevice.class]) { [request setComputeDevice:device forComputeStage:stage]; break; }
+            }
+        }
+        VNImageRequestHandler *handler = [[VNImageRequestHandler alloc] initWithCGImage:image options:@{}];
+        CGImageRelease(image);
+        __block BOOL ok = NO;
+        dispatch_semaphore_t done = dispatch_semaphore_create(0);
+        dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
+            ok = [handler performRequests:@[request] error:nil];
+            atomic_store(&busy, false);
+            dispatch_semaphore_signal(done);
+        });
+        if (dispatch_semaphore_wait(done, dispatch_time(DISPATCH_TIME_NOW, (int64_t)(4 * NSEC_PER_SEC))) != 0) {
+            [request cancel];
+            return failure(@"Text recognition timed out");
+        }
+        if (!ok) return failure(@"Text recognition failed");
+        // Vision boxes are normalized with the origin at the bottom left.
+        NSArray<VNRecognizedTextObservation *> *ordered = [request.results sortedArrayUsingComparator:^NSComparisonResult(VNRecognizedTextObservation *a, VNRecognizedTextObservation *b) {
+            CGFloat ay = CGRectGetMidY(a.boundingBox), by = CGRectGetMidY(b.boundingBox);
+            if (fabs(ay - by) > 0.01) return ay > by ? NSOrderedAscending : NSOrderedDescending;
+            return a.boundingBox.origin.x < b.boundingBox.origin.x ? NSOrderedAscending : NSOrderedDescending;
+        }];
+        NSMutableArray<NSString *> *lines = [NSMutableArray array];
+        for (VNRecognizedTextObservation *observation in ordered) {
+            VNRecognizedText *best = [observation topCandidates:1].firstObject;
+            if (best.string.length && best.confidence >= 0.3) [lines addObject:best.string];
+        }
+        return json([lines componentsJoinedByString:@"\n"]);
     }
 }
