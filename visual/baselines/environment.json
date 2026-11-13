@@ -1,7 +1,7 @@
 {
-  "commit": "4b3c6feadf21a22410cffded0ae85f0728f13ce4",
+  "commit": "cebb968a34c5b09b0843d910971fd699384eb37f",
   "runner": "Windows",
-  "image": "20261022.344.1",
-  "node": "v24.22.1",
+  "image": "20261101.353.1",
+  "node": "v24.22.2",
   "reused": ""
 }
