@@ -5,6 +5,7 @@ use crate::{
         self,
         engine::{fingerprint, Intervention, Kind},
     },
+    decisions::{Applied, Decision, DecisionKind},
     goal_analysis::{response_text, Service},
     models::ActivitySnapshot,
 };
@@ -516,8 +517,21 @@ fn outcome_target(inner: &Inner, signal: &Signal) -> Result<Value, String> {
     }
 }
 
+/// Diagnostics only: a journal write failure must never block an outcome check.
+fn note(inner: &Inner, outcome: &str, goal: Option<i64>, confidence: Option<f64>) {
+    let _ =
+        inner
+            .storage
+            .note_attempt(crate::tracking_attempts::OUTCOME, outcome, goal, confidence);
+}
 pub(crate) async fn run(app: &AppHandle, state: &AppState) -> Result<(), String> {
     let Ok(_lane) = state.companion_request.try_lock() else {
+        // A due check that loses the shared lane is recorded; an idle one is not.
+        if let Ok(inner) = state.inner.lock() {
+            if due(&inner) {
+                note(&inner, "skipped_lane_busy", None, None);
+            }
+        }
         return Ok(());
     };
     let (activity, consent, candidates, model) = {
@@ -580,6 +594,7 @@ pub(crate) async fn run(app: &AppHandle, state: &AppState) -> Result<(), String>
             return Ok(());
         }
         if !crate::observation::reserve_primary(&mut inner) {
+            note(&inner, "skipped_hourly_budget", None, None);
             inner.companion.semantic.status = "waiting";
             inner.companion.semantic.reason = "observation_budget";
             return Ok(());
@@ -662,7 +677,17 @@ pub(crate) async fn run(app: &AppHandle, state: &AppState) -> Result<(), String>
             &check,
         ),
     )
-    .await?;
+    .await
+    .inspect_err(|error| {
+        if let Ok(inner) = state.inner.lock() {
+            note(
+                &inner,
+                crate::tracking_attempts::provider_outcome(error),
+                None,
+                None,
+            );
+        }
+    })?;
     check()?;
     let answer = parse(&response, &candidates, &samples)?;
     {
@@ -687,6 +712,16 @@ pub(crate) async fn run(app: &AppHandle, state: &AppState) -> Result<(), String>
             "proposal_observed"
         };
         inner.companion.semantic.last_goal = answer.matched_goal_id;
+        note(
+            &inner,
+            match answer.status.as_str() {
+                "result" => "observed_result",
+                "in_progress" => "observed_in_progress",
+                _ => "observed_unknown",
+            },
+            answer.matched_goal_id,
+            Some(answer.confidence),
+        );
         inner.storage.classify_review_context(
             &activity,
             answer
@@ -775,6 +810,12 @@ pub(crate) async fn run(app: &AppHandle, state: &AppState) -> Result<(), String>
                     .map_err(|_| "Observation state unavailable")?;
                 inner.companion.semantic.status = "unknown";
                 inner.companion.semantic.reason = "insufficient_outcome_evidence";
+                note(
+                    &inner,
+                    "outcome_not_verified",
+                    signal.goal_id,
+                    Some(signal.confidence),
+                );
                 continue;
             }
             let mut inner = state
@@ -865,30 +906,54 @@ fn prompt(inner: &Inner, signal: &Signal) -> Result<Intervention, String> {
         expires_at: Utc::now().timestamp() + 600,
     })
 }
-fn propose(app: &AppHandle, inner: &mut Inner, signal: &Signal) -> Result<(), String> {
-    let p = prompt(inner, signal)?;
-    if p.kind == Kind::NewGoal
-        && inner
-            .storage
-            .core_work_snapshot()?
-            .goals
+/// The finding as a shared decision: the same checks, cooldowns and cards as every other
+/// analyser, so one goal is never offered twice by different paths.
+fn decision(inner: &Inner, signal: &Signal) -> Result<Decision, String> {
+    let kind = match signal.kind.as_str() {
+        "complete_goal" | "complete_step" => DecisionKind::ProposeComplete,
+        "new_step" => DecisionKind::ProposeStep,
+        "new_goal" => DecisionKind::ProposeGoal,
+        _ => return Err("Unknown observation proposal".into()),
+    };
+    let revision = signal
+        .goal_id
+        .filter(|_| kind != DecisionKind::ProposeGoal)
+        .map(|id| inner.storage.goal_plan(id).map(|p| p.revision))
+        .transpose()?;
+    Ok(Decision {
+        goal_id: if kind == DecisionKind::ProposeGoal {
+            None
+        } else {
+            signal.goal_id
+        },
+        step_id: signal.step_id.clone(),
+        kind,
+        evidence: signal
+            .evidence
             .iter()
-            .any(|g| g.status == "open" && fingerprint(&g.title) == fingerprint(&p.text))
-    {
-        return Ok(());
+            .map(|e| format!("sample:{}", e.sample_id))
+            .collect(),
+        reason: String::new(),
+        confidence: signal.confidence,
+        dedupe_key: format!(
+            "semantic:{}:{:?}:{:?}:{revision:?}:{}",
+            signal.kind,
+            signal.goal_id,
+            signal.step_id,
+            fingerprint(&signal.text.as_deref().unwrap_or_default().to_lowercase())
+        ),
+        source: "semantic_observation".into(),
+        text: signal.text.clone(),
+        place: None,
+        plan_revision: revision,
+    })
+}
+fn propose(app: &AppHandle, inner: &mut Inner, signal: &Signal) -> Result<(), String> {
+    let finding = decision(inner, signal)?;
+    if crate::decisions::submit_at(inner, finding, Instant::now())? == Applied::Queued {
+        companion::deliver_now(app, inner, Utc::now().timestamp())?;
     }
-    if p.kind == Kind::NewTask
-        && p.goal_id.is_some_and(|id| {
-            inner.storage.goal_plan(id).is_ok_and(|p2| {
-                p2.steps
-                    .iter()
-                    .any(|s| fingerprint(&s.text) == fingerprint(&p.text))
-            })
-        })
-    {
-        return Ok(());
-    }
-    companion::offer(app, inner, p, Utc::now().timestamp())
+    Ok(())
 }
 fn apply_result(
     app: &AppHandle,
@@ -931,11 +996,18 @@ fn apply_result(
             Err(e) if e == "Automatic completion was undone for this plan" => {
                 inner.companion.semantic.status = "result_observed";
                 inner.companion.semantic.reason = "previous_undo_needs_confirmation";
-                return companion::offer(app, inner, p, Utc::now().timestamp());
+                return propose(app, inner, signal);
             }
             Err(e) => return Err(e),
         };
         inner.companion.semantic.reason = "outcome_verified_and_completed";
+        note(inner, "completion_applied", p.goal_id, Some(p.confidence));
+        crate::decisions::completed_elsewhere(
+            inner,
+            p.goal_id,
+            signal.step_id.clone(),
+            Instant::now(),
+        );
         inner.companion.semantic.status = "completed";
         inner.companion.memory.last_progress = Utc::now().timestamp();
         inner.privacy_revision = inner.privacy_revision.wrapping_add(1);
@@ -977,7 +1049,7 @@ fn apply_result(
         } else {
             "automatic_completion_disabled"
         };
-        companion::offer(app, inner, p, Utc::now().timestamp())?;
+        propose(app, inner, signal)?;
     }
     Ok(())
 }

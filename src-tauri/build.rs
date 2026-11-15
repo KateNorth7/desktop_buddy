@@ -14,6 +14,9 @@ fn main() {
             "Speech",
             "CoreAudio",
             "ScreenCaptureKit",
+            "Vision",
+            "ImageIO",
+            "CoreML",
         ] {
             println!("cargo:rustc-link-lib=framework={framework}");
         }

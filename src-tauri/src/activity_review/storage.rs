@@ -435,6 +435,35 @@ impl Storage {
         }
         Ok(())
     }
+    /// Moves the still pending, automatically recorded intervals of one episode window to
+    /// a goal. Assigned, outside and manually reviewed time never moves, so nothing is
+    /// counted twice. Returns the moved seconds.
+    pub(crate) fn assign_pending_context(
+        &self,
+        period: i64,
+        context: &str,
+        goal: i64,
+        reason: &str,
+        confidence: f64,
+    ) -> Result<i64, String> {
+        let mut q = self
+            .connection
+            .prepare("SELECT id,milliseconds FROM review_intervals WHERE period_id=?1 AND context_key=?2 AND status='pending' AND manual=0")
+            .map_err(db)?;
+        let rows = q
+            .query_map(params![period, context], |r| {
+                Ok((r.get::<_, i64>(0)?, r.get::<_, i64>(1)?))
+            })
+            .map_err(db)?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(db)?;
+        let mut moved = 0;
+        for (id, ms) in rows {
+            self.assign_review_interval(id, Some(goal), "assigned", false, reason, confidence)?;
+            moved += ms;
+        }
+        Ok(moved / 1000)
+    }
     pub(super) fn assign_review_interval(
         &self,
         id: i64,

@@ -10,6 +10,8 @@ mod cascade_tests;
 mod lanes;
 #[cfg(test)]
 mod metadata_tests;
+#[cfg(test)]
+mod replay_tests;
 mod resolution;
 pub(crate) mod stability;
 use stability::metadata_unavailable;
@@ -33,7 +35,10 @@ pub const REASK: Duration = Duration::from_secs(90);
 const EPISODE_GAP: Duration = Duration::from_secs(120);
 /// Unassigned time across an episode's windows that justifies asking about the whole
 /// episode, even while its newest window has not been stable for `AI_STABLE`.
-const EPISODE_ASK: Duration = Duration::from_secs(180);
+const EPISODE_ASK: Duration = Duration::from_secs(45);
+/// How long attribution waits for the shared AI lane before giving up the turn. Other
+/// background checks finish within this, so attribution no longer loses every turn to them.
+const LANE_WAIT: Duration = Duration::from_secs(45);
 
 /// A run of windows that form one stretch of work; see `Runtime::episode`.
 pub(crate) struct Episode {
@@ -46,6 +51,7 @@ const CACHE_TTL: Duration = Duration::from_secs(300);
 /// the goal they were matched to. Never any page text.
 const TRAIL_SECONDS: i64 = 1200;
 const TRAIL_LIMIT: usize = 12;
+const CONTEXT_CHANGED: &str = "Goal matching context changed";
 #[derive(Clone)]
 pub(crate) struct TrailEntry {
     pub(crate) at: i64,
@@ -83,6 +89,10 @@ pub struct Metrics {
 }
 #[derive(Default)]
 pub struct Runtime {
+    /// Local completion signals and per-goal work episodes.
+    pub(crate) signals: crate::completion_signals::Tracker,
+    /// A matching task is already waiting for the shared AI lane; no second one queues.
+    lane_waiting: bool,
     pub view: MatchView,
     pub metrics: Metrics,
     sample: Option<ActivitySnapshot>,
@@ -430,10 +440,21 @@ fn observe_inner_at(
         return Ok(());
     }
     inner.goal_matching.proposal = resolved.view.clone();
-    let stable = inner
-        .goal_matching
-        .stable_since
-        .is_some_and(|at| now.saturating_duration_since(at) >= LOCAL_STABLE);
+    // Returning to a window that local evidence already tied to this goal earlier in the
+    // trail needs no new stability wait: short revisits of a form or an email still count.
+    let returning = resolved.view.goal_id.is_some_and(|id| {
+        let key = fingerprint(sample);
+        inner
+            .goal_matching
+            .trail
+            .iter()
+            .any(|entry| entry.key == key && entry.goal_id == Some(id))
+    });
+    let stable = returning
+        || inner
+            .goal_matching
+            .stable_since
+            .is_some_and(|at| now.saturating_duration_since(at) >= LOCAL_STABLE);
     let explicit = resolved.view.source.as_deref() == Some("explicit_focus");
     // Generic titles cannot keep an AI assignment indefinitely. Periodic
     // refresh allows a later task in the same window to acquire new evidence.
@@ -482,6 +503,28 @@ fn observe_inner_at(
         .goal_id
         .filter(|_| view.confidence.unwrap_or(0.) >= crate::relevance::THRESHOLD);
     inner.goal_matching.record_trail(sample, matched, wall, now);
+    // A local match that settles after the stability wait owns the whole stable context,
+    // as an AI answer does; otherwise its first half minute would stay pending forever.
+    let settled = matched.filter(|id| {
+        matches!(
+            view.source.as_deref(),
+            Some("local_keywords" | "user_rule" | "learned_lane")
+        ) && (inner.goal_matching.view.goal_id != Some(*id)
+            || inner.goal_matching.view.source != view.source)
+    });
+    if let Some(id) = settled {
+        attribute_context(
+            inner,
+            sample,
+            id,
+            view.confidence.unwrap_or(0.),
+            view.reason
+                .as_deref()
+                .unwrap_or("Local evidence identifies this goal"),
+            now,
+            false,
+        );
+    }
     inner.goal_matching.view = view;
     // Focus lifecycle updates can change a checkpoint; bind to the resulting state.
     inner.goal_matching.signature = Some(resolution::resolve(inner, sample)?.signature);
@@ -801,6 +844,7 @@ fn due_inner(inner: &crate::commands::Inner, now: Instant) -> bool {
     cloud_allowed(inner)
         && (inner.status.anthropic_configured || inner.status.mock_ai)
         && !matching.in_flight
+        && !matching.lane_waiting
         && !debounced
         && ready
 }
@@ -875,7 +919,7 @@ async fn request(
             &job.goals,
             &job.sample,
         ) {
-            return Err("Goal matching context changed".into());
+            return Err(CONTEXT_CHANGED.into());
         }
         inner.companion.view.preferences.screen_task_detection
     };
@@ -950,6 +994,15 @@ struct Job {
     context_revision: u64,
     mock: bool,
 }
+/// Diagnostics only: a journal write failure must never block attribution itself.
+fn note(inner: &crate::commands::Inner, outcome: &str, goal: Option<i64>, confidence: Option<f64>) {
+    let _ = inner.storage.note_attempt(
+        crate::tracking_attempts::MATCHING,
+        outcome,
+        goal,
+        confidence,
+    );
+}
 fn claim(inner: &mut crate::commands::Inner, now: Instant) -> Result<Option<Job>, String> {
     if !due_inner(inner, now) {
         return Ok(None);
@@ -961,9 +1014,11 @@ fn claim(inner: &mut crate::commands::Inner, now: Instant) -> Result<Option<Job>
         .ok_or("No activity to match")?;
     let goals = candidates(inner, &sample)?;
     if goals.as_array().is_none_or(|g| g.is_empty()) {
+        note(inner, "skipped_no_candidates", None, None);
         return Ok(None);
     }
     if !inner.status.mock_ai && !crate::observation::reserve(inner) {
+        note(inner, "skipped_hourly_budget", None, None);
         if inner.goal_matching.view.goal_id.is_none() {
             inner.goal_matching.view.reason =
                 Some("Goal matching is waiting for the hourly AI budget".into());
@@ -1008,7 +1063,34 @@ fn finish(
         &job.goals,
         &job.sample,
     ) {
+        note(inner, "context_changed", None, None);
         return Ok(None);
+    }
+    match &result {
+        Ok(answer) => {
+            let outcome = match answer.goal_id {
+                None => "answered_no_goal",
+                Some(id)
+                    if answer.confidence
+                        >= if in_today(&job.goals, id) {
+                            AUTO_ASSIGN_CONFIDENCE
+                        } else {
+                            OUTSIDE_TODAY_ASSIGN_CONFIDENCE
+                        } =>
+                {
+                    "assigned"
+                }
+                Some(_) => "answered_below_threshold",
+            };
+            note(inner, outcome, answer.goal_id, Some(answer.confidence));
+        }
+        Err(error) if error == CONTEXT_CHANGED => note(inner, "context_changed", None, None),
+        Err(error) => note(
+            inner,
+            crate::tracking_attempts::provider_outcome(error),
+            None,
+            None,
+        ),
     }
     let mut suggestion = None;
     let unverified = metadata_unavailable(&job.sample);
@@ -1146,7 +1228,22 @@ fn finish(
     Ok(suggestion)
 }
 pub async fn identify(app: &AppHandle, state: &AppState) {
-    let Ok(_provider) = state.companion_request.try_lock() else {
+    // Attribution is how measured time reaches a goal: wait for the shared lane instead of
+    // losing the turn to whichever observation or review call happens to hold it.
+    match state.inner.lock() {
+        Ok(mut inner) if !inner.goal_matching.lane_waiting => {
+            inner.goal_matching.lane_waiting = true;
+        }
+        _ => return,
+    }
+    let lane = tokio::time::timeout(LANE_WAIT, state.companion_request.lock()).await;
+    if let Ok(mut inner) = state.inner.lock() {
+        inner.goal_matching.lane_waiting = false;
+        if lane.is_err() {
+            note(&inner, "skipped_lane_busy", None, None);
+        }
+    }
+    let Ok(_provider) = lane else {
         return;
     };
     let job = state
@@ -1194,7 +1291,7 @@ pub async fn identify(app: &AppHandle, state: &AppState) {
             )
             .await
         } else {
-            Err("Goal matching context changed".into())
+            Err(CONTEXT_CHANGED.into())
         }
     };
     if let Ok(mut inner) = state.inner.lock() {

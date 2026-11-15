@@ -37,7 +37,7 @@ export function describePrivacy(
 ): string {
   if (!tracking)
     return "Background tracking is paused. No new activity is collected; explicitly requested chat and research can still use the context you permit.";
-  const sharing = `Enabled AI checks may send bounded interface text, window metadata, ${goalTitle ? "this goal" : "relevant goals"} and permitted relevant memories to Claude. ${screenshots ? "Optional active-window images may also be sent. Review evidence is encrypted locally until the daily summary is saved at the configured Daily summary time." : "Screenshots are off."} This preview does not show the exact next request.`;
+  const sharing = `Enabled AI checks may send bounded interface text, window metadata, ${goalTitle ? "this goal" : "relevant goals"} and permitted relevant memories to Claude. ${screenshots ? "Text of an active window that exposes little text is recognised on this device and treated like interface text. Optional active-window images may also be sent. Review evidence is encrypted locally until the daily summary is saved at the configured Daily summary time." : "Screenshots are off."} This preview does not show the exact next request.`;
   const goal = goalTitle ? `your goal, “${goalTitle}”` : "your current goal";
   let apps: { app: string; seconds: number }[];
   try {

@@ -691,3 +691,59 @@ fn nonfocused_step_acceptance_completion_and_undo_keep_focus_and_the_wider_goal_
     assert!(!i.storage.goal_plan(id).unwrap().steps[0].done);
     assert_eq!(i.storage.goal().unwrap().unwrap().id, focus);
 }
+#[test]
+fn screen_findings_share_the_decision_path_with_the_other_analysers() {
+    let state = AppState::new(Storage::open(std::path::Path::new(":memory:")).unwrap()).unwrap();
+    let mut inner = state.inner.lock().unwrap();
+    inner.companion.view.preferences.screen_task_detection = true;
+    let day = chrono::Local::now().date_naive().to_string();
+    inner
+        .storage
+        .core_create_goal("Order a cake", "cake", &day)
+        .unwrap();
+    let goal = inner.storage.core_work_snapshot().unwrap().goals[0].id;
+    let done = Signal {
+        kind: "complete_goal".into(),
+        goal_id: Some(goal),
+        step_id: None,
+        text: None,
+        confidence: 0.95,
+        evidence: vec![Evidence {
+            sample_id: 2,
+            quote: Some("Order confirmed".into()),
+            image: false,
+        }],
+    };
+    let now = Instant::now();
+    let finding = decision(&inner, &done).unwrap();
+    assert_eq!(
+        finding.plan_revision,
+        Some(inner.storage.goal_plan(goal).unwrap().revision)
+    );
+    assert_eq!(
+        crate::decisions::submit_at(&mut inner, finding, now).unwrap(),
+        Applied::Queued
+    );
+    // The episode review reaching the same conclusion later shows no second card.
+    let review = Decision {
+        source: "episode_review".into(),
+        dedupe_key: "review_done:x".into(),
+        ..decision(&inner, &done).unwrap()
+    };
+    assert_eq!(
+        crate::decisions::submit_at(&mut inner, review, now).unwrap(),
+        Applied::Deduplicated
+    );
+    // A new goal that is already listed is never offered.
+    let listed = Signal {
+        kind: "new_goal".into(),
+        goal_id: None,
+        text: Some("order a cake".into()),
+        ..done
+    };
+    let listed = decision(&inner, &listed).unwrap();
+    assert_eq!(
+        crate::decisions::submit_at(&mut inner, listed, now).unwrap(),
+        Applied::Rejected("already_listed")
+    );
+}

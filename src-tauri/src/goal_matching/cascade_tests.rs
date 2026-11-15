@@ -1082,6 +1082,20 @@ fn a_run_of_short_windows_with_enough_pending_time_is_asked_about_as_one_episode
 }
 
 #[test]
+fn a_task_waiting_for_the_shared_lane_keeps_a_second_one_from_queueing() {
+    let (state, _ids) = setup(&["Atlas launch alpha", "Vega budget"]);
+    let mut i = state.inner.lock().unwrap();
+    let base = Instant::now();
+    feed(&mut i, &sample("Research notes"), base, 0, 45);
+    feed(&mut i, &sample("Draft email"), base, 48, 60);
+    assert!(due_inner(&i, base + Duration::from_secs(60)));
+    i.goal_matching.lane_waiting = true;
+    assert!(!due_inner(&i, base + Duration::from_secs(60)));
+    i.goal_matching.lane_waiting = false;
+    assert!(due_inner(&i, base + Duration::from_secs(60)));
+}
+
+#[test]
 fn changing_text_in_the_same_window_is_asked_again_only_after_reask() {
     let (state, ids) = setup(&["Atlas launch alpha", "Atlas launch beta", "Vega budget"]);
     let mut i = state.inner.lock().unwrap();

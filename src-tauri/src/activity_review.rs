@@ -126,6 +126,20 @@ impl Storage {
                 )
                 .map_err(db)?;
         }
+        // Additive migration: the fixed result code an evidence sample showed, if any.
+        let evidence: Vec<String> = self
+            .connection
+            .prepare("PRAGMA table_info(review_evidence)")
+            .map_err(db)?
+            .query_map([], |r| r.get::<_, String>(1))
+            .map_err(db)?
+            .collect::<Result<_, _>>()
+            .map_err(db)?;
+        if !evidence.iter().any(|c| c == "result_signal") {
+            self.connection
+                .execute_batch("ALTER TABLE review_evidence ADD COLUMN result_signal TEXT;")
+                .map_err(db)?;
+        }
         Ok(())
     }
     /// A failed review attempt: retried after five minutes, and after `MAX_REVIEW_FAILURES`

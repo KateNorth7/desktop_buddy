@@ -117,6 +117,8 @@ pub struct DayProgress {
     pub completed: Vec<String>,
     pub completed_goals: Vec<String>,
     pub goals: Vec<GoalTime>,
+    /// Recorded, attributed and waiting time, so an empty goal list can be explained.
+    pub tracking: crate::tracking_attempts::TrackingDay,
 }
 #[derive(Serialize)]
 pub struct HourTime {
@@ -990,6 +992,7 @@ impl Storage {
             completed_goals:self.connection.prepare("SELECT e.title FROM core_events e WHERE e.day=?1 AND e.step_id='goal' AND e.kind='completed' AND e.id=(SELECT MAX(x.id) FROM core_events x WHERE x.goal_id=e.goal_id AND x.step_id='goal' AND x.day=e.day)").map_err(db)?.query_map([date],|r|r.get(0)).map_err(db)?.collect::<Result<Vec<_>,_>>().map_err(db)?,
             completed,
             goals,
+            tracking: self.tracking_day(date)?,
         })
     }
     pub fn core_snapshot(&self, anchor: Option<&str>) -> Result<CoreSnapshot, String> {
@@ -1145,6 +1148,7 @@ impl Storage {
                     completed: vec![],
                     completed_goals: vec![],
                     goals: vec![],
+                    tracking: Default::default(),
                 }
             },
             week,

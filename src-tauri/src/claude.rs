@@ -326,7 +326,16 @@ pub fn sanitize(schema: &mut Value) {
                     if kind == "null" {
                         json!({"type":"null"})
                     } else {
+                        // A nullable enum lists null among its values; only the null
+                        // variant may keep it, or the typed variant is not a valid schema.
                         let mut variant = constraints.clone();
+                        if let Some(values) = variant.get_mut("enum").and_then(Value::as_array_mut)
+                        {
+                            values.retain(|value| !value.is_null());
+                        }
+                        if variant.get("const").is_some_and(Value::is_null) {
+                            variant.remove("const");
+                        }
                         variant.insert("type".into(), kind.clone());
                         Value::Object(variant)
                     }
@@ -490,6 +499,19 @@ pub(crate) mod test {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn a_nullable_enum_keeps_null_only_in_its_null_variant() {
+        let mut schema = json!({"type":"object","properties":{
+            "kind":{"type":["string","null"],"enum":["send_email","join_call",null]}},
+            "required":["kind"]});
+        sanitize(&mut schema);
+        let variants = schema["properties"]["kind"]["anyOf"].as_array().unwrap();
+        assert_eq!(
+            variants[0],
+            json!({"type":"string","enum":["send_email","join_call"]})
+        );
+        assert_eq!(variants[1], json!({"type":"null"}));
+    }
     #[test]
     fn chat_request_moves_instructions_to_system_and_constrains_json_output() {
         let payload = json!({"model":"vendor/legacy","temperature":0.2,"top_p":0.9,"max_tokens":2048,"reasoning_effort":"high",

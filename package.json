@@ -1,7 +1,7 @@
 {
   "name": "desktop-buddy",
   "private": true,
-  "version": "0.51.0",
+  "version": "0.52.0",
   "license": "MIT",
   "type": "module",
   "scripts": {
@@ -10,6 +10,7 @@
     "test": "vitest run",
     "lint": "node scripts/lint-frontend.mjs",
     "lint:rust": "node scripts/lint-rust.mjs",
+    "bench:live": "node scripts/live-benchmarks.mjs",
     "lint:unused": "node scripts/lint-unused.mjs",
     "test:visual": "playwright test --update-snapshots=none",
     "test:visual:list": "playwright test --list",

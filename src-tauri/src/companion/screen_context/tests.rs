@@ -364,3 +364,72 @@ fn passive_media_keeps_text_available_but_never_bypasses_lock_exclusion_or_pause
     inner.buddy.foreground = Some(activity.clone());
     assert!(!allowed_in_session(&inner, &activity, true));
 }
+
+#[tokio::test]
+async fn windows_without_accessible_text_are_read_on_device_only_with_screenshot_consent() {
+    let (state, activity) = fixture();
+    let recognized = AtomicUsize::new(0);
+    let recognize = |_: ActivitySnapshot| async {
+        recognized.fetch_add(1, Ordering::SeqCst);
+        Ok("Maria - Payoneer Recruiting\nAPI_KEY=fictional-private-canary\nTuesday 10-12 works for me".to_string())
+    };
+    // A messenger without an accessibility tree: only the window chrome is readable.
+    state
+        .inner
+        .lock()
+        .unwrap()
+        .companion
+        .view
+        .preferences
+        .use_screenshots = true;
+    let text = read_with(
+        &state,
+        &activity,
+        Instant::now(),
+        |_| async { Ok("Telegram".into()) },
+        recognize,
+    )
+    .await
+    .unwrap()
+    .unwrap();
+    assert_eq!(recognized.load(Ordering::SeqCst), 1);
+    assert!(text.starts_with("Telegram\n"));
+    assert!(text.contains("Tuesday 10-12 works for me"));
+    assert!(
+        !text.contains("fictional-private-canary"),
+        "recognized text is redacted"
+    );
+    // Rich interface text is enough on its own.
+    let rich = "Release notes ".repeat(10);
+    state.inner.lock().unwrap().companion.screen_context = None;
+    let text = read_with(
+        &state,
+        &activity,
+        Instant::now(),
+        |_| async { Ok(rich.clone()) },
+        recognize,
+    )
+    .await
+    .unwrap()
+    .unwrap();
+    assert_eq!(recognized.load(Ordering::SeqCst), 1);
+    assert_eq!(text, rich);
+    // Without the screenshot consent the window's pixels are never read.
+    {
+        let mut inner = state.inner.lock().unwrap();
+        inner.companion.view.preferences.use_screenshots = false;
+        inner.companion.screen_context = None;
+    }
+    let text = read_with(
+        &state,
+        &activity,
+        Instant::now(),
+        |_| async { Ok(String::new()) },
+        recognize,
+    )
+    .await
+    .unwrap()
+    .unwrap();
+    assert_eq!(recognized.load(Ordering::SeqCst), 1);
+    assert!(text.is_empty());
+}

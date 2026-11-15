@@ -17,7 +17,12 @@ const PRICE: Record<
   string,
   { input: number; output: number; cacheWrite: number; cacheRead: number }
 > = {
-  "claude-haiku-5-5": { input: 0.1, output: 0.5, cacheWrite: 0.125, cacheRead: 0.01 },
+  "claude-haiku-5-5": {
+    input: 0.1,
+    output: 0.5,
+    cacheWrite: 0.125,
+    cacheRead: 0.01,
+  },
 };
 const SEARCH_MICROUSD = 10000;
 // Reserved before a request: a conservative estimate settled to actual usage after it.
@@ -132,7 +137,8 @@ export function validateMessages(body: Record<string, unknown>): Validated {
   let searches = 0;
   if (body.tools !== undefined) {
     // The only server tool allowed is one bounded web search; every search is billed.
-    if (!Array.isArray(body.tools) || body.tools.length !== 1) throw Error("tools");
+    if (!Array.isArray(body.tools) || body.tools.length !== 1)
+      throw Error("tools");
     const tool = body.tools[0] as Record<string, unknown>;
     if (
       !tool ||
@@ -199,7 +205,10 @@ export function validateMessages(body: Record<string, unknown>): Validated {
     throw Error("content budget");
   const price = PRICE[String(body.model)];
   const inputTokens = Math.ceil(textBytes / 3) + images * 1600 + 400;
-  const outputTokens = Math.min(Number(body.max_tokens), RESERVED_OUTPUT_TOKENS);
+  const outputTokens = Math.min(
+    Number(body.max_tokens),
+    RESERVED_OUTPUT_TOKENS,
+  );
   return {
     // Conservative reservation units, not a quoted currency price. Timeouts stay charged.
     units: textBytes + Number(body.max_tokens) * 8 + images * 16384,
@@ -227,6 +236,37 @@ export function actualMicrousd(
       count(usage?.output_tokens) * price.output +
       count(tools.web_search_requests) * SEARCH_MICROUSD,
   );
+}
+/** A spike block tells the developers once, with the user ID and counters only. */
+export async function alertDevelopers(
+  env: Environment,
+  request: typeof fetch,
+  userId: string,
+  result: Record<string, unknown>,
+): Promise<void> {
+  const token = env("TELEGRAM_BOT_TOKEN"),
+    chat = env("TELEGRAM_ALERT_CHAT_ID");
+  const usd = (value: unknown) => (Number(value) / 1_000_000).toFixed(2);
+  const text = [
+    `sumi built-in AI blocked ${userId} until the end of the UTC day (${String(result.reason)}).`,
+    `Today USD ${usd(result.today_microusd)}, 7-day average USD ${usd(result.average_microusd)}, ${Number(result.calls_10min) || 0} calls in 10 minutes.`,
+    `Unblock: select public.buddy_unblock_ai('${userId}');`,
+  ].join(" ");
+  console.warn(
+    JSON.stringify({ event: "gateway_user_blocked", reason: result.reason }),
+  );
+  if (!token || !chat || !/^[0-9]+:[A-Za-z0-9_-]+$/.test(token)) return;
+  try {
+    await request(`https://api.telegram.org/bot${token}/sendMessage`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ chat_id: chat, text }),
+      redirect: "error",
+      signal: AbortSignal.timeout(5000),
+    });
+  } catch {
+    console.warn(JSON.stringify({ event: "gateway_alert_failure" }));
+  }
 }
 type Route = { method: string; url: string; kind: string };
 function resolveRoute(path: string): Route | undefined {
@@ -392,6 +432,38 @@ export function createGateway(dependencies: Dependencies) {
           console.warn(JSON.stringify({ event: "gateway_settle_failure" }));
       } catch {
         console.warn(JSON.stringify({ event: "gateway_settle_failure" }));
+      }
+      // Per-user accounting and spike detection: numbers only, never content.
+      try {
+        const count = (value: unknown) =>
+          Number.isFinite(Number(value)) && Number(value) > 0
+            ? Math.floor(Number(value))
+            : 0;
+        const tools = (data?.usage?.server_tool_use ?? {}) as Record<
+          string,
+          unknown
+        >;
+        const recorded = await rpc("buddy_record_ai_usage", {
+          p_user: user.id,
+          p_route: quotaRoute,
+          p_model: String(payload?.model),
+          p_delta: actual - reservation.microusd,
+          p_microusd: actual,
+          p_input: count(data?.usage?.input_tokens),
+          p_output: count(data?.usage?.output_tokens),
+          p_cache_write: count(data?.usage?.cache_creation_input_tokens),
+          p_cache_read: count(data?.usage?.cache_read_input_tokens),
+          p_searches: count(tools.web_search_requests),
+        });
+        if (!recorded.ok)
+          console.warn(JSON.stringify({ event: "gateway_usage_failure" }));
+        else {
+          const result = JSON.parse(await bounded(recorded, 2000));
+          if (result?.alert === true)
+            await alertDevelopers(env, request, user.id, result);
+        }
+      } catch {
+        console.warn(JSON.stringify({ event: "gateway_usage_failure" }));
       }
       return Response.json(data, { headers: { "Cache-Control": "no-store" } });
     } catch (error) {
