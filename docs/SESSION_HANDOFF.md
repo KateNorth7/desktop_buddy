@@ -1,5 +1,9 @@
 # sumi session handoff
 
+## 0.52.0 prepared — 15 November 2026
+
+`goal-understanding/d-hardening` (PR #1) holds goal understanding, episode review, simple-goal auto-close, on-device text recognition and the live-run fixes (`docs/handoff/d-goal-understanding.md`). Ekaterina approved the four Settings Privacy baselines (`22d0f2e`). Application checks run 43698308285 passed on `22d0f2e` (macOS, Windows, visual, required gate). `npm run release:prepare -- 0.52.0` synchronized the five manifests and added `docs/RELEASE_0.52.0.md`; `release:prepare -- --check` and `npm run test:release` (20 passed) pass. Not done: merge to main and the signed release. The gateway SQL/function from Prompt B is not deployed and the installer does not depend on it. The public privacy page on the original Pages site does not match `docs/privacy.html` (stale since 0.51.0) and cannot be updated from the fork.
+
 ## Goal understanding contract — 10 November 2026
 
 `claude/tracking-diagnostics` rebased onto fork `main` at `f40ef7b` (published 0.51.0, Claude Haiku 5.5 default). Step 0 of `docs/GOAL_UNDERSTANDING_PROMPTS.md` added the shared contract: `goal_understanding.rs` (type, `goal_understandings` table keyed by goal and plan revision, read/save, purged by Clear local history, cascades with the goal), `episode_evidence.rs` (types and empty reads; storage is Prompt B's choice) and `decisions.rs` (one decision type and a `submit` stub that changes nothing). No behaviour change. The plan now holds the branch names, the file ownership map and per-prompt handoff files. The branch is not pushed: `rev-oss` has read-only access to `KateNorth7/desktop_buddy` (403), so A, B and C cannot start from the fork yet.
