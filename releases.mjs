@@ -1,4 +1,4 @@
-export const REPOSITORY = "ArtmarketVM/desktop_buddy";
+export const REPOSITORY = "KateNorth7/desktop_buddy";
 export const LATEST_RELEASE = `https://github.com/${REPOSITORY}/releases/latest`;
 export const RELEASE_API = `https://api.github.com/repos/${REPOSITORY}/releases/latest`;
 

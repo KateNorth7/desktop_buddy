@@ -11,7 +11,7 @@ const release = {
       name,
       state: "uploaded",
       size: 1,
-      browser_download_url: `https://github.com/ArtmarketVM/desktop_buddy/releases/download/v0.49.4/${name}`,
+      browser_download_url: `https://github.com/KateNorth7/desktop_buddy/releases/download/v0.49.4/${name}`,
     }),
   ),
 };

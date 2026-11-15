@@ -1,6 +1,6 @@
 # Sumi GitHub Pages
 
-Public landing page: https://artmarketvm.github.io/desktop_buddy/
+Public landing page: https://katenorth7.github.io/desktop_buddy/
 
 This dedicated `gh-pages` branch hosts the website only. Application source and releases stay on `main`. GitHub Pages publishes this branch's root using `.nojekyll`; no backend, private API key, database, app build or installer update is needed.
 
@@ -24,6 +24,6 @@ To change the video, edit `video.youtubeId`, replace the local poster if needed 
 2. Run `node --test tests/site.test.mjs`; preview via `python3 -m http.server 1499 --bind 127.0.0.1`.
 3. Validate the video link/player, download destinations and retained privacy URL. Commit with an English title and push gh-pages. Website edits do not bump the app version or build installers.
 
-Initial supported release: v0.49.4; download lookup follows future stable releases automatically. Intel/universal Mac assets are unsupported. The site has no analytics, accounts, forms, AI credentials or Supabase configuration.
+Releases come from KateNorth7/desktop_buddy (from v0.50.0; the frozen hackathon submission ArtmarketVM/desktop_buddy stays at v0.49.4); download lookup follows future stable releases automatically. Intel/universal Mac assets are unsupported. The site has no analytics, accounts, forms, AI credentials or Supabase configuration.
 
 Font assets retain their OFL licenses. Platform icons are from [Material Design Icons](https://github.com/Templarian/MaterialDesign), with the included license in assets/platform-icons-LICENSE.txt; the platform marks identify compatibility, not endorsement. The favicon uses the application's existing companion body pattern and Lime preset. Website code is MIT-licensed.
