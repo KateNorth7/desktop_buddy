@@ -1,6 +1,6 @@
 # Application updates
 
-sumi uses signed GitHub Releases for Windows x64 and Apple Silicon macOS 14.5+. Repository commits, tags and ordinary CI artifacts are not delivered application updates. Download the ready-made installers from [Releases](https://github.com/ArtmarketVM/desktop_buddy/releases/latest); see [installation](docs/JUDGES_START_HERE.md).
+sumi uses signed GitHub Releases for Windows x64 and Apple Silicon macOS 14.5+. Repository commits, tags and ordinary CI artifacts are not delivered application updates. Download the ready-made installers from [Releases](https://github.com/KateNorth7/desktop_buddy/releases/latest); see [installation](docs/JUDGES_START_HERE.md).
 
 ## User update flow
 

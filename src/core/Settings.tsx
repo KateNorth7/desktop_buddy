@@ -26,7 +26,7 @@ import { emptyCore } from "./types";
 
 const sections = ["General", "Profile", "AI", "Privacy", "About"] as const;
 export const PRIVACY_POLICY_URL =
-  "https://artmarketvm.github.io/desktop_buddy/docs/privacy.html";
+  "https://katenorth7.github.io/desktop_buddy/docs/privacy.html";
 
 /** One plain sentence about what sumi knows right now and what it would send. */
 export function describePrivacy(

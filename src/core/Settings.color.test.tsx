@@ -132,7 +132,7 @@ it("opens the published privacy policy from the Privacy section", async () => {
   fireEvent.click(screen.getByRole("button", { name: /^Privacy$/ }));
   fireEvent.click(screen.getByRole("button", { name: "Privacy policy ↗" }));
   expect(openUrl).toHaveBeenCalledWith(
-    "https://artmarketvm.github.io/desktop_buddy/docs/privacy.html",
+    "https://katenorth7.github.io/desktop_buddy/docs/privacy.html",
   );
 });
 it("color autosaves without saving unrelated name drafts", async () => {

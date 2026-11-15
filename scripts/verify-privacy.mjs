@@ -9,7 +9,7 @@ const configured = source.match(
   /export const PRIVACY_POLICY_URL\s*=\s*["']([^"']+)["']/,
 )?.[1];
 const canonical =
-  "https://artmarketvm.github.io/desktop_buddy/docs/privacy.html";
+  "https://katenorth7.github.io/desktop_buddy/docs/privacy.html";
 const policy = readFileSync(
   new URL("../docs/privacy.html", import.meta.url),
   "utf8",
