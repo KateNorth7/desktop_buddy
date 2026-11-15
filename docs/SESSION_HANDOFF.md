@@ -1,5 +1,9 @@
 # sumi session handoff
 
+## 0.52.0 published — 15 November 2026
+
+PR #1 merged into fork `main` (`5949d37`). Release run [43708462740](https://github.com/KateNorth7/desktop_buddy/actions/runs/43708462740) passed (both platform validations, visual, publish). Verified once afterwards: `releases/latest` resolves to v0.52.0; `updates-epoch-3.json` (Windows) and `updates-macos-epoch-1.json` carry 0.52.0 with signatures; `SHA256SUMS.txt` lists 12 entries and matches the downloaded Mac update archive and Windows installer. Installers were not installed or run from this session; auto-close and the Windows runtime are not verified live.
+
 ## 0.52.0 prepared — 15 November 2026
 
 `goal-understanding/d-hardening` (PR #1) holds goal understanding, episode review, simple-goal auto-close, on-device text recognition and the live-run fixes (`docs/handoff/d-goal-understanding.md`). Ekaterina approved the four Settings Privacy baselines (`22d0f2e`). Application checks run 43698308285 passed on `22d0f2e` (macOS, Windows, visual, required gate). `npm run release:prepare -- 0.52.0` synchronized the five manifests and added `docs/RELEASE_0.52.0.md`; `release:prepare -- --check` and `npm run test:release` (20 passed) pass. Not done: merge to main and the signed release. The gateway SQL/function from Prompt B is not deployed and the installer does not depend on it. The public privacy page on the original Pages site does not match `docs/privacy.html` (stale since 0.51.0) and cannot be updated from the fork.
