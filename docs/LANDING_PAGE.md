@@ -1,6 +1,8 @@
 # Public download landing page
 
-Public URL: https://artmarketvm.github.io/desktop_buddy/
+Public URL: https://katenorth7.github.io/desktop_buddy/ (served from the fork's [`gh-pages` branch](https://github.com/KateNorth7/desktop_buddy/tree/gh-pages) once Pages is enabled there; see below).
+
+**Fork move, 15 November 2026.** Releases publish from `KateNorth7/desktop_buddy` since 0.50.0, but the original site at https://artmarketvm.github.io/desktop_buddy/ still downloaded the frozen v0.49.4 and served the 18 October policy (Nebius/Tavily). The fork's `gh-pages` (`ac15a33`) now looks up releases in the fork and carries the current policy with fork links; the app's `PRIVACY_POLICY_URL`, README, UPDATES.md and `npm run verify:privacy` use the fork's Pages URL. Enabling Pages (Settings → Pages → Deploy from branch `gh-pages` `/`) and Issues on the fork needs a repository admin. The original site is not changed: it belongs to the frozen submission. History below describes the original site.
 
 The owner authorized GitHub Pages publication on 30 October 2026. The existing Pages source was changed from `main` at `/` to the dedicated [`gh-pages` branch](https://github.com/ArtmarketVM/desktop_buddy/tree/gh-pages) at `/`. The application root index.html remains unchanged. Never merge the website branch's root files into app main.
 

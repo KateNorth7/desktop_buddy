@@ -6,11 +6,11 @@ A local-first desktop companion that helps you keep track of goals, return to un
 
 ## Download
 
-**[Watch the demo and download sumi](https://artmarketvm.github.io/desktop_buddy/)** — the public landing page has the product video and Windows/macOS download buttons.
+**[Watch the demo and download sumi](https://katenorth7.github.io/desktop_buddy/)** — the public landing page has the product video and Windows/macOS download buttons.
 
 **Judges and users do not need to build sumi.** Download a ready-to-install package below, complete onboarding and use **Built-in AI**. No Node.js, Rust, account registration or personal API key is required. See the [judge installation and testing guide](docs/JUDGES_START_HERE.md).
 
-[Get the latest release](https://github.com/ArtmarketVM/desktop_buddy/releases/latest) for the current version, release notes and verified installer assets. Replace `<version>` below with that release’s version.
+[Get the latest release](https://github.com/KateNorth7/desktop_buddy/releases/latest) for the current version, release notes and verified installer assets. Replace `<version>` below with that release’s version.
 
 | Platform | Installer                               | Support                    |
 | -------- | --------------------------------------- | -------------------------- |
