@@ -2,7 +2,7 @@
 
 ## Download channel moved to the fork — 16 November 2026
 
-Fork Pages are enabled (Ekaterina, branch `gh-pages`, root) and Issues are on. The fork `gh-pages` (`ac15a33`) resolves downloads from `KateNorth7/desktop_buddy` releases and serves the current `docs/privacy.html`. PR #2 merged (`42ac665`): README, `UPDATES.md`, the in-app privacy link, `verify:privacy` and `docs/LANDING_PAGE.md` point at https://katenorth7.github.io/desktop_buddy/. Checks: CI run 43712682822 green on `373a54c` (macOS, Windows, visual); site tests 7 passed; live landing and policy return 200; `npm run verify:privacy` reports the live policy matches the local file. Not done: installed 0.52.0 still opens the old policy URL until a 0.52.1 release; 0.49.4 installs on the original update channel are not migrated (needs a bridge release in the original repository, which is out of scope).
+Fork Pages are enabled (Ekaterina, branch `gh-pages`, root) and Issues are on. The fork `gh-pages` (`ac15a33`) resolves downloads from `KateNorth7/desktop_buddy` releases and serves the current `docs/privacy.html`. PR #2 merged (`42ac665`): README, `UPDATES.md`, the in-app privacy link, `verify:privacy` and `docs/LANDING_PAGE.md` point at https://katenorth7.github.io/desktop_buddy/. Checks: CI run 43712682822 green on `373a54c` (macOS, Windows, visual); site tests 7 passed; live landing and policy return 200; `npm run verify:privacy` reports the live policy matches the local file. Installed 0.52.0 still opens the old policy URL; 0.52.1 carries the new link.
 
 ## 0.52.0 published — 15 November 2026
 
