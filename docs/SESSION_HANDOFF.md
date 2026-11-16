@@ -1,5 +1,9 @@
 # sumi session handoff
 
+## Download channel moved to the fork — 16 November 2026
+
+Fork Pages are enabled (Ekaterina, branch `gh-pages`, root) and Issues are on. The fork `gh-pages` (`ac15a33`) resolves downloads from `KateNorth7/desktop_buddy` releases and serves the current `docs/privacy.html`. PR #2 merged (`42ac665`): README, `UPDATES.md`, the in-app privacy link, `verify:privacy` and `docs/LANDING_PAGE.md` point at https://katenorth7.github.io/desktop_buddy/. Checks: CI run 43712682822 green on `373a54c` (macOS, Windows, visual); site tests 7 passed; live landing and policy return 200; `npm run verify:privacy` reports the live policy matches the local file. Not done: installed 0.52.0 still opens the old policy URL until a 0.52.1 release; 0.49.4 installs on the original update channel are not migrated (needs a bridge release in the original repository, which is out of scope).
+
 ## 0.52.0 published — 15 November 2026
 
 PR #1 merged into fork `main` (`5949d37`). Release run [43708462740](https://github.com/KateNorth7/desktop_buddy/actions/runs/43708462740) passed (both platform validations, visual, publish). Verified once afterwards: `releases/latest` resolves to v0.52.0; `updates-epoch-3.json` (Windows) and `updates-macos-epoch-1.json` carry 0.52.0 with signatures; `SHA256SUMS.txt` lists 12 entries and matches the downloaded Mac update archive and Windows installer. Installers were not installed or run from this session; auto-close and the Windows runtime are not verified live.
