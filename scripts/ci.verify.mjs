@@ -449,6 +449,10 @@ test("lint gates block and their warning budgets cannot be bypassed", () => {
   assert.match(ci, /needs: \[plan, platforms, visual, rust-lint\]/);
   assert.match(ci, /rust-lint:\n    needs: \[plan, platforms\]\n/);
   assert.doesNotMatch(ci, /runner: macos-15/);
+  assert.match(
+    platforms,
+    /runs-on: \$\{\{ \(matrix\.name == 'macos-apple-silicon' && github\.event_name != 'pull_request'\) && fromJSON\('\["self-hosted","macOS","ARM64","sumi"\]'\) \|\| matrix\.runner \}\}/,
+  );
   assert.match(platforms, /components: rustfmt, clippy/);
   assert.match(platforms, /toolchain: 1.99.1/);
   assert.match(platforms, /ci-proof.mjs lint-record/);

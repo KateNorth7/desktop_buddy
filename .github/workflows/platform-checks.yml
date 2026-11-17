@@ -38,7 +38,10 @@ jobs:
           - runner: macos-15
             name: macos-apple-silicon
             target: aarch64-apple-darwin
-    runs-on: ${{ matrix.runner }}
+    # GitHub's hosted Apple Silicon pool is often unavailable. Trusted runs
+    # (manual dispatch, main pushes, releases) use the owner's registered Mac;
+    # pull requests always stay on hosted runners so outside code never runs there.
+    runs-on: ${{ (matrix.name == 'macos-apple-silicon' && github.event_name != 'pull_request') && fromJSON('["self-hosted","macOS","ARM64","sumi"]') || matrix.runner }}
     timeout-minutes: 45
     concurrency:
       group: validation-${{ github.sha }}-${{ matrix.name }}
