@@ -38,7 +38,10 @@ jobs:
           - runner: macos-15
             name: macos-apple-silicon
             target: aarch64-apple-darwin
-    runs-on: ${{ matrix.runner }}
+    # GitHub's hosted Apple Silicon pool is often unavailable. Trusted runs
+    # (manual dispatch, main pushes, releases) use the owner's registered Mac;
+    # pull requests always stay on hosted runners so outside code never runs there.
+    runs-on: ${{ (matrix.name == 'macos-apple-silicon' && github.event_name != 'pull_request') && fromJSON('["self-hosted","macOS","ARM64","sumi"]') || matrix.runner }}
     timeout-minutes: 45
     concurrency:
       group: validation-${{ github.sha }}-${{ matrix.name }}
@@ -53,6 +56,9 @@ jobs:
       CARGO_INCREMENTAL: "0"
     steps:
       - uses: actions/checkout@v4
+      - name: Expose Homebrew tools on the self-hosted Mac
+        if: runner.os == 'macOS'
+        run: echo /opt/homebrew/bin >> "$GITHUB_PATH"
       - uses: actions/setup-node@v4
         with:
           node-version: 24

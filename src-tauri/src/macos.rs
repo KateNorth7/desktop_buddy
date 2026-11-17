@@ -469,7 +469,22 @@ mod tests {
         use base64::Engine;
         let image =
             base64::engine::general_purpose::STANDARD.encode(include_bytes!("vision/fixture.jpg"));
-        let text = recognize_text(&image).unwrap();
+        // A fresh executable makes Vision prepare its CPU models first (about 30 s on a
+        // MacBook Air); the 4 s limit cancels the wait but preparation continues, as it
+        // does in the running app. Retry until it is ready instead of failing cold.
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(90);
+        let text = loop {
+            match recognize_text(&image) {
+                Ok(text) => break text,
+                Err(error)
+                    if (error.contains("timed out") || error.contains("busy"))
+                        && std::time::Instant::now() < deadline =>
+                {
+                    std::thread::sleep(std::time::Duration::from_secs(2));
+                }
+                Err(error) => panic!("{error}"),
+            }
+        };
         let lower = text.to_lowercase();
         let title = lower.find("interview follow-up").expect("title recognized");
         let status = lower
