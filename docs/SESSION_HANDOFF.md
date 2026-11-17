@@ -1,5 +1,11 @@
 # sumi session handoff
 
+## 0.52.1 published and self-hosted Mac runner — 17 November 2026
+
+GitHub's hosted macOS arm64 pool refused every job from 16 November ("not acquired by Runner... capacity constraints"). Trusted Apple Silicon validation (manual dispatch, main pushes, releases) now runs on the owner's Mac: runner `sumi-mac`, label `sumi`, as the standard macOS user `sumi-ci` inside that user's logged-in GUI session (a LaunchAgent in `gui/<uid>`; a system daemon cannot sign or relaunch the app). Pull requests stay on hosted runners. After a reboot, log in as `sumi-ci` (Fast User Switching) and switch back, or the Mac job waits. Setup scripts live in the ignored `.tools/runner/`. The Vision OCR test now waits up to 90 s for cold model preparation (about 27 s for a fresh binary on a MacBook Air); the app is unchanged.
+
+PR #3 merged (`f18af71`). CI run 44157099362 and main push run 44159193497 green. Release run [44159217014](https://github.com/KateNorth7/desktop_buddy/actions/runs/44159217014) passed on its third attempt. Verified once: `releases/latest` is v0.52.1; `updates-epoch-3.json` and `updates-macos-epoch-1.json` carry 0.52.1 with signatures; `SHA256SUMS.txt` lists 12 entries and matches the Mac update archive and Windows installer; the Mac app reports 0.52.1 and passes `scripts/macos-code-signing.mjs` (reviewed fingerprint `26a06189…bd76`).
+
 ## Download channel moved to the fork — 16 November 2026
 
 Fork Pages are enabled (Ekaterina, branch `gh-pages`, root) and Issues are on. The fork `gh-pages` (`ac15a33`) resolves downloads from `KateNorth7/desktop_buddy` releases and serves the current `docs/privacy.html`. PR #2 merged (`42ac665`): README, `UPDATES.md`, the in-app privacy link, `verify:privacy` and `docs/LANDING_PAGE.md` point at https://katenorth7.github.io/desktop_buddy/. Checks: CI run 43712682822 green on `373a54c` (macOS, Windows, visual); site tests 7 passed; live landing and policy return 200; `npm run verify:privacy` reports the live policy matches the local file. Installed 0.52.0 still opens the old policy URL; 0.52.1 carries the new link.
