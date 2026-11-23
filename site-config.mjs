@@ -2,7 +2,7 @@
 // The player loads after Play; there is no locally hosted video fallback.
 export const video = Object.freeze({
   youtubeId: "4Vu0HkIB1gY",
-  poster: "./assets/youtube-poster.jpg",
+  poster: "./assets/youtube-poster.jpg?v=cover-2",
 });
 
 // Google Analytics 4 measurement ID (Admin → Data streams → Web, "G-XXXXXXXXXX").
