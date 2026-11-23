@@ -4,7 +4,13 @@ import { readFileSync } from "node:fs";
 import { selectDownloads, youtubeEmbed, LATEST_RELEASE, REPOSITORY } from "../releases.mjs";
 import { gtagScriptUrl } from "../analytics.mjs";
 import { analytics } from "../site-config.mjs";
-import { COMPANION_CARDS, REPLY_MS } from "../companion.mjs";
+import {
+  COMPANION_CARDS,
+  SUCCESS_MS,
+  NEXT_CARD_MS,
+  avatarFrame,
+  moodOf,
+} from "../companion.mjs";
 import { existsSync } from "node:fs";
 const release = {
   tag_name: "v0.49.4",
@@ -78,17 +84,24 @@ test("releases and links come from the fork that publishes installers", () => {
   assert.match(html, /id="github-link"/);
   assert.match(html, /id="privacy-link"/);
 });
-test("companion cards are the app's own, with a reply for every choice", () => {
-  assert.equal(COMPANION_CARDS.length, 3);
+test("companion cards use the app's kinds, wording and poses", () => {
   assert.deepEqual(
-    COMPANION_CARDS.map((c) => c.id),
-    ["completion", "deadline", "new_work"],
+    COMPANION_CARDS.map((c) => c.kind),
+    ["goal_completion", "deadline", "unplanned_work", "automatic_completion"],
   );
   for (const card of COMPANION_CARDS) {
-    assert.equal(card.choices.length, 2);
-    for (const choice of card.choices) assert.ok(choice.reply.length > 0);
+    assert.ok(card.title && card.text && card.primary.label && card.secondary.label);
+    assert.ok(["attention", "idle", "success"].includes(card.pose));
   }
-  assert.equal(REPLY_MS, 5000);
+  const completion = COMPANION_CARDS[0];
+  assert.equal(completion.title, "Mark this goal complete?");
+  assert.equal(completion.primary.label, "Yes, complete goal");
+  assert.equal(completion.secondary.label, "Not yet");
+  assert.ok(completion.primary.celebrate);
+  assert.equal(COMPANION_CARDS[1].primary.label, "I’m on it");
+  assert.equal(COMPANION_CARDS[3].text, "Closed “Prepare the autumn release”.");
+  assert.equal(SUCCESS_MS, 1600);
+  assert.equal(NEXT_CARD_MS, 5000);
   assert.ok(existsSync(new URL("../assets/sumi-mascot.png", import.meta.url)));
   assert.ok(
     existsSync(
@@ -98,6 +111,19 @@ test("companion cards are the app's own, with a reply for every choice", () => {
       ),
     ),
   );
+});
+test("the mascot is drawn from the app's frames", () => {
+  assert.equal(moodOf("idle"), "working");
+  assert.equal(moodOf("success"), "done");
+  assert.equal(moodOf("attention"), "attention");
+  const idle = avatarFrame("idle");
+  assert.equal(idle.filter((c) => c.eye).length, 4);
+  assert.equal(idle.filter((c) => c.fill === "#e4fa8e").length, 52);
+  const done = avatarFrame("success", 0);
+  assert.ok(done.length > idle.length);
+  assert.ok(done.some((c) => c.fill === "#6c5fff"));
+  const attention = avatarFrame("attention");
+  assert.ok(attention.length > idle.length);
 });
 test("GA4 loads only for a well-formed measurement ID", () => {
   assert.equal(

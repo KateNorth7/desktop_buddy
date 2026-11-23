@@ -165,123 +165,152 @@ button {
   color: var(--muted);
 }
 
-/* Companion */
+/* Companion: the app's own card and mascot (InterventionCard, Avatar) */
 .companion {
+  --app-accent: #6c5fff;
+  --app-accent-hover: #5a4de6;
+  --app-raised: #ececec;
+  --app-text-body: 0.875rem;
+  --app-text-caption: 0.6875rem;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 1.375rem;
+  justify-content: flex-end;
+  gap: 5px;
+  min-height: 21rem;
+  font-size: var(--app-text-body);
 }
-.bubble-slot {
+.companion-bubble {
   position: relative;
-  width: 100%;
-  max-width: 22.5rem;
-  min-height: 6.75rem;
-  display: flex;
-  align-items: flex-end;
+  width: min(100%, 304px);
+  min-height: 0;
+  filter: drop-shadow(0 2px 3px rgb(31 31 31 / 0.05));
 }
-.bubble {
-  position: relative;
-  width: 100%;
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
-  padding: 1rem 1.125rem;
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: 1rem;
-  box-shadow: var(--shadow);
-  font-size: var(--text-body);
-  line-height: 1.45;
-  animation: bubble-pop 0.35s ease-out;
-}
-.bubble::after {
+.companion-bubble::after {
   content: "";
   position: absolute;
-  left: 50%;
-  bottom: -7px;
-  width: 12px;
-  height: 12px;
-  background: var(--surface);
+  width: 10px;
+  height: 10px;
+  bottom: -4px;
+  left: calc(50% - 5px);
+  transform: rotate(45deg);
   border-right: 1px solid var(--line);
   border-bottom: 1px solid var(--line);
-  transform: translateX(-50%) rotate(45deg);
-}
-.bubble strong {
-  font-weight: 500;
-}
-.bubble-actions {
-  display: flex;
-  gap: 0.5rem;
-}
-.bubble-actions button {
-  min-height: 2.25rem;
-  padding: 0.5rem 0.875rem;
-  border-radius: 0.625rem;
-  border: 1px solid var(--line);
+  border-radius: 0 0 4px 0;
   background: var(--surface);
-  font-size: 0.875rem;
-  cursor: pointer;
-  transition: background 0.18s;
+  pointer-events: none;
 }
-.bubble-actions button:hover {
-  background: var(--lime-hover);
+.suggestion-card {
+  width: 100%;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 17px;
+  background: var(--surface);
+  color: var(--text);
+  animation: buddy-arrive 0.3s ease-out;
 }
-.bubble-actions .primary {
-  background: var(--lime);
-  border-color: rgb(31 31 31 / 0.08);
+.companion-prompt h2 {
+  margin: 0 0 6px;
+  font-size: var(--app-text-body);
   font-weight: 500;
+  overflow-wrap: anywhere;
 }
-.bubble-undo {
-  align-self: flex-start;
-  padding: 0;
-  border: 0;
-  background: none;
-  font-size: 0.875rem;
-  color: var(--accent);
-  text-decoration: underline;
+.companion-prompt p {
+  margin: 0;
+  font-size: var(--app-text-body);
+  line-height: 1.45;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+.companion-prompt small {
+  display: block;
+  margin-top: 6px;
+  font-size: var(--app-text-caption);
+  line-height: 1.5;
+  color: var(--muted);
+}
+.companion-prompt .setting-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 10px;
+  font-size: var(--app-text-caption);
+  color: var(--muted);
+}
+.companion-prompt input {
+  font: inherit;
+  font-size: var(--app-text-body);
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  padding: 8px 10px;
+}
+.companion-prompt-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+.companion-prompt-actions button {
+  min-height: 30px;
+  padding: 5px 10px;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  background: var(--app-accent);
+  color: #fff;
+  font-size: var(--app-text-body);
+  font-weight: 500;
   cursor: pointer;
+  transition:
+    background 0.15s,
+    border-color 0.15s;
+}
+.companion-prompt-actions button:hover {
+  background: var(--app-accent-hover);
+}
+.companion-prompt-actions button.secondary {
+  background: var(--app-raised);
+  border-color: var(--line);
+  color: var(--muted);
+}
+.companion-prompt-actions button.secondary:hover {
+  background: var(--line);
 }
 .mascot {
+  width: 8.25rem;
+  height: 8.25rem;
+}
+.mascot svg {
   display: block;
-  width: 15rem;
-  height: 15rem;
-  animation: mascot-float 3.2s ease-in-out infinite;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
 }
-.mascot.react {
-  animation: mascot-react 0.7s ease-out;
+.avatar-idle .avatar-eyes {
+  animation: buddy-blink 7s infinite;
+  transform-origin: center;
+  transform-box: fill-box;
 }
-@keyframes mascot-float {
+@keyframes buddy-blink {
   0%,
+  44%,
+  48%,
   100% {
-    transform: translateY(0);
+    transform: scaleY(1);
   }
-  50% {
-    transform: translateY(-12px);
+  46% {
+    transform: scaleY(0.1);
   }
 }
-@keyframes mascot-react {
-  0% {
-    transform: translateY(0) scale(1);
-  }
-  30% {
-    transform: translateY(-22px) scale(1.06);
-  }
-  60% {
-    transform: translateY(0) scale(0.97);
-  }
-  100% {
-    transform: translateY(0) scale(1);
-  }
-}
-@keyframes bubble-pop {
+@keyframes buddy-arrive {
   from {
     opacity: 0;
-    transform: translateY(8px) scale(0.96);
+    transform: translateY(12px);
   }
   to {
     opacity: 1;
-    transform: translateY(0) scale(1);
+    transform: translateY(0);
   }
 }
 
@@ -383,27 +412,7 @@ footer a:hover {
     padding: 1.5rem 0 2rem;
   }
   .companion {
-    flex-direction: row;
-    justify-content: center;
-    align-items: center;
-    gap: 1rem;
-  }
-  .bubble-slot {
     min-height: 0;
-    align-items: center;
-  }
-  .bubble::after {
-    left: -7px;
-    bottom: auto;
-    top: 50%;
-    border-right: 0;
-    border-left: 1px solid var(--line);
-    transform: translateY(-50%) rotate(45deg);
-  }
-  .companion .mascot {
-    order: -1;
-    width: 9rem;
-    height: 9rem;
   }
 }
 @media (max-width: 620px) {
@@ -417,22 +426,6 @@ footer a:hover {
   .download {
     justify-content: center;
     width: 100%;
-  }
-  .companion {
-    flex-direction: column;
-  }
-  .bubble::after {
-    left: 50%;
-    top: auto;
-    bottom: -7px;
-    border-left: 0;
-    border-right: 1px solid var(--line);
-    transform: translateX(-50%) rotate(45deg);
-  }
-  .companion .mascot {
-    order: 1;
-    width: 9rem;
-    height: 9rem;
   }
   .player {
     border-radius: 0.625rem;
@@ -454,9 +447,8 @@ footer a:hover {
     transition: none !important;
     scroll-behavior: auto !important;
   }
-  .mascot,
-  .mascot.react,
-  .bubble {
+  .avatar-idle .avatar-eyes,
+  .suggestion-card {
     animation: none;
   }
 }

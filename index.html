@@ -40,8 +40,8 @@
       type="font/woff2"
       crossorigin
     />
-    <link rel="stylesheet" href="./style.css?v=landing-2" />
-    <script type="module" src="./site.mjs?v=landing-2"></script>
+    <link rel="stylesheet" href="./style.css?v=landing-3" />
+    <script type="module" src="./site.mjs?v=landing-3"></script>
   </head>
   <body>
     <main class="page">
@@ -85,15 +85,21 @@
         </div>
 
         <div class="companion" aria-label="What Sumi says">
-          <div class="bubble-slot" id="bubble-slot" aria-live="polite"></div>
-          <img
-            class="mascot"
-            id="mascot"
-            src="./assets/sumi-mascot.png"
-            width="240"
-            height="240"
-            alt="sumi, a small pixel companion"
-          />
+          <div
+            class="companion-bubble"
+            id="bubble-slot"
+            aria-live="polite"
+            hidden
+          ></div>
+          <div class="mascot" id="mascot">
+            <noscript
+              ><img
+                src="./assets/sumi-mascot.png"
+                width="132"
+                height="132"
+                alt="sumi, a small pixel companion"
+            /></noscript>
+          </div>
         </div>
       </section>
 

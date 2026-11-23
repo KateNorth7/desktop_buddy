@@ -1,7 +1,16 @@
-import { video, analytics } from "./site-config.mjs?v=landing-2";
+import { video, analytics } from "./site-config.mjs?v=landing-3";
 import { RELEASE_API, selectDownloads, youtubeEmbed } from "./releases.mjs";
 import { installAnalytics, trackEvent } from "./analytics.mjs";
-import { COMPANION_CARDS, REPLY_MS } from "./companion.mjs";
+import {
+  COMPANION_CARDS,
+  RESCHEDULE,
+  SUCCESS_MS,
+  NEXT_CARD_MS,
+  FRAME_MS,
+  AVATAR_VIEWBOX,
+  avatarFrame,
+  frameCount,
+} from "./companion.mjs";
 
 try {
   if (analytics.measurementId) installAnalytics(analytics.measurementId);
@@ -55,69 +64,152 @@ for (const [selector, name, params] of [
   });
 }
 
-// The companion: one card at a time, waiting for a click; the reply stays
-// for REPLY_MS, then the next card appears. Nothing is sent anywhere.
+// --- The companion ---------------------------------------------------------
+// The mascot is the app's own pixel avatar; cards use the app's kinds, wording
+// and buttons. A card waits for a click. Confirming a completion puts sumi in
+// the success pose for SUCCESS_MS; the next card arrives after NEXT_CARD_MS.
+
+const SVG = "http://www.w3.org/2000/svg";
 const slot = document.querySelector("#bubble-slot");
-const mascot = document.querySelector("#mascot");
+const mascotHost = document.querySelector("#mascot");
+const reducedMotion = window.matchMedia?.(
+  "(prefers-reduced-motion: reduce)",
+).matches;
+
+let avatarState = "idle";
+let frameIndex = 0;
+let frameTimer = null;
+
+function drawAvatar() {
+  const svg = document.createElementNS(SVG, "svg");
+  svg.setAttribute("viewBox", AVATAR_VIEWBOX);
+  svg.setAttribute("shape-rendering", "crispEdges");
+  svg.setAttribute("role", "img");
+  svg.setAttribute("aria-label", `sumi companion, ${avatarState}`);
+  svg.setAttribute("class", `avatar avatar-${avatarState}`);
+  const bodyGroup = document.createElementNS(SVG, "g");
+  const eyeGroup = document.createElementNS(SVG, "g");
+  eyeGroup.setAttribute("class", "avatar-eyes");
+  for (const cell of avatarFrame(avatarState, frameIndex)) {
+    const rect = document.createElementNS(SVG, "rect");
+    rect.setAttribute("x", cell.x);
+    rect.setAttribute("y", cell.y);
+    rect.setAttribute("width", cell.width);
+    rect.setAttribute("height", cell.height);
+    rect.setAttribute("fill", cell.fill);
+    (cell.eye ? eyeGroup : bodyGroup).append(rect);
+  }
+  bodyGroup.append(eyeGroup);
+  svg.append(bodyGroup);
+  mascotHost.replaceChildren(svg);
+}
+
+function setAvatar(state) {
+  avatarState = state;
+  frameIndex = 0;
+  clearInterval(frameTimer);
+  drawAvatar();
+  const count = frameCount(state);
+  if (count > 1 && !reducedMotion) {
+    frameTimer = setInterval(() => {
+      frameIndex = (frameIndex + 1) % count;
+      drawAvatar();
+    }, FRAME_MS);
+  }
+}
+
 let cardIndex = 0;
-let replyTimer = null;
+let nextTimer = null;
+let successTimer = null;
 
-function renderCard(card) {
-  const bubble = document.createElement("div");
-  bubble.className = "bubble";
-  const text = document.createElement("span");
-  text.append(card.before);
-  if (card.goal) {
-    const goal = document.createElement("strong");
-    goal.textContent = card.goal;
-    text.append(goal);
-  }
-  text.append(card.after);
-  const actions = document.createElement("span");
-  actions.className = "bubble-actions";
-  for (const [i, choice] of card.choices.entries()) {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.textContent = choice.label;
-    if (i === 0) button.className = "primary";
-    button.addEventListener("click", () => answer(card, choice));
-    actions.append(button);
-  }
-  bubble.append(text, actions);
-  slot.replaceChildren(bubble);
+function button(label, className, onClick) {
+  const el = document.createElement("button");
+  el.type = "button";
+  el.textContent = label;
+  if (className) el.className = className;
+  el.addEventListener("click", onClick);
+  return el;
 }
 
-function renderReply(choice) {
-  const bubble = document.createElement("div");
-  bubble.className = "bubble";
-  const text = document.createElement("span");
-  text.textContent = choice.reply;
-  bubble.append(text);
-  if (choice.undo) {
-    const undo = document.createElement("button");
-    undo.type = "button";
-    undo.className = "bubble-undo";
-    undo.textContent = "Undo";
-    bubble.append(undo);
-  }
-  slot.replaceChildren(bubble);
+function cardShell(title, text) {
+  const section = document.createElement("section");
+  section.className = "suggestion-card companion-prompt";
+  section.setAttribute("aria-label", title);
+  const h2 = document.createElement("h2");
+  h2.textContent = title;
+  const p = document.createElement("p");
+  p.textContent = text;
+  section.append(h2, p);
+  return section;
 }
 
-function answer(card, choice) {
-  clearTimeout(replyTimer);
-  trackEvent("companion_reply", { card: card.id, choice: choice.id });
-  mascot.classList.remove("react");
-  void mascot.offsetWidth;
-  mascot.classList.add("react");
-  renderReply(choice);
-  replyTimer = setTimeout(() => {
-    mascot.classList.remove("react");
+function showCard(card) {
+  const section = cardShell(card.title, card.text);
+  if (card.note) {
+    const small = document.createElement("small");
+    small.textContent = card.note;
+    section.append(small);
+  }
+  const actions = document.createElement("div");
+  actions.className = "companion-prompt-actions";
+  actions.append(
+    button(card.primary.label, "", () => respond(card, card.primary)),
+    button(card.secondary.label, "secondary", () =>
+      card.secondary.reschedule
+        ? showReschedule(card)
+        : respond(card, card.secondary),
+    ),
+  );
+  section.append(actions);
+  slot.replaceChildren(section);
+  slot.hidden = false;
+  setAvatar(card.pose);
+}
+
+function showReschedule(card) {
+  const section = cardShell(RESCHEDULE.title, RESCHEDULE.text);
+  const label = document.createElement("label");
+  label.className = "setting-row";
+  const span = document.createElement("span");
+  span.textContent = RESCHEDULE.field;
+  const input = document.createElement("input");
+  input.type = "datetime-local";
+  const tomorrow = new Date(Date.now() + 86400000);
+  tomorrow.setHours(10, 0, 0, 0);
+  const pad = (n) => String(n).padStart(2, "0");
+  input.value = `${tomorrow.getFullYear()}-${pad(tomorrow.getMonth() + 1)}-${pad(tomorrow.getDate())}T10:00`;
+  label.append(span, input);
+  const actions = document.createElement("div");
+  actions.className = "companion-prompt-actions";
+  actions.append(
+    button(RESCHEDULE.save, "", () =>
+      respond(card, { id: "reschedule", label: RESCHEDULE.save }),
+    ),
+    button(RESCHEDULE.cancel, "secondary", () => showCard(card)),
+  );
+  section.append(label, actions);
+  slot.replaceChildren(section);
+}
+
+function respond(card, choice) {
+  clearTimeout(nextTimer);
+  clearTimeout(successTimer);
+  trackEvent("companion_reply", { card: card.kind, choice: choice.id });
+  slot.replaceChildren();
+  slot.hidden = true;
+  if (choice.celebrate) {
+    setAvatar("success");
+    successTimer = setTimeout(() => setAvatar("idle"), SUCCESS_MS);
+  } else {
+    setAvatar("idle");
+  }
+  nextTimer = setTimeout(() => {
     cardIndex = (cardIndex + 1) % COMPANION_CARDS.length;
-    renderCard(COMPANION_CARDS[cardIndex]);
-  }, REPLY_MS);
+    showCard(COMPANION_CARDS[cardIndex]);
+  }, NEXT_CARD_MS);
 }
 
-if (slot && mascot) renderCard(COMPANION_CARDS[cardIndex]);
+if (slot && mascotHost) showCard(COMPANION_CARDS[cardIndex]);
 
 // One unauthenticated metadata request to the release repository; no tokens or storage.
 // If GitHub is unavailable/rate-limited, both ordinary links still open Releases.
