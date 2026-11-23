@@ -15,7 +15,8 @@ To change the video, edit `video.youtubeId`, replace the local poster if needed 
 ## Downloads and design
 
 - Both platform buttons resolve the latest stable GitHub release's complete uploaded Apple Silicon DMG and Windows x64 EXE pair. Accepted URLs must belong to this exact repository. One bounded public metadata request runs per visit; no polling, browser storage or credentials are used. If JavaScript/API access fails or is rate-limited, ordinary links open the latest GitHub release.
-- The header uses the app's actual pixel wordmark: lowercase `sumi` rendered in bundled Silkscreen, weight 400 and 0.08em tracking. The owner-approved English slogan, Instrument Sans, Cloud/Lime palette and version-only line remain. The header mascot was removed at the owner's request. Both download buttons use Lime #E4FA8E on hover; keyboard focus retains the sky-blue outline.
+- Layout (23 November 2026): a two-column hero (headline, one sentence, two download buttons on the left; the pixel companion with one card on the right), then the demo video, then a one-line footer with the privacy sentence, version, GitHub and Privacy. The header is the app's pixel wordmark: lowercase `sumi` in bundled Silkscreen, weight 400 and 0.08em tracking. Instrument Sans 400/500/600 (600 only for the headline), Cloud/Lime palette; the macOS button is Lime, both turn Lime on hover; keyboard focus keeps the sky-blue outline.
+- The companion (`companion.mjs`, `assets/sumi-mascot.png`) shows three cards the app really sends, one at a time: a completion offer, a deadline check-in and a new-work offer. A card waits for a click; the reply shows for five seconds, then the next card appears. The mascot hovers and hops on a click. Nothing is sent or stored; `prefers-reduced-motion` turns the motion off. Clicks are reported to analytics as `companion_reply` (card, choice).
 - `docs/privacy.html` and referenced fonts are exact copies from application main, preserving `/desktop_buddy/docs/privacy.html`. When the policy changes, sync both branches, publish and run the app's `npm run verify:privacy`.
 
 ## Edit and publish
@@ -28,6 +29,6 @@ Releases come from `KateNorth7/desktop_buddy` (`REPOSITORY` in `releases.mjs`; f
 
 ## Analytics
 
-Google Analytics 4 loads only when `analytics.measurementId` in `site-config.mjs` holds a valid `G-…` ID; an empty ID publishes the page without any analytics request. Besides page views, the page sends `download` (platform, resolved app version), `play_video`, `watch_on_youtube`, `open_github` and `open_privacy` events. GA4 sets cookies on the visitor's browser; a consent notice for visitors in regions that require one is not part of this page.
+Google Analytics 4 loads only when `analytics.measurementId` in `site-config.mjs` holds a valid `G-…` ID; an empty ID publishes the page without any analytics request. Besides page views, the page sends `download` (platform, resolved app version), `play_video`, `companion_reply` (card, choice), `open_github`, `open_privacy` and, from the no-JavaScript fallback link, `watch_on_youtube` events. GA4 sets cookies on the visitor's browser; a consent notice for visitors in regions that require one is not part of this page.
 
 Font assets retain their OFL licenses. Platform icons are from [Material Design Icons](https://github.com/Templarian/MaterialDesign), with the included license in assets/platform-icons-LICENSE.txt; the platform marks identify compatibility, not endorsement. The favicon uses the application's existing companion body pattern and Lime preset. Website code is MIT-licensed.

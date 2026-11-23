@@ -4,6 +4,8 @@ import { readFileSync } from "node:fs";
 import { selectDownloads, youtubeEmbed, LATEST_RELEASE, REPOSITORY } from "../releases.mjs";
 import { gtagScriptUrl } from "../analytics.mjs";
 import { analytics } from "../site-config.mjs";
+import { COMPANION_CARDS, REPLY_MS } from "../companion.mjs";
+import { existsSync } from "node:fs";
 const release = {
   tag_name: "v0.49.4",
   draft: false,
@@ -75,6 +77,27 @@ test("releases and links come from the fork that publishes installers", () => {
   assert.doesNotMatch(html, /github\.com\/ArtmarketVM/);
   assert.match(html, /id="github-link"/);
   assert.match(html, /id="privacy-link"/);
+});
+test("companion cards are the app's own, with a reply for every choice", () => {
+  assert.equal(COMPANION_CARDS.length, 3);
+  assert.deepEqual(
+    COMPANION_CARDS.map((c) => c.id),
+    ["completion", "deadline", "new_work"],
+  );
+  for (const card of COMPANION_CARDS) {
+    assert.equal(card.choices.length, 2);
+    for (const choice of card.choices) assert.ok(choice.reply.length > 0);
+  }
+  assert.equal(REPLY_MS, 5000);
+  assert.ok(existsSync(new URL("../assets/sumi-mascot.png", import.meta.url)));
+  assert.ok(
+    existsSync(
+      new URL(
+        "../assets/fonts/instrument-sans-latin-600-normal.woff2",
+        import.meta.url,
+      ),
+    ),
+  );
 });
 test("GA4 loads only for a well-formed measurement ID", () => {
   assert.equal(

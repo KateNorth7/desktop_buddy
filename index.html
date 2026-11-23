@@ -5,14 +5,14 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta
       name="description"
-      content="Meet Sumi, your AI desktop companion for focused work. It notices what you actually do, maps it to your goals, and keeps you moving with reminders, coaching, and research - so hours become progress."
+      content="Sumi - your AI desktop companion for focused work. It notices what you actually do, maps it to your goals, and keeps you moving with reminders, coaching, and research."
     />
     <meta name="theme-color" content="#f3f3ef" />
     <meta name="referrer" content="strict-origin-when-cross-origin" />
     <meta property="og:title" content="sumi — Your desktop companion" />
     <meta
       property="og:description"
-      content="Meet Sumi, your AI desktop companion for focused work. It notices what you actually do, maps it to your goals, and keeps you moving with reminders, coaching, and research - so hours become progress."
+      content="Sumi - your AI desktop companion for focused work. It notices what you actually do, maps it to your goals, and keeps you moving with reminders, coaching, and research."
     />
     <meta property="og:type" content="website" />
     <meta
@@ -33,19 +33,70 @@
       type="font/woff2"
       crossorigin
     />
-    <link rel="stylesheet" href="./style.css?v=fork-ga4-1" />
-    <script type="module" src="./site.mjs?v=fork-ga4-1"></script>
+    <link
+      rel="preload"
+      href="./assets/fonts/instrument-sans-latin-600-normal.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
+    <link rel="stylesheet" href="./style.css?v=landing-2" />
+    <script type="module" src="./site.mjs?v=landing-2"></script>
   </head>
   <body>
     <main class="page">
       <header class="brand">
-        <h1>sumi</h1>
-        <p class="intro">
-          Meet Sumi, your AI desktop companion for focused work. It notices what
-          you actually do, maps it to your goals, and keeps you moving with
-          reminders, coaching, and research - so hours become progress.
-        </p>
+        <img src="./assets/sumi.svg" width="28" height="28" alt="" />
+        <span class="wordmark">sumi</span>
       </header>
+
+      <section class="hero" aria-label="Sumi">
+        <div class="hero-copy">
+          <h1>Sumi - your AI desktop companion for focused work</h1>
+          <p class="intro">
+            It notices what you actually do, maps it to your goals, and keeps
+            you moving with reminders, coaching, and research.
+          </p>
+          <div class="download-buttons">
+            <a
+              class="download download-primary"
+              id="download-macos"
+              href="https://github.com/KateNorth7/desktop_buddy/releases/latest"
+              aria-label="Download Sumi for macOS 14.5 or later on Apple Silicon"
+              >Download for macOS 14.5+</a
+            >
+            <a
+              class="download"
+              id="download-windows"
+              href="https://github.com/KateNorth7/desktop_buddy/releases/latest"
+              aria-label="Download Sumi for Windows 10 or 11"
+              >Download for Windows 10/11</a
+            >
+          </div>
+          <p class="download-status" id="download-status" role="status" hidden>
+            Open the latest release to choose your installer.
+          </p>
+          <noscript
+            ><p class="download-status">
+              The buttons open the latest release. Choose the Windows EXE or
+              Apple Silicon DMG.
+            </p></noscript
+          >
+        </div>
+
+        <div class="companion" aria-label="What Sumi says">
+          <div class="bubble-slot" id="bubble-slot" aria-live="polite"></div>
+          <img
+            class="mascot"
+            id="mascot"
+            src="./assets/sumi-mascot.png"
+            width="240"
+            height="240"
+            alt="sumi, a small pixel companion"
+          />
+        </div>
+      </section>
+
       <section class="demo" aria-label="Sumi product video">
         <div class="player" id="player">
           <img
@@ -68,69 +119,30 @@
             </svg>
           </button>
         </div>
-        <p class="video-error" id="video-error">
+        <p class="video-error" id="video-error" hidden>
           <a href="https://www.youtube.com/watch?v=4Vu0HkIB1gY"
             >Watch on YouTube ↗</a
           >
         </p>
-      </section>
-      <section class="downloads" aria-label="Download Sumi">
-        <div class="download-buttons">
-          <a
-            class="download"
-            id="download-windows"
-            href="https://github.com/KateNorth7/desktop_buddy/releases/latest"
-            aria-label="Download Sumi for Windows"
-          >
-            <img
-              src="./assets/microsoft-windows.svg"
-              width="28"
-              height="28"
-              alt=""
-            />
-            <span class="download-copy"
-              ><span class="download-title">Download for Windows</span
-              ><span class="download-detail">Windows 10 / 11 · x64</span></span
-            >
-            <svg class="download-arrow" viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M12 3v12m-4-4 4 4 4-4M5 17v4h14v-4" />
-            </svg>
-          </a>
-          <a
-            class="download"
-            id="download-macos"
-            href="https://github.com/KateNorth7/desktop_buddy/releases/latest"
-            aria-label="Download Sumi for macOS"
-          >
-            <img src="./assets/apple.svg" width="29" height="29" alt="" />
-            <span class="download-copy"
-              ><span class="download-title">Download for macOS</span
-              ><span class="download-detail"
-                >Apple Silicon · macOS 14.5+</span
-              ></span
-            >
-            <svg class="download-arrow" viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M12 3v12m-4-4 4 4 4-4M5 17v4h14v-4" />
-            </svg>
-          </a>
-        </div>
-        <p class="download-note">
-          <span id="release-version"></span>
-        </p>
-        <p class="download-status" id="download-status" role="status" hidden>
-          Open the latest release to choose your installer.
-        </p>
         <noscript
-          ><p class="download-status">
-            The buttons open the latest release. Choose the Windows EXE or Apple
-            Silicon DMG.
+          ><p class="video-error">
+            <a href="https://www.youtube.com/watch?v=4Vu0HkIB1gY"
+              >Watch on YouTube ↗</a
+            >
           </p></noscript
         >
       </section>
+
       <footer>
-        <a id="github-link" href="https://github.com/KateNorth7/desktop_buddy">GitHub</a
-        ><span aria-hidden="true">·</span
-        ><a id="privacy-link" href="./docs/privacy.html">Privacy</a>
+        <span class="footer-note"
+          >Free and open source. Your data stays on your computer.</span
+        >
+        <span class="footer-links"
+          ><span id="release-version"></span
+          ><a id="github-link" href="https://github.com/KateNorth7/desktop_buddy"
+            >GitHub</a
+          ><a id="privacy-link" href="./docs/privacy.html">Privacy</a></span
+        >
       </footer>
     </main>
   </body>
