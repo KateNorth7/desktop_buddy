@@ -8,5 +8,5 @@ export const video = Object.freeze({
 // Google Analytics 4 measurement ID (Admin → Data streams → Web, "G-XXXXXXXXXX").
 // Leave empty to publish the site without analytics.
 export const analytics = Object.freeze({
-  measurementId: "",
+  measurementId: "G-N600K81XNJ",
 });
