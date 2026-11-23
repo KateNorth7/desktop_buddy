@@ -1,7 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { selectDownloads, youtubeEmbed, LATEST_RELEASE } from "../releases.mjs";
+import { selectDownloads, youtubeEmbed, LATEST_RELEASE, REPOSITORY } from "../releases.mjs";
+import { gtagScriptUrl } from "../analytics.mjs";
+import { analytics } from "../site-config.mjs";
 const release = {
   tag_name: "v0.49.4",
   draft: false,
@@ -66,4 +68,20 @@ test("HTML keeps functional release-page links without JavaScript", () => {
   assert.match(html, /docs\/privacy.html/);
   assert.match(html, /https:\/\/www\.youtube\.com\/watch\?v=4Vu0HkIB1gY/);
   assert.doesNotMatch(html, /<video\b|\.mp4|demo-poster\.jpg/);
+});
+test("releases and links come from the fork that publishes installers", () => {
+  assert.equal(REPOSITORY, "KateNorth7/desktop_buddy");
+  const html = readFileSync(new URL("../index.html", import.meta.url), "utf8");
+  assert.doesNotMatch(html, /github\.com\/ArtmarketVM/);
+  assert.match(html, /id="github-link"/);
+  assert.match(html, /id="privacy-link"/);
+});
+test("GA4 loads only for a well-formed measurement ID", () => {
+  assert.equal(
+    gtagScriptUrl("G-ABC123XYZ"),
+    "https://www.googletagmanager.com/gtag/js?id=G-ABC123XYZ",
+  );
+  for (const id of ["", "UA-1234-1", "G-abc", 'G-1" onload=bad', "GTM-ABCD"])
+    assert.throws(() => gtagScriptUrl(id));
+  if (analytics.measurementId) gtagScriptUrl(analytics.measurementId);
 });

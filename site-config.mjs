@@ -4,3 +4,9 @@ export const video = Object.freeze({
   youtubeId: "4Vu0HkIB1gY",
   poster: "./assets/youtube-poster.jpg",
 });
+
+// Google Analytics 4 measurement ID (Admin → Data streams → Web, "G-XXXXXXXXXX").
+// Leave empty to publish the site without analytics.
+export const analytics = Object.freeze({
+  measurementId: "",
+});
