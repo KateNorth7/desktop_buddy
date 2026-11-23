@@ -14,8 +14,7 @@ export const COMPANION_CARDS = Object.freeze([
   {
     kind: "goal_completion",
     title: "Mark this goal complete?",
-    text: `It looks like you finished “${GOAL}”. Mark it complete?`,
-    note: "Nothing changes until you confirm.",
+    text: `It looks like you finished “${GOAL}”.`,
     primary: { id: "accept", label: "Yes, complete goal", celebrate: true },
     secondary: { id: "ignore", label: "Not yet" },
     pose: "attention",
@@ -23,7 +22,7 @@ export const COMPANION_CARDS = Object.freeze([
   {
     kind: "deadline",
     title: "An upcoming deadline",
-    text: `“${GOAL}” is due at 10:00. Are you on it, or do you need to reschedule?`,
+    text: `“${GOAL}” is due at 10:00.`,
     primary: { id: "on_it", label: "I’m on it" },
     secondary: { id: "reschedule", label: "Reschedule", reschedule: true },
     pose: "idle",
@@ -31,7 +30,7 @@ export const COMPANION_CARDS = Object.freeze([
   {
     kind: "unplanned_work",
     title: "Add this work to Today?",
-    text: "You spent 40 minutes on “Figma — release mockups”. Add this work to Today?",
+    text: "You spent 40 minutes in Figma on the release mockups.",
     primary: { id: "accept", label: "Add to Today" },
     secondary: { id: "ignore", label: "Skip" },
     pose: "attention",
@@ -48,7 +47,7 @@ export const COMPANION_CARDS = Object.freeze([
 
 export const RESCHEDULE = Object.freeze({
   title: "Reschedule your deadline",
-  text: "Choose a new date and time. Your deadline changes when you save.",
+  text: "Choose a new date and time.",
   field: "New deadline",
   save: "Save deadline",
   cancel: "Cancel",

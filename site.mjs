@@ -1,4 +1,4 @@
-import { video, analytics } from "./site-config.mjs?v=landing-3";
+import { video, analytics } from "./site-config.mjs?v=landing-4";
 import { RELEASE_API, selectDownloads, youtubeEmbed } from "./releases.mjs";
 import { installAnalytics, trackEvent } from "./analytics.mjs";
 import {
@@ -145,11 +145,6 @@ function cardShell(title, text) {
 
 function showCard(card) {
   const section = cardShell(card.title, card.text);
-  if (card.note) {
-    const small = document.createElement("small");
-    small.textContent = card.note;
-    section.append(small);
-  }
   const actions = document.createElement("div");
   actions.className = "companion-prompt-actions";
   actions.append(

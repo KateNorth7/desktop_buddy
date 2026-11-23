@@ -177,7 +177,7 @@ button {
   align-items: center;
   justify-content: flex-end;
   gap: 5px;
-  min-height: 21rem;
+  min-height: 27rem;
   font-size: var(--app-text-body);
 }
 .companion-bubble {
@@ -221,13 +221,6 @@ button {
   line-height: 1.45;
   color: var(--muted);
   overflow-wrap: anywhere;
-}
-.companion-prompt small {
-  display: block;
-  margin-top: 6px;
-  font-size: var(--app-text-caption);
-  line-height: 1.5;
-  color: var(--muted);
 }
 .companion-prompt .setting-row {
   display: flex;
@@ -278,8 +271,8 @@ button {
   background: var(--line);
 }
 .mascot {
-  width: 8.25rem;
-  height: 8.25rem;
+  width: 15rem;
+  height: 15rem;
 }
 .mascot svg {
   display: block;
