@@ -1,6 +1,6 @@
 import { video, analytics } from "./site-config.mjs?v=landing-4";
-import { RELEASE_API, selectDownloads, youtubeEmbed } from "./releases.mjs";
-import { installAnalytics, trackEvent } from "./analytics.mjs";
+import { RELEASE_API, selectDownloads, youtubeEmbed } from "./releases.mjs?v=landing-4";
+import { installAnalytics, trackEvent } from "./analytics.mjs?v=landing-4";
 import {
   COMPANION_CARDS,
   RESCHEDULE,
@@ -10,7 +10,7 @@ import {
   AVATAR_VIEWBOX,
   avatarFrame,
   frameCount,
-} from "./companion.mjs";
+} from "./companion.mjs?v=landing-4";
 
 try {
   if (analytics.measurementId) installAnalytics(analytics.measurementId);
