@@ -273,6 +273,17 @@ button {
 .mascot {
   width: 15rem;
   height: 15rem;
+  margin-bottom: 2rem;
+  animation: mascot-float 3.2s ease-in-out infinite;
+}
+@keyframes mascot-float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-12px);
+  }
 }
 .mascot svg {
   display: block;
@@ -441,7 +452,8 @@ footer a:hover {
     scroll-behavior: auto !important;
   }
   .avatar-idle .avatar-eyes,
-  .suggestion-card {
+  .suggestion-card,
+  .mascot {
     animation: none;
   }
 }
