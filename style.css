@@ -409,6 +409,57 @@ footer a:hover {
   outline-offset: 5px;
 }
 
+/* Consent banner */
+.consent {
+  position: fixed;
+  left: 50%;
+  bottom: 1.25rem;
+  transform: translateX(-50%);
+  width: min(100% - 2rem, 40rem);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.75rem 1.25rem;
+  padding: 0.875rem 1.125rem;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 0.875rem;
+  box-shadow: 0 12px 40px rgb(31 31 31 / 0.12);
+  font-size: var(--text-caption);
+  line-height: 1.5;
+  z-index: 10;
+}
+.consent p {
+  margin: 0;
+  flex: 1 1 18rem;
+  color: var(--muted);
+}
+.consent a {
+  color: var(--text);
+}
+.consent-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+.consent-actions button {
+  min-height: 2.25rem;
+  padding: 0.4rem 0.875rem;
+  border-radius: 0.625rem;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  font-size: var(--text-caption);
+  font-weight: 500;
+  cursor: pointer;
+}
+.consent-accept {
+  background: var(--lime);
+  border-color: rgb(31 31 31 / 0.08);
+}
+.consent-actions button:hover {
+  background: var(--lime-hover);
+}
+
 @media (max-width: 900px) {
   .hero {
     grid-template-columns: minmax(0, 1fr);

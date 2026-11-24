@@ -1,6 +1,6 @@
-import { video, analytics } from "./site-config.mjs?v=landing-5";
-import { RELEASE_API, selectDownloads, youtubeEmbed } from "./releases.mjs?v=landing-5";
-import { installAnalytics, trackEvent } from "./analytics.mjs?v=landing-5";
+import { video, analytics } from "./site-config.mjs?v=landing-6";
+import { RELEASE_API, selectDownloads, youtubeEmbed } from "./releases.mjs?v=landing-6";
+import { installAnalytics, trackEvent } from "./analytics.mjs?v=landing-6";
 import {
   COMPANION_CARDS,
   RESCHEDULE,
@@ -10,12 +10,36 @@ import {
   AVATAR_VIEWBOX,
   avatarFrame,
   frameCount,
-} from "./companion.mjs?v=landing-5";
+} from "./companion.mjs?v=landing-6";
 
-try {
-  if (analytics.measurementId) installAnalytics(analytics.measurementId);
-} catch {
-  // A malformed ID leaves the page without analytics rather than broken.
+import { readConsent, writeConsent } from "./consent.mjs?v=landing-6";
+
+// Analytics only after consent. Declining keeps the page free of any Google request.
+const banner = document.querySelector("#consent");
+function startAnalytics() {
+  try {
+    if (analytics.measurementId) installAnalytics(analytics.measurementId);
+  } catch {
+    // A malformed ID leaves the page without analytics rather than broken.
+  }
+}
+function decide(value) {
+  writeConsent(localStorage, value);
+  banner.hidden = true;
+  if (value === "accepted") startAnalytics();
+}
+if (analytics.measurementId) {
+  const choice = readConsent(localStorage);
+  if (choice === "accepted") startAnalytics();
+  else if (choice === null) {
+    banner.hidden = false;
+    document
+      .querySelector("#consent-accept")
+      .addEventListener("click", () => decide("accepted"));
+    document
+      .querySelector("#consent-decline")
+      .addEventListener("click", () => decide("declined"));
+  }
 }
 
 const player = document.querySelector("#player");

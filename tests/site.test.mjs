@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { selectDownloads, youtubeEmbed, LATEST_RELEASE, REPOSITORY } from "../releases.mjs";
 import { gtagScriptUrl } from "../analytics.mjs";
+import { readConsent, writeConsent, CONSENT_KEY } from "../consent.mjs";
 import { analytics } from "../site-config.mjs";
 import {
   COMPANION_CARDS,
@@ -124,6 +125,24 @@ test("the mascot is drawn from the app's frames", () => {
   assert.ok(done.some((c) => c.fill === "#6c5fff"));
   const attention = avatarFrame("attention");
   assert.ok(attention.length > idle.length);
+});
+test("consent is remembered and only accepts known values", () => {
+  const store = new Map();
+  const storage = {
+    getItem: (k) => (store.has(k) ? store.get(k) : null),
+    setItem: (k, v) => store.set(k, v),
+  };
+  assert.equal(readConsent(storage), null);
+  writeConsent(storage, "declined");
+  assert.equal(readConsent(storage), "declined");
+  writeConsent(storage, "accepted");
+  assert.equal(store.get(CONSENT_KEY), "accepted");
+  assert.throws(() => writeConsent(storage, "maybe"));
+  store.set(CONSENT_KEY, "garbage");
+  assert.equal(readConsent(storage), null);
+  const html = readFileSync(new URL("../index.html", import.meta.url), "utf8");
+  assert.match(html, /id="consent-accept"/);
+  assert.match(html, /id="consent-decline"/);
 });
 test("GA4 loads only for a well-formed measurement ID", () => {
   assert.equal(
