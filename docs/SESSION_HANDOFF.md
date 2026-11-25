@@ -1,5 +1,9 @@
 # sumi session handoff
 
+## Team stats page — 25 November 2026
+
+New key-protected page https://katenorth7.github.io/desktop_buddy/stats/ (gh-pages `dfb45bc`) backed by the Edge Function `buddy-stats` (deployed to `qrspcvglmmrputcltgxr`; see `docs/TEAM_STATS.md`). It shows installs, recently online, active today/7/30 days, app and AI session lengths, retention by week, hourly activity, downloads by version and a site-to-active funnel. No app change: numbers come from anonymous Auth session refreshes, the gateway's 48-hour minute counters and GitHub asset counters; aggregates only. First live read: 19 installs since 28 October, 3 active in 7 days, median app session 1 h. Checks: `npm run test:gateway` 17 passed, site tests 16 passed, lint clean, page checked at desktop and phone width with live aggregates. Not done: GA4 website block (needs a service account with Viewer access to the property), device/OS (not available without app data). `buddy_ai_usage_daily` does not exist in production: `ai-gateway.sql` (per-user accounting, caps, spike blocks) is still unapplied.
+
 ## 0.52.1 published and self-hosted Mac runner — 17 November 2026
 
 GitHub's hosted macOS arm64 pool refused every job from 16 November ("not acquired by Runner... capacity constraints"). Trusted Apple Silicon validation (manual dispatch, main pushes, releases) now runs on the owner's Mac: runner `sumi-mac`, label `sumi`, as the standard macOS user `sumi-ci` inside that user's logged-in GUI session (a LaunchAgent in `gui/<uid>`; a system daemon cannot sign or relaunch the app). Pull requests stay on hosted runners. After a reboot, log in as `sumi-ci` (Fast User Switching) and switch back, or the Mac job waits. Setup scripts live in the ignored `.tools/runner/`. The Vision OCR test now waits up to 90 s for cold model preparation (about 27 s for a fresh binary on a MacBook Air); the app is unchanged.

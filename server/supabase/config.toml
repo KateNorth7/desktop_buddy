@@ -5,3 +5,7 @@ verify_jwt = false
 [functions.buddy-ai]
 # User JWT validation stays enabled; the handler independently validates the user too.
 verify_jwt = true
+
+[functions.buddy-stats]
+# Team stats page. No user JWT: the handler requires the STATS_KEY team key and returns aggregates only.
+verify_jwt = false
