@@ -108,3 +108,32 @@ export function shortUrl(url) {
     return url || "(not set)";
   }
 }
+
+/** Referring page as host and path, without protocol, query or trailing slash. */
+export function referrerLabel(url) {
+  try {
+    const u = new URL(url);
+    const path = u.pathname.replace(/\/$/, "");
+    return `${u.hostname.replace(/^www\./, "")}${path}`;
+  } catch {
+    return url || "(not set)";
+  }
+}
+
+export const SITE_URL = "https://katenorth7.github.io/desktop_buddy/";
+
+/** A landing-page link carrying UTM tags; empty parts are left out. */
+export function taggedLink({ source, medium, campaign }) {
+  const clean = (value) =>
+    String(value ?? "")
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9._-]+/g, "-")
+      .replace(/^-+|-+$/g, "");
+  const params = new URLSearchParams();
+  if (clean(source)) params.set("utm_source", clean(source));
+  if (clean(medium)) params.set("utm_medium", clean(medium));
+  if (clean(campaign)) params.set("utm_campaign", clean(campaign));
+  const query = params.toString();
+  return query ? `${SITE_URL}?${query}` : SITE_URL;
+}

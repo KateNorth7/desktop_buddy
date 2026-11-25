@@ -68,3 +68,14 @@ test("clicked links read as short labels", async () => {
   );
   assert.equal(shortUrl(""), "(not set)");
 });
+
+test("tagged links and referrers stay readable and safe", async () => {
+  const { taggedLink, referrerLabel } = await import("../stats/model.mjs");
+  assert.equal(
+    taggedLink({ source: "Telegram Chat", medium: "messenger", campaign: "Testers Nov" }),
+    "https://katenorth7.github.io/desktop_buddy/?utm_source=telegram-chat&utm_medium=messenger&utm_campaign=testers-nov",
+  );
+  assert.equal(taggedLink({}), "https://katenorth7.github.io/desktop_buddy/");
+  assert.equal(referrerLabel("https://www.facebook.com/"), "facebook.com");
+  assert.equal(referrerLabel("https://news.ycombinator.com/item?id=1"), "news.ycombinator.com/item");
+});

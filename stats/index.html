@@ -8,8 +8,8 @@
     <meta name="theme-color" content="#f3f3ef" />
     <title>sumi · Team stats</title>
     <link rel="icon" href="../assets/sumi.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="./stats.css?v=5" />
-    <script type="module" src="./stats.mjs?v=6"></script>
+    <link rel="stylesheet" href="./stats.css?v=6" />
+    <script type="module" src="./stats.mjs?v=7"></script>
   </head>
   <body>
     <main class="board">
@@ -187,6 +187,25 @@
             <p id="site-note">Google Analytics, last 30 days. Only visitors who accepted cookies are counted.</p>
           </div>
           <div id="site"></div>
+          <div class="builder">
+            <h3>Make a tracked link</h3>
+            <p>Telegram, WhatsApp and email hide where a visit came from, so it counts as direct. Share this link instead and it appears under Channel and Campaigns.</p>
+            <form id="link-form" onsubmit="return false">
+              <label>Where you post it<input id="link-source" value="telegram" placeholder="telegram" /></label>
+              <label>Type<select id="link-medium">
+                <option value="messenger">Messenger</option>
+                <option value="social">Social post</option>
+                <option value="email">Email</option>
+                <option value="community">Community or forum</option>
+                <option value="ads">Paid ad</option>
+              </select></label>
+              <label>Campaign<input id="link-campaign" value="testers" placeholder="testers" /></label>
+            </form>
+            <div class="builder-out">
+              <input id="link-out" readonly aria-label="Tracked link" />
+              <button type="button" id="link-copy">Copy</button>
+            </div>
+          </div>
         </section>
 
         <section class="panel">

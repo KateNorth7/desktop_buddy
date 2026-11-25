@@ -11,7 +11,9 @@ import {
   percent,
   relativeTime,
   shortUrl,
-} from "./model.mjs?v=3";
+  referrerLabel,
+  taggedLink,
+} from "./model.mjs?v=4";
 
 const $ = (id) => document.getElementById(id);
 const SVG = "http://www.w3.org/2000/svg";
@@ -169,7 +171,7 @@ function ranked(title, rows) {
     li.append(bar);
     list.append(li);
   }
-  if (!rows.length) list.append(text("li", "No data yet."));
+  if (!rows.length) list.append(text("li", "None yet."));
   box.append(list);
   return box;
 }
@@ -378,7 +380,16 @@ function render(body) {
     box.append(chart);
     barChart(chart, site.daily.map((d) => ({ ...d, label: dayLabel(d.day), tick: dayLabel(d.day) })), { series: [{ key: "visitors", name: "Visitors", color: ACCENT }], label: "Website visitors per day", height: 150 });
     const grid = el("div", { class: "site-grid" });
-    grid.append(ranked("Sources", site.sources), ranked("Links clicked", (site.links ?? []).map((l) => ({ ...l, name: shortUrl(l.name) }))), ranked("Events", site.events), ranked("Countries", site.countries), ranked("Devices", site.devices), ranked("Systems", site.systems));
+    grid.append(
+      ranked("Channel / type · sessions", site.source_medium ?? site.sources),
+      ranked("Came from (page)", (site.referrers ?? []).map((r) => ({ ...r, name: referrerLabel(r.name) }))),
+      ranked("Campaigns (utm_campaign)", site.campaigns ?? []),
+      ranked("Links clicked", (site.links ?? []).map((l) => ({ ...l, name: shortUrl(l.name) }))),
+      ranked("Events", site.events),
+      ranked("Countries", site.countries),
+      ranked("Devices", site.devices),
+      ranked("Systems", site.systems),
+    );
     box.append(grid);
   }
 }
@@ -431,6 +442,28 @@ $("signout").addEventListener("click", () => {
   $("gate-error").hidden = true;
   $("gate").hidden = false;
 });
+
+// Tagged-link builder: links shared in messengers otherwise show up as "direct".
+const builder = $("link-form");
+const refreshLink = () => {
+  $("link-out").value = taggedLink({
+    source: $("link-source").value,
+    medium: $("link-medium").value,
+    campaign: $("link-campaign").value,
+  });
+};
+builder.addEventListener("input", refreshLink);
+$("link-copy").addEventListener("click", async () => {
+  try {
+    await navigator.clipboard.writeText($("link-out").value);
+    $("link-copy").textContent = "Copied";
+  } catch {
+    $("link-out").select();
+    $("link-copy").textContent = "Press ⌘C";
+  }
+  setTimeout(() => ($("link-copy").textContent = "Copy"), 1600);
+});
+refreshLink();
 
 if (sessionKey) load(sessionKey);
 else $("gate").hidden = false;

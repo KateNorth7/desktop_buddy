@@ -428,6 +428,66 @@ button:focus-visible {
   border-radius: 2px;
   background: var(--accent);
 }
+.builder {
+  margin-top: 1.5rem;
+  border-top: 1px solid var(--line);
+  padding-top: 1.25rem;
+}
+.builder h3 {
+  margin: 0;
+  font-size: var(--text-heading);
+  font-weight: 500;
+}
+.builder p {
+  margin: 0.125rem 0 0.875rem;
+  color: var(--muted);
+  font-size: var(--text-caption);
+}
+.builder form {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+.builder label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: var(--text-caption);
+  color: var(--muted);
+}
+.builder input,
+.builder select {
+  font: inherit;
+  font-size: var(--text-body);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 0.5rem 0.625rem;
+  background: var(--surface);
+  min-width: 0;
+}
+.builder-out {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+.builder-out input {
+  flex: 1;
+  font: inherit;
+  font-size: var(--text-caption);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 0.5rem 0.625rem;
+  background: var(--accent-soft);
+  min-width: 0;
+}
+.builder-out button {
+  border: 0;
+  border-radius: 10px;
+  background: var(--lime);
+  padding: 0.5rem 1rem;
+  font-weight: 500;
+}
 .connect {
   border: 1px dashed var(--line);
   border-radius: 14px;
@@ -563,6 +623,9 @@ button:focus-visible {
   }
 }
 @media (max-width: 760px) {
+  .builder form {
+    grid-template-columns: minmax(0, 1fr);
+  }
   .grid,
   .funnel {
     grid-template-columns: minmax(0, 1fr);
