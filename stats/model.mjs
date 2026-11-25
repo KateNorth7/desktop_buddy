@@ -94,3 +94,17 @@ export function relativeTime(iso, now) {
   const days = Math.round(hours / 24);
   return days === 1 ? "yesterday" : `${days} days ago`;
 }
+
+/** A readable label for a clicked URL: host and the last path part, no query. */
+export function shortUrl(url) {
+  try {
+    const u = new URL(url);
+    const host = u.hostname.replace(/^www\./, "");
+    const file = u.pathname.split("/").filter(Boolean).pop();
+    if (host === "youtube.com" || host === "youtu.be") return "YouTube video";
+    if (host === "github.com" && file) return `GitHub · ${file}`;
+    return file ? `${host} · ${file}` : host;
+  } catch {
+    return url || "(not set)";
+  }
+}

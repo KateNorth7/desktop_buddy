@@ -58,3 +58,13 @@ test("install status follows session refreshes and AI calls", async () => {
   assert.equal(relativeTime("2026-11-25T11:30:00Z", now), "30 min ago");
   assert.equal(relativeTime("2026-11-24T10:00:00Z", now), "yesterday");
 });
+
+test("clicked links read as short labels", async () => {
+  const { shortUrl } = await import("../stats/model.mjs");
+  assert.equal(shortUrl("https://www.youtube.com/watch?v=4Vu0HkIB1gY"), "YouTube video");
+  assert.equal(
+    shortUrl("https://github.com/KateNorth7/desktop_buddy/releases/download/v0.52.1/sumi_0.52.1_x64-setup.exe"),
+    "GitHub · sumi_0.52.1_x64-setup.exe",
+  );
+  assert.equal(shortUrl(""), "(not set)");
+});

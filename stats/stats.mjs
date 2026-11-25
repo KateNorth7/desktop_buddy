@@ -10,7 +10,8 @@ import {
   installStatus,
   percent,
   relativeTime,
-} from "./model.mjs?v=2";
+  shortUrl,
+} from "./model.mjs?v=3";
 
 const $ = (id) => document.getElementById(id);
 const SVG = "http://www.w3.org/2000/svg";
@@ -377,7 +378,7 @@ function render(body) {
     box.append(chart);
     barChart(chart, site.daily.map((d) => ({ ...d, label: dayLabel(d.day), tick: dayLabel(d.day) })), { series: [{ key: "visitors", name: "Visitors", color: ACCENT }], label: "Website visitors per day", height: 150 });
     const grid = el("div", { class: "site-grid" });
-    grid.append(ranked("Clicks and events", site.events), ranked("Sources", site.sources), ranked("Countries", site.countries), ranked("Devices and systems", [...site.devices, ...site.systems]));
+    grid.append(ranked("Sources", site.sources), ranked("Links clicked", (site.links ?? []).map((l) => ({ ...l, name: shortUrl(l.name) }))), ranked("Events", site.events), ranked("Countries", site.countries), ranked("Devices", site.devices), ranked("Systems", site.systems));
     box.append(grid);
   }
 }
