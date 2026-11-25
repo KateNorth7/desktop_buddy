@@ -103,6 +103,7 @@ export async function siteStats(env: Env, fetcher: typeof fetch) {
     devices,
     systems,
     realtime,
+    links,
   ] = await Promise.all([
     call("runReport", {
       dateRanges: range,
@@ -131,6 +132,16 @@ export async function siteStats(env: Env, fetcher: typeof fetch) {
     top("deviceCategory"),
     top("operatingSystem"),
     call("runRealtimeReport", { metrics: [{ name: "activeUsers" }] }),
+    call("runReport", {
+      dateRanges: range,
+      dimensions: [{ name: "linkUrl" }],
+      metrics: [{ name: "eventCount" }],
+      dimensionFilter: {
+        filter: { fieldName: "eventName", stringFilter: { value: "click" } },
+      },
+      orderBys: [{ metric: { metricName: "eventCount" }, desc: true }],
+      limit: 10,
+    }),
   ]);
   const t = totals[0]?.metricValues?.map((m) => Number(m.value)) ?? [];
   return {
@@ -170,6 +181,10 @@ export async function siteStats(env: Env, fetcher: typeof fetch) {
         "click",
       ].includes(e.name),
     ),
+    links: links.map((r) => ({
+      name: r.dimensionValues?.[0]?.value ?? "",
+      value: Number(r.metricValues?.[0]?.value ?? 0),
+    })),
     sources,
     countries,
     devices,
