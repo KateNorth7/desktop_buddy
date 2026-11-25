@@ -11,6 +11,10 @@ https://katenorth7.github.io/desktop_buddy/stats/ shows how sumi is used, for th
 - **Downloads** come from GitHub release asset counters. Mac installers (`.dmg`) and Mac updates (`.app.tar.gz`) are separate; Windows updates reuse the installer, so its count includes updates.
 - **Website** comes from Google Analytics 4 through the Data API when `GA4_PROPERTY_ID` and `GA4_SERVICE_ACCOUNT` (a service-account JSON with Viewer access to the property) are set. GA4 only sees visitors who accepted the cookie banner.
 
+Per-install rows show only a number (`#n`, by first appearance), status, first and last refresh, days active in 30 days, hours open in 7 days and refresh counts; the anonymous ID never leaves the function.
+
+Data start: installs and use 28 October 2026 (first anonymous session); downloads 6 November 2026 (first fork release, cumulative counters); website 23 November 2026 (GA4 on the site), consented visitors only from 24 November; recently online and AI sessions keep only the last 48 hours.
+
 Not available without app changes: device model, operating system and exact session length. Per-user daily AI usage needs `buddy_ai_usage_daily` from `server/supabase/ai-gateway.sql`, which is not applied in production.
 
 ## Deploy

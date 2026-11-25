@@ -105,6 +105,10 @@ export function summarizeReleases(releases: Release[]) {
 }
 
 const num = (value: unknown) => Number(value ?? 0);
+const iso = (value: unknown) =>
+  value === null || value === undefined
+    ? null
+    : new Date(value as string | Date).toISOString();
 
 // Activity comes from records Supabase Auth and the gateway already keep:
 // - every refresh of the app's anonymous session (about hourly while sumi runs);
@@ -169,6 +173,23 @@ async function supabaseStats(sql: Sql) {
       coalesce(sum(calls) filter (where scope = 'global:ai' and bucket = current_date - 1), 0) as ai_yesterday,
       coalesce(sum(calls) filter (where scope = 'global:search' and bucket = current_date - 1), 0) as search_yesterday
     from public.buddy_ai_counters
+  `);
+  // One row per install, numbered by first appearance. The anonymous ID never leaves:
+  // the page sees only "#n" and timings.
+  const installs = await sql(`${ACTIVITY}
+    select row_number() over (order by p.first_seen) as n,
+      p.first_seen, p.last_seen,
+      (select max(c.bucket) from public.buddy_ai_counters c
+        where c.scope = 'minute:' || p.user_id and c.calls > 0) as last_ai,
+      (select count(distinct created_at::date) from tok t
+        where t.user_id = p.user_id and t.created_at > now() - interval '30 days') as days_30d,
+      (select count(distinct date_trunc('hour', created_at)) from tok t
+        where t.user_id = p.user_id and t.created_at > now() - interval '7 days') as hours_7d,
+      (select count(*) from tok t
+        where t.user_id = p.user_id and t.created_at > now() - interval '7 days') as refreshes_7d,
+      (select count(*) from tok t where t.user_id = p.user_id) as refreshes_total
+    from people p
+    order by p.last_seen desc
   `);
 
   // App sessions over 30 days from refresh chains: each refresh stands for about an hour.
@@ -252,6 +273,16 @@ async function supabaseStats(sql: Sql) {
       cohort: String(c.cohort),
       week: num(c.week_offset),
       people: num(c.people),
+    })),
+    installs: installs.map((i) => ({
+      label: `#${num(i.n)}`,
+      first_seen: iso(i.first_seen),
+      last_seen: iso(i.last_seen),
+      last_ai: iso(i.last_ai),
+      days_30d: num(i.days_30d),
+      hours_7d: num(i.hours_7d),
+      refreshes_7d: num(i.refreshes_7d),
+      refreshes_total: num(i.refreshes_total),
     })),
     ai: {
       calls_today: num(ai.ai_today),

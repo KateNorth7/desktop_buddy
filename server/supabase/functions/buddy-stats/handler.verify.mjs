@@ -77,6 +77,19 @@ test("requests without the key get nothing, and only aggregates come back", asyn
           tracked_since: "2026-11-01",
         },
       ];
+    if (query.includes("row_number()"))
+      return [
+        {
+          n: 7,
+          first_seen: "2026-10-28T10:00:00Z",
+          last_seen: new Date().toISOString(),
+          last_ai: null,
+          days_30d: 4,
+          hours_7d: 6,
+          refreshes_7d: 6,
+          refreshes_total: 30,
+        },
+      ];
     if (query.includes("global:ai"))
       return [
         { ai_today: 5, search_today: 1, ai_yesterday: 7, search_yesterday: 0 },
@@ -124,6 +137,17 @@ test("requests without the key get nothing, and only aggregates come back", asyn
   assert.equal(body.users.data.recent.people_15m, 1);
   assert.equal(body.users.data.app_sessions_30d.median_minutes, 120);
   assert.equal(body.users.data.ai.calls_today, 5);
+  assert.deepEqual(Object.keys(body.users.data.installs[0]).sort(), [
+    "days_30d",
+    "first_seen",
+    "hours_7d",
+    "label",
+    "last_ai",
+    "last_seen",
+    "refreshes_7d",
+    "refreshes_total",
+  ]);
+  assert.equal(body.users.data.installs[0].label, "#7");
   assert.equal(body.site.ok, false);
   assert.doesNotMatch(JSON.stringify(body), /11111111-1111/);
   const foreign = await handle(
