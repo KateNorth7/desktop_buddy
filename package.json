@@ -22,7 +22,7 @@
     "test:acceptance:runner": "node --test scripts/acceptance.verify.mjs",
     "test:release": "node --test scripts/update-manifest.verify.mjs scripts/signing-trust.verify.mjs scripts/macos-update.verify.mjs scripts/retained-windows.verify.mjs scripts/release.verify.mjs scripts/macos-code-signing.verify.mjs scripts/credential-helper.verify.mjs scripts/branding.verify.mjs",
     "test:contact": "node --test server/contact.verify.mjs",
-    "test:gateway": "node --test server/supabase/functions/buddy-ai/handler.verify.mjs",
+    "test:gateway": "node --test server/supabase/functions/buddy-ai/handler.verify.mjs server/supabase/functions/buddy-stats/handler.verify.mjs",
     "tauri": "tauri",
     "dev:macos": "tauri dev",
     "build:macos": "bash scripts/build-macos.sh",
