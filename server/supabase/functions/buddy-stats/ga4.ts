@@ -104,6 +104,9 @@ export async function siteStats(env: Env, fetcher: typeof fetch) {
     systems,
     realtime,
     links,
+    sourceMedium,
+    referrers,
+    campaigns,
   ] = await Promise.all([
     call("runReport", {
       dateRanges: range,
@@ -142,6 +145,10 @@ export async function siteStats(env: Env, fetcher: typeof fetch) {
       orderBys: [{ metric: { metricName: "eventCount" }, desc: true }],
       limit: 10,
     }),
+    top("sessionSourceMedium", "sessions", 10),
+    // Full referring page of each page view; "(not set)" for direct visits.
+    top("pageReferrer", "screenPageViews", 10),
+    top("sessionCampaignName", "sessions", 10),
   ]);
   const t = totals[0]?.metricValues?.map((m) => Number(m.value)) ?? [];
   return {
@@ -186,6 +193,11 @@ export async function siteStats(env: Env, fetcher: typeof fetch) {
       value: Number(r.metricValues?.[0]?.value ?? 0),
     })),
     sources,
+    source_medium: sourceMedium,
+    referrers: referrers.filter((r) => r.name && r.name !== "(not set)"),
+    campaigns: campaigns.filter(
+      (c) => c.name && !/^\((not set|direct|referral|organic)\)$/.test(c.name),
+    ),
     countries,
     devices,
     systems,
