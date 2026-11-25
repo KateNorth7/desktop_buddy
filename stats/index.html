@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex, nofollow" />
+    <meta name="referrer" content="no-referrer" />
+    <meta name="theme-color" content="#f3f3ef" />
+    <title>sumi · Team stats</title>
+    <link rel="icon" href="../assets/sumi.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="./stats.css?v=2" />
+    <script type="module" src="./stats.mjs?v=3"></script>
+  </head>
+  <body>
+    <main class="board">
+      <header class="top">
+        <div class="brand">
+          <img src="../assets/sumi.svg" alt="" width="28" height="28" />
+          <span class="wordmark">sumi</span>
+          <span class="divider" aria-hidden="true"></span>
+          <h1>Team stats</h1>
+        </div>
+        <div class="top-actions">
+          <span class="updated" id="updated"></span>
+          <button type="button" id="refresh" class="ghost" hidden>Refresh</button>
+          <button type="button" id="signout" class="ghost" hidden>Sign out</button>
+        </div>
+      </header>
+
+      <section class="gate" id="gate" hidden>
+        <h2>Enter the team key</h2>
+        <p>
+          Ask a teammate for the key. It stays in this browser and is sent only to
+          sumi's own stats service.
+        </p>
+        <form id="gate-form">
+          <input
+            id="gate-key"
+            type="password"
+            autocomplete="current-password"
+            placeholder="sumi-…"
+            aria-label="Team key"
+            required
+          />
+          <button type="submit">Open stats</button>
+        </form>
+        <p class="error" id="gate-error" role="alert" hidden></p>
+      </section>
+
+      <p class="loading" id="loading" hidden>Loading…</p>
+
+      <div id="content" hidden>
+        <section class="tiles" aria-label="Key numbers">
+          <article class="tile">
+            <span class="cap">Recently online</span>
+            <strong id="k-recent">–</strong>
+            <span class="sub" id="k-recent-sub"></span>
+          </article>
+          <article class="tile">
+            <span class="cap">Active today</span>
+            <strong id="k-today">–</strong>
+            <span class="sub" id="k-today-sub"></span>
+          </article>
+          <article class="tile">
+            <span class="cap">Active · 7 days</span>
+            <strong id="k-week">–</strong>
+            <span class="sub" id="k-week-sub"></span>
+          </article>
+          <article class="tile">
+            <span class="cap">Installs</span>
+            <strong id="k-people">–</strong>
+            <span class="sub" id="k-people-sub"></span>
+          </article>
+          <article class="tile">
+            <span class="cap">Typical session</span>
+            <strong id="k-session">–</strong>
+            <span class="sub" id="k-session-sub"></span>
+          </article>
+          <article class="tile">
+            <span class="cap">Downloads</span>
+            <strong id="k-downloads">–</strong>
+            <span class="sub" id="k-downloads-sub"></span>
+          </article>
+        </section>
+
+        <section class="panel">
+          <div class="panel-head">
+            <h2>Funnel</h2>
+            <p>From the website to people who keep using sumi. Last 30 days for the site, all time for the rest.</p>
+          </div>
+          <ol class="funnel" id="funnel"></ol>
+        </section>
+
+        <div class="grid">
+          <section class="panel">
+            <div class="panel-head">
+              <h2>People using sumi</h2>
+              <p>Distinct installs with the app open each day, last 30 days.</p>
+            </div>
+            <div class="chart" id="chart-active"></div>
+          </section>
+          <section class="panel">
+            <div class="panel-head">
+              <h2>Hours in use</h2>
+              <p>Hours with sumi open, all installs together, per day.</p>
+            </div>
+            <div class="chart" id="chart-hours"></div>
+          </section>
+        </div>
+
+        <div class="grid">
+          <section class="panel">
+            <div class="panel-head">
+              <h2>Last 48 hours</h2>
+              <p>People calling sumi's AI each hour. Local time.</p>
+            </div>
+            <div class="chart" id="chart-hourly"></div>
+          </section>
+          <section class="panel">
+            <div class="panel-head">
+              <h2>Sessions</h2>
+              <p>How long sumi stays open, and how long people actively work with it.</p>
+            </div>
+            <dl class="facts" id="sessions"></dl>
+          </section>
+        </div>
+
+        <section class="panel">
+          <div class="panel-head">
+            <h2>Retention</h2>
+            <p>People by the week they started, and how many were back in each later week.</p>
+          </div>
+          <div class="table-wrap"><table class="cohorts" id="cohorts"></table></div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-head">
+            <h2>Downloads by version</h2>
+            <p>GitHub release files. Windows updates reuse the installer, so its count includes updates.</p>
+          </div>
+          <div class="legend" id="downloads-legend"></div>
+          <div class="chart" id="chart-downloads"></div>
+        </section>
+
+        <section class="panel" id="site-panel">
+          <div class="panel-head">
+            <h2>Website</h2>
+            <p id="site-note">Google Analytics, last 30 days. Only visitors who accepted cookies are counted.</p>
+          </div>
+          <div id="site"></div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-head">
+            <h2>AI today</h2>
+            <p>Built-in AI requests across all installs.</p>
+          </div>
+          <dl class="facts" id="ai"></dl>
+        </section>
+
+        <footer class="method">
+          <h2>How these numbers are made</h2>
+          <p>
+            sumi sends no analytics. Everything here comes from records the service
+            already keeps: an install is an anonymous built-in AI session; "in use"
+            means the app refreshed that session (about once an hour while it runs);
+            "recently online" means AI calls in the last hour, from per-minute counters
+            kept for 48 hours. Installs that only use personal API keys are invisible.
+            No names, IDs or content are shown or sent to this page.
+          </p>
+        </footer>
+      </div>
+    </main>
+    <div class="tooltip" id="tooltip" role="status" hidden></div>
+  </body>
+</html>
