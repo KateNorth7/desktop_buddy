@@ -8,8 +8,8 @@
     <meta name="theme-color" content="#f3f3ef" />
     <title>sumi · Team stats</title>
     <link rel="icon" href="../assets/sumi.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="./stats.css?v=2" />
-    <script type="module" src="./stats.mjs?v=3"></script>
+    <link rel="stylesheet" href="./stats.css?v=4" />
+    <script type="module" src="./stats.mjs?v=5"></script>
   </head>
   <body>
     <main class="board">
@@ -77,8 +77,11 @@
             <span class="sub" id="k-session-sub"></span>
           </article>
           <article class="tile">
-            <span class="cap">Downloads</span>
-            <strong id="k-downloads">–</strong>
+            <span class="cap">Installers downloaded</span>
+            <div class="platform-figures">
+              <span><img src="../assets/apple.svg" alt="macOS" width="18" height="18" /><strong id="k-mac">–</strong></span>
+              <span><img src="../assets/microsoft-windows.svg" alt="Windows" width="18" height="18" /><strong id="k-win">–</strong></span>
+            </div>
             <span class="sub" id="k-downloads-sub"></span>
           </article>
         </section>
@@ -86,6 +89,7 @@
         <section class="panel">
           <div class="panel-head">
             <h2>Funnel</h2>
+            <span class="since" data-since="funnel"></span>
             <p>From the website to people who keep using sumi. Last 30 days for the site, all time for the rest.</p>
           </div>
           <ol class="funnel" id="funnel"></ol>
@@ -95,6 +99,7 @@
           <section class="panel">
             <div class="panel-head">
               <h2>People using sumi</h2>
+            <span class="since" data-since="installs"></span>
               <p>Distinct installs with the app open each day, last 30 days.</p>
             </div>
             <div class="chart" id="chart-active"></div>
@@ -102,6 +107,7 @@
           <section class="panel">
             <div class="panel-head">
               <h2>Hours in use</h2>
+            <span class="since" data-since="installs"></span>
               <p>Hours with sumi open, all installs together, per day.</p>
             </div>
             <div class="chart" id="chart-hours"></div>
@@ -112,6 +118,7 @@
           <section class="panel">
             <div class="panel-head">
               <h2>Last 48 hours</h2>
+            <span class="since" data-since="rolling48"></span>
               <p>People calling sumi's AI each hour. Local time.</p>
             </div>
             <div class="chart" id="chart-hourly"></div>
@@ -119,6 +126,7 @@
           <section class="panel">
             <div class="panel-head">
               <h2>Sessions</h2>
+            <span class="since" data-since="sessions"></span>
               <p>How long sumi stays open, and how long people actively work with it.</p>
             </div>
             <dl class="facts" id="sessions"></dl>
@@ -127,24 +135,55 @@
 
         <section class="panel">
           <div class="panel-head">
+            <h2>Installs</h2>
+            <span class="since" data-since="installs"></span>
+            <p>Every install under a number, newest activity first. No names or IDs. "Open now" means the app refreshed its session within the last 75 minutes or called AI in the last 15.</p>
+          </div>
+          <div class="table-wrap"><table class="installs" id="installs"></table></div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-head">
             <h2>Retention</h2>
+            <span class="since" data-since="installs"></span>
             <p>People by the week they started, and how many were back in each later week.</p>
           </div>
           <div class="table-wrap"><table class="cohorts" id="cohorts"></table></div>
         </section>
 
-        <section class="panel">
-          <div class="panel-head">
-            <h2>Downloads by version</h2>
-            <p>GitHub release files. Windows updates reuse the installer, so its count includes updates.</p>
-          </div>
-          <div class="legend" id="downloads-legend"></div>
-          <div class="chart" id="chart-downloads"></div>
-        </section>
+        <div class="grid">
+          <section class="panel platform">
+            <div class="panel-head platform-head">
+              <img src="../assets/apple.svg" alt="" width="28" height="28" />
+              <div>
+                <h2>macOS downloads</h2>
+            <span class="since" data-since="downloads"></span>
+                <p>Apple Silicon. New installs and automatic updates by version.</p>
+              </div>
+            </div>
+            <dl class="facts" id="mac-facts"></dl>
+            <div class="legend" id="mac-legend"></div>
+            <div class="chart" id="chart-mac"></div>
+          </section>
+          <section class="panel platform">
+            <div class="panel-head platform-head">
+              <img src="../assets/microsoft-windows.svg" alt="" width="28" height="28" />
+              <div>
+                <h2>Windows downloads</h2>
+            <span class="since" data-since="downloads"></span>
+                <p>Windows 10 and 11. Updates reuse the installer, so counts include them.</p>
+              </div>
+            </div>
+            <dl class="facts" id="win-facts"></dl>
+            <div class="legend" id="win-legend"></div>
+            <div class="chart" id="chart-win"></div>
+          </section>
+        </div>
 
         <section class="panel" id="site-panel">
           <div class="panel-head">
             <h2>Website</h2>
+            <span class="since" data-since="site"></span>
             <p id="site-note">Google Analytics, last 30 days. Only visitors who accepted cookies are counted.</p>
           </div>
           <div id="site"></div>
@@ -153,6 +192,7 @@
         <section class="panel">
           <div class="panel-head">
             <h2>AI today</h2>
+            <span class="since" data-since="rolling2d"></span>
             <p>Built-in AI requests across all installs.</p>
           </div>
           <dl class="facts" id="ai"></dl>

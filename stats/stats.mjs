@@ -7,8 +7,10 @@ import {
   formatSeconds,
   funnel,
   niceScale,
+  installStatus,
   percent,
-} from "./model.mjs?v=1";
+  relativeTime,
+} from "./model.mjs?v=2";
 
 const $ = (id) => document.getElementById(id);
 const SVG = "http://www.w3.org/2000/svg";
@@ -139,6 +141,10 @@ function barChart(container, rows, { series, label, height = 180 }) {
 const dayLabel = (iso) =>
   new Date(`${iso}T12:00:00Z`).toLocaleDateString("en-GB", { day: "numeric", month: "short" });
 const ACCENT = "#4388a8";
+// Google Analytics went live on the site on 23 November 2026; the consent banner on 24 November.
+const SITE_SINCE = "2026-11-23";
+const CONSENT_SINCE = "2026-11-24";
+const relative = (iso) => relativeTime(iso, Date.now());
 
 function fact(list, label, value, small) {
   const div = el("div");
@@ -187,8 +193,9 @@ function render(body) {
   }
   if (downloads) {
     const t = downloads.totals;
-    $("k-downloads").textContent = formatNumber(t.mac_installer + t.windows_installer);
-    $("k-downloads-sub").textContent = `installers · ${formatNumber(t.mac_update)} Mac updates`;
+    $("k-mac").textContent = formatNumber(t.mac_installer);
+    $("k-win").textContent = formatNumber(t.windows_installer);
+    $("k-downloads-sub").textContent = `all versions · ${formatNumber(t.mac_update)} Mac updates on top`;
   }
 
   // Funnel
@@ -260,23 +267,95 @@ function render(body) {
       $(id).replaceChildren(text("p", `Supabase unavailable: ${body.users?.reason ?? "unknown"}`, { class: "empty" }));
   }
 
-  // Downloads
+  // Downloads, one panel per platform
   if (downloads) {
-    const series = [
-      { key: "mac_installer", name: "Mac installer", color: "#2a78d6" },
-      { key: "mac_update", name: "Mac update", color: "#eb6834" },
-      { key: "windows_installer", name: "Windows installer + updates", color: "#1baf7a" },
+    const releases = [...downloads.releases].reverse().slice(-16);
+    const latest = downloads.releases[0];
+    const t = downloads.totals;
+    const platforms = [
+      {
+        id: "mac",
+        facts: [
+          ["Installers", formatNumber(t.mac_installer), "new installs"],
+          ["Updates", formatNumber(t.mac_update), "applied automatically"],
+          [`On v${latest?.version ?? "–"}`, formatNumber((latest?.mac_installer ?? 0) + (latest?.mac_update ?? 0)), "installs fetched it"],
+        ],
+        series: [
+          { key: "mac_installer", name: "Installer", color: "#2a78d6" },
+          { key: "mac_update", name: "Update", color: "#eb6834" },
+        ],
+      },
+      {
+        id: "win",
+        facts: [
+          ["Downloads", formatNumber(t.windows_installer), "installs and updates"],
+          [`On v${latest?.version ?? "–"}`, formatNumber(latest?.windows_installer ?? 0), "installs fetched it"],
+          ["Versions", formatNumber(downloads.releases.filter((r) => r.windows_installer).length), "with downloads"],
+        ],
+        series: [{ key: "windows_installer", name: "Installer and updates", color: "#1baf7a" }],
+      },
     ];
-    $("downloads-legend").replaceChildren(
-      ...series.map((s) => {
-        const span = text("span", s.name);
-        span.style.setProperty("--swatch", s.color);
-        return span;
-      }),
-    );
-    const rows = [...downloads.releases].reverse().map((r) => ({ ...r, label: `v${r.version}`, tick: r.version }));
-    barChart($("chart-downloads"), rows.slice(-16), { series, label: "Downloads by release", height: 200 });
+    for (const platform of platforms) {
+      const list = $(`${platform.id}-facts`);
+      list.replaceChildren();
+      for (const [label, value, small] of platform.facts) fact(list, label, value, small);
+      $(`${platform.id}-legend`).replaceChildren(
+        ...(platform.series.length > 1 ? platform.series : []).map((s) => {
+          const span = text("span", s.name);
+          span.style.setProperty("--swatch", s.color);
+          return span;
+        }),
+      );
+      barChart(
+        $(`chart-${platform.id}`),
+        releases.map((r) => ({ ...r, label: `v${r.version}`, tick: r.version })),
+        { series: platform.series, label: `${platform.id === "mac" ? "macOS" : "Windows"} downloads by version`, height: 170 },
+      );
+    }
   }
+
+  // Installs
+  if (users) {
+    const table = $("installs");
+    table.replaceChildren();
+    const head = el("tr");
+    for (const [label, cls] of [["Install"], ["Status"], ["Last seen"], ["Started"], ["Days active · 30 d", "num"], ["Hours open · 7 d", "num"], ["Refreshes · 7 d", "num"], ["Refreshes · all", "num"]])
+      head.append(text("th", label, cls ? { class: cls } : {}));
+    table.append(head);
+    const maxHours = Math.max(1, ...users.installs.map((i) => i.hours_7d));
+    for (const install of users.installs) {
+      const state = installStatus(install, Date.now());
+      const tr = el("tr");
+      tr.append(text("td", install.label));
+      const status = el("td");
+      status.append(text("span", state.label, { class: `status ${state.kind}` }));
+      tr.append(status);
+      tr.append(text("td", relative(install.last_seen)), text("td", install.first_seen ? dayLabel(install.first_seen.slice(0, 10)) : "–"));
+      tr.append(text("td", formatNumber(install.days_30d), { class: "num" }));
+      const hours = text("td", formatNumber(install.hours_7d), { class: "num" });
+      const spark = el("span", { class: "spark" });
+      spark.style.width = `${Math.round((install.hours_7d / maxHours) * 40)}px`;
+      hours.append(spark);
+      tr.append(hours);
+      tr.append(text("td", formatNumber(install.refreshes_7d), { class: "num" }), text("td", formatNumber(install.refreshes_total), { class: "num" }));
+      table.append(tr);
+    }
+  }
+
+  // Collection start for every panel.
+  const firstRelease = downloads?.releases.map((r) => r.published).filter(Boolean).sort()[0];
+  const installsSince = users?.tracked_since ? `Data since ${dayLabel(users.tracked_since)} 2026` : "Data since first install";
+  const downloadsSince = firstRelease ? `Data since ${dayLabel(firstRelease.slice(0, 10))} 2026, first fork release` : "All releases";
+  const since = {
+    installs: installsSince,
+    downloads: downloadsSince,
+    site: `Data since ${dayLabel(SITE_SINCE)} 2026 · consented visitors only from ${dayLabel(CONSENT_SINCE)}`,
+    rolling48: "Rolling: last 48 hours only",
+    rolling2d: "Rolling: today and yesterday only",
+    sessions: `App: since ${users?.tracked_since ? dayLabel(users.tracked_since) : "first install"} · AI: last 48 hours`,
+    funnel: `Site since ${dayLabel(SITE_SINCE)} · downloads ${firstRelease ? `since ${dayLabel(firstRelease.slice(0, 10))}` : "all time"} · installs ${users?.tracked_since ? `since ${dayLabel(users.tracked_since)}` : "all time"}`,
+  };
+  for (const node of document.querySelectorAll("[data-since]")) node.textContent = since[node.dataset.since] ?? "";
 
   // Website
   const site = body.site?.ok ? body.site.data : null;

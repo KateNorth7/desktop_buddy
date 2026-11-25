@@ -73,3 +73,24 @@ export function niceScale(max) {
   const step = [1, 2, 5, 10].map((m) => m * power).find((s) => s >= raw);
   return { max: step * 3, ticks: [0, step, step * 2, step * 3] };
 }
+
+/** Status of one install from its last session refresh and last AI minute. */
+export function installStatus(install, now) {
+  const since = (iso) => (iso ? (now - Date.parse(iso)) / 60_000 : Infinity);
+  const seen = since(install.last_seen);
+  if (seen <= 75 || since(install.last_ai) <= 15) return { kind: "open", label: "Open now" };
+  if (seen <= 24 * 60) return { kind: "today", label: "Last 24 h" };
+  if (seen <= 7 * 24 * 60) return { kind: "week", label: "This week" };
+  return { kind: "quiet", label: "Quiet" };
+}
+
+export function relativeTime(iso, now) {
+  if (!iso) return "–";
+  const minutes = Math.max(0, Math.round((now - Date.parse(iso)) / 60_000));
+  if (minutes < 1) return "just now";
+  if (minutes < 60) return `${minutes} min ago`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `${hours} h ago`;
+  const days = Math.round(hours / 24);
+  return days === 1 ? "yesterday" : `${days} days ago`;
+}

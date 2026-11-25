@@ -46,3 +46,15 @@ test("retention rows keep gaps and scales stay round", () => {
   assert.deepEqual(rows[0], { cohort: "2026-10-26", size: 18, weeks: [undefined, 4] });
   assert.deepEqual(niceScale(13), { max: 15, ticks: [0, 5, 10, 15] });
 });
+
+test("install status follows session refreshes and AI calls", async () => {
+  const { installStatus, relativeTime } = await import("../stats/model.mjs");
+  const now = Date.parse("2026-11-25T12:00:00Z");
+  assert.equal(installStatus({ last_seen: "2026-11-25T11:00:00Z", last_ai: null }, now).kind, "open");
+  assert.equal(installStatus({ last_seen: "2026-11-25T08:00:00Z", last_ai: "2026-11-25T11:50:00Z" }, now).kind, "open");
+  assert.equal(installStatus({ last_seen: "2026-11-25T08:00:00Z", last_ai: null }, now).kind, "today");
+  assert.equal(installStatus({ last_seen: "2026-11-21T08:00:00Z", last_ai: null }, now).kind, "week");
+  assert.equal(installStatus({ last_seen: "2026-11-01T08:00:00Z", last_ai: null }, now).kind, "quiet");
+  assert.equal(relativeTime("2026-11-25T11:30:00Z", now), "30 min ago");
+  assert.equal(relativeTime("2026-11-24T10:00:00Z", now), "yesterday");
+});
