@@ -47,7 +47,11 @@ it("sets a deadline from digits without a manually typed separator", async () =>
   const user = userEvent.setup();
   const change = vi.fn();
   render(<DeadlinePicker value="2030-10-22T23:59" onChange={change} />);
-  await user.click(screen.getByRole("button", { name: /Oct 22/ }));
+  await user.click(
+    screen.getByRole("button", {
+      name: formatDeadline("2030-10-22T23:59"),
+    }),
+  );
   await user.click(screen.getByLabelText("Deadline time"));
   await user.keyboard("0930{Enter}");
   expect(change).toHaveBeenLastCalledWith("2030-10-22T09:30");

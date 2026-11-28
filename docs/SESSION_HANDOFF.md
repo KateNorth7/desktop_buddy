@@ -1,5 +1,9 @@
 # sumi session handoff
 
+## 0.52.2 prepared — 28 November 2026
+
+The owner requested updated Windows/macOS installers after pushing `7848dc4`. Five manifests and `docs/RELEASE_0.52.2.md` are synchronized by `release:prepare`; its check and all 20 release-policy tests pass. The unrelated calendar test now derives its accessible date label from the locale-aware formatter (4 tests pass under ru-RU), resolving the previous full-suite failure without changing the picker. Existing application checks remain valid except version-bound frontend output; the 0.52.2 production build passes. Native validation and signed packaging must run in CI because local MSVC prerequisites are missing. The Mac job on the earlier application run waited for the self-hosted `sumi-mac`; owner asked to confirm it is online with `sumi-ci` logged in. No 0.52.2 publication yet.
+
 ## 0.52.1 chat failure diagnosed — 27 November 2026
 
 Windows installed 0.52.1 fails its first synthetic create-goal action at `buddy_skill_plan`, before execution. The full planner exceeds Claude's strict-schema union budget (HTTP 400). An unreleased fix on `0511310` uses JSON-encoded action inputs with unchanged local validation/authorization, shows safe chat errors and adds bounded pointer recovery. The source-derived new schema returned HTTP 200 and two separate goal actions on a synthetic Russian request. Frontend: 39 targeted tests pass; full suite 353/354 (unchanged English-date assumption fails under ru-RU); build and lint pass. Rust formatting passes, but native tests are blocked by missing MSVC `link.exe`, including outside the sandbox. The owner authorized commit and push on 28 November; application source and existing validation remain unchanged during that Git-only follow-up. No Mac validation, installer or release; installed code is unchanged. Details and commands: `docs/handoff/chat-failure-0.52.1.md`.
