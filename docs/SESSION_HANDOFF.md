@@ -1,5 +1,11 @@
 # sumi session handoff
 
+## 0.52.2 published — 28 November 2026
+
+Published https://github.com/KateNorth7/desktop_buddy/releases/tag/v0.52.2 at 00:47 UTC, source `e445364`. Release run `46087353777` passed Windows x64, hosted Apple Silicon (`hosted_macos=true`), strict visual comparison and publication. Native reports: Windows 834 Rust tests passed / 8 skipped; macOS 838 passed / 7 skipped; both 354 frontend tests passed, both lint profiles and packaging passed. Public files verified once: latest is v0.52.2, 12 SHA256 entries match, Windows epoch-3 and macOS epoch-1 manifests carry signed 0.52.2, retained channels pass verification. The downloaded Mac ZIP contains sumi 0.52.2, arm64 only, minimum macOS 14.5, unchanged bundle identifier. Evidence is ignored under `.tools/release-0522-*` and `.tools/releases/0.52.2`. No installed user app was replaced or restarted.
+
+The owner had no access to `sumi-mac`; the initial self-hosted release `46086725856` was cancelled before publication. Automatic check `46087323174` was cancelled after its Windows/visual jobs passed while its self-hosted Mac remained queued; the hosted release independently passed both required platform jobs. Keep the hosted release option and existing signing keys; do not rerun this completed release.
+
 ## 0.52.2 prepared — 28 November 2026
 
 The owner requested updated Windows/macOS installers after pushing `7848dc4`. Commit `8844372` synchronizes five manifests and `docs/RELEASE_0.52.2.md`; preparation checks, 20 release tests, the 0.52.2 frontend build and all 4 locale-independent calendar tests pass. Other frontend checks are reused from `7848dc4`. Local native tests remain blocked by missing MSVC tools. The owner has no access to the self-hosted Mac, so release run `46086725856` was cancelled before publication. Release dispatch now supports `hosted_macos=true` (standard arm64 `macos-15`, same signing and validation gates); its concurrency group avoids waiting behind an offline self-hosted job. Normal trusted CI still defaults to the owner's Mac; PRs stay hosted. Workflow policy tests pass. No 0.52.2 publication yet.
