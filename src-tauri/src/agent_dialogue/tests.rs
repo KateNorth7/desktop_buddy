@@ -342,9 +342,8 @@ fn verified_search_page_keeps_hidden_goals_addressable_without_widening_workspac
         context["state"]["last_goal_search"]["goal_ids"],
         json!([target])
     );
-    let schema = schema(&after, true, &context);
-    let read = schema["properties"]["response"]["anyOf"][1]["properties"]["actions"]["items"]
-        ["anyOf"]
+    let schema = action_contracts(&after, true, &context);
+    let read = schema["properties"]["proposed_actions"]["items"]["anyOf"]
         .as_array()
         .unwrap()
         .iter()
@@ -1548,11 +1547,13 @@ fn exclusive_response_schema_removes_conflicting_decisions_and_memory_fields() {
     let read = &variants[1];
     assert_eq!(read["properties"]["decision"]["const"], "read");
     assert!(read["properties"].get("updates").is_none());
-    assert!(!read["properties"]["actions"]["items"]["anyOf"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .any(|v| v["properties"]["name"]["const"] == "delete_goal"));
+    assert!(
+        !read["properties"]["actions"]["items"]["properties"]["name"]["enum"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|v| v == "delete_goal")
+    );
     let raw = json!({"state_version":snapshot.version,"response":{"decision":"answer","message":"Three saved steps remain.","web_query":null,"compose_response":false}});
     assert_eq!(
         parse(&envelope(raw), "What remains?").unwrap().intent.mode,
@@ -1573,6 +1574,108 @@ fn punctuation_only_provider_responses_are_not_displayable_answers() {
         &[]
     )
     .is_err());
+}
+
+#[test]
+fn planner_wire_schema_stays_within_the_provider_union_budget() {
+    fn unions(value: &Value) -> usize {
+        match value {
+            Value::Object(fields) => {
+                usize::from(
+                    fields.contains_key("anyOf") || fields.get("type").is_some_and(Value::is_array),
+                ) + fields.values().map(unions).sum::<usize>()
+            }
+            Value::Array(items) => items.iter().map(unions).sum(),
+            _ => 0,
+        }
+    }
+    let (state, _) = fixture(&case()).unwrap();
+    let inner = state.inner.lock().unwrap();
+    let snapshot = skills::snapshot(
+        &inner.storage,
+        inner.storage.current_conversation().unwrap(),
+    )
+    .unwrap();
+    for share in [true, false] {
+        let context = dialogue_context::packet(
+            &json!({"latest_request":"Create two tasks"}),
+            &snapshot,
+            share,
+            &[],
+        );
+        let mut format = schema(&snapshot, share, &context);
+        crate::claude::sanitize(&mut format);
+        assert!(
+            unions(&format) <= 16,
+            "The provider rejects excessive union parameters"
+        );
+        let names = &format["properties"]["response"]["anyOf"][2]["properties"]["actions"]["items"]
+            ["properties"]["name"]["enum"];
+        assert!(names.as_array().unwrap().contains(&json!("create_goal")));
+        assert!(names.as_array().unwrap().contains(&json!("delete_goal")));
+    }
+}
+
+#[tokio::test]
+async fn compact_wire_actions_create_two_separate_goals() {
+    let (state, _) = fixture(&case()).unwrap();
+    let conversation = state
+        .inner
+        .lock()
+        .unwrap()
+        .storage
+        .current_conversation()
+        .unwrap();
+    let server = MockServer::start().await;
+    Mock::given(method("POST")).respond_with(|request: &Request| {
+        let (body, context) = body(request);
+        match crate::claude::test::operation(&body).as_str().unwrap() {
+            "buddy_skill_plan" => response(json!({"state_version":context["state"]["state_version"],"response":{
+                "decision":"change","actions":[
+                    {"name":"create_goal","input":json!({"title":"Parcel to Omsk","steps":[]}).to_string(),"instruction":context["latest_request"]},
+                    {"name":"create_goal","input":json!({"title":"Parcel to Novosibirsk","steps":[]}).to_string(),"instruction":context["latest_request"]}
+                ],"compose_response":false}})),
+            "buddy_dialogue_authorization" => response(json!({"review":{"verdict":"approved","request_mode":"change","message":""}})),
+            operation => panic!("Unexpected operation {operation}"),
+        }
+    }).mount(&server).await;
+    let service = Service {
+        client: &state.client,
+        endpoint: server.uri(),
+        key: "fixture".into(),
+        model: "fixture".into(),
+    };
+    let result = run(&json!({"latest_request":"Create two separate tasks: Parcel to Omsk and Parcel to Novosibirsk", "conversation":[]}), conversation, &state, 0, true, &service).await.unwrap();
+    assert!(result.committed);
+    let inner = state.inner.lock().unwrap();
+    let goals = inner.storage.core_snapshot(None).unwrap().goals;
+    for title in ["Parcel to Omsk", "Parcel to Novosibirsk"] {
+        assert_eq!(goals.iter().filter(|g| g.title == title).count(), 1);
+    }
+}
+
+#[test]
+fn encoded_action_inputs_are_decoded_and_still_require_valid_skill_arguments() {
+    for encoded in ["[]", "null", "{broken"] {
+        let raw = json!({"state_version":"v","response":{"decision":"change","actions":[{"name":"create_goal","input":encoded,"instruction":"Create a goal"}],"compose_response":false}});
+        assert!(parse(&envelope(raw), "Create a goal").is_err());
+    }
+    let input = json!({"title":"Parcel to Omsk","steps":[]});
+    let raw = json!({"state_version":"v","response":{"decision":"change","actions":[{"name":"create_goal","input":input.to_string(),"instruction":"Create a goal"}],"compose_response":false}});
+    let turn = parse(&envelope(raw), "Create a goal").unwrap();
+    assert_eq!(turn.reasoning.proposed_actions[0].input, input);
+    let skill = skills::registry()
+        .into_iter()
+        .find(|s| s.name == "create_goal")
+        .unwrap();
+    assert!((skill.validator)(&skill, &turn.reasoning.proposed_actions[0].input).is_ok());
+    assert!((skill.validator)(
+        &skill,
+        &json!({"title":"Parcel", "steps":[], "unauthorized":true})
+    )
+    .is_err());
+    let raw = json!({"state_version":"v","response":{"decision":"read","actions":[{"name":"delete_goal","input":"{}","instruction":"Delete"}],"compose_response":false}});
+    assert!(parse(&envelope(raw), "List goals").is_err());
 }
 
 #[test]
@@ -1597,7 +1700,7 @@ fn ordered_schema_selects_decision_and_skill_before_arguments() {
             .unwrap(),
         "decision"
     );
-    let action = &change["properties"]["actions"]["items"]["anyOf"][0];
+    let action = &change["properties"]["actions"]["items"];
     assert_eq!(
         action["properties"]
             .as_object()

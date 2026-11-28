@@ -4,6 +4,8 @@ import { desktop } from "../api/tauri";
 
 type Point = { x: number; y: number };
 type Geometry = { position: Point; scale: number };
+type PointerOperation =
+  "visibility" | "geometry" | "cursor" | "hit-test" | "ignore" | "listeners";
 export interface BuddyPointerAdapter {
   geometry: () => Promise<Geometry>;
   cursor: () => Promise<Point>;
@@ -45,7 +47,7 @@ export function startBuddyPointer({
   hitTest: (point: Point) => boolean;
   viewport: () => { width: number; height: number };
   held: () => boolean;
-  onError: () => void;
+  onError: (operation: PointerOperation) => void;
 }): () => void {
   let stopped = false;
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -56,6 +58,7 @@ export function startBuddyPointer({
   let nextVisibility = 0;
   let visible = true;
   let unlisten: (() => void) | undefined;
+  let failures = 0;
   const restore = async () => {
     // Fail interactive: a failed probe must not leave an unreachable pet.
     await adapter.ignore(false).catch(() => {});
@@ -63,6 +66,7 @@ export function startBuddyPointer({
   };
   const tick = async () => {
     let delay = 32;
+    let operation: PointerOperation = "visibility";
     try {
       if (Date.now() >= nextVisibility) {
         visible = await adapter.visible();
@@ -72,19 +76,23 @@ export function startBuddyPointer({
         delay = 250;
       } else {
         if (geometryDirty || !geometry) {
+          operation = "geometry";
           const observedRevision = revision;
           geometry = await adapter.geometry();
           if (!(geometry.scale > 0) || !Number.isFinite(geometry.scale))
             throw new Error("Invalid window scale");
           geometryDirty = observedRevision !== revision;
         }
+        operation = "cursor";
         const point = toBuddyPoint(await adapter.cursor(), geometry);
         if (!Number.isFinite(point.x) || !Number.isFinite(point.y))
           throw new Error("Invalid cursor position");
         if (stopped) return;
+        operation = "hit-test";
         const interactive = hitTest(point);
         const ignore = !held() && !interactive;
         if (ignore !== ignored) {
+          operation = "ignore";
           await adapter.ignore(ignore);
           ignored = ignore;
         }
@@ -97,11 +105,21 @@ export function startBuddyPointer({
         )
           delay = 160;
       }
+      failures = 0;
     } catch {
-      stopped = true;
-      unlisten?.();
       await restore();
-      onError();
+      if (stopped) return;
+      geometryDirty = true;
+      nextVisibility = 0;
+      failures += 1;
+      if (failures >= 5) {
+        stopped = true;
+        unlisten?.();
+        onError(operation);
+      } else {
+        // A locked desktop or a window transition can briefly reject native probes.
+        delay = Math.min(250 * 2 ** (failures - 1), 2000);
+      }
     } finally {
       if (stopped) await restore();
       else timer = setTimeout(() => void tick(), delay);
@@ -119,7 +137,7 @@ export function startBuddyPointer({
       if (!stopped) {
         stopped = true;
         await restore();
-        onError();
+        onError("listeners");
       }
     }
   })();
@@ -135,7 +153,7 @@ export function useBuddyPointer(
   root: RefObject<HTMLElement | null>,
   enabled: boolean,
   busy: boolean,
-  onError: () => void,
+  onError: (operation: PointerOperation) => void,
   onHover: (hovered: boolean) => void,
 ) {
   const busyRef = useRef(busy);
@@ -199,7 +217,7 @@ export function useBuddyPointer(
       },
       viewport: () => ({ width: innerWidth, height: innerHeight }),
       held: () => pressed || busyRef.current,
-      onError: () => errorRef.current(),
+      onError: (operation) => errorRef.current(operation),
     });
     return () => {
       document.removeEventListener("pointerdown", down, true);

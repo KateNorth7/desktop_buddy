@@ -33,8 +33,19 @@ import type { CompanionView } from "./types";
 import { type CoachingView } from "../coaching/api";
 
 function chatError(error: unknown) {
-  const generic = queryClient.recordError("chat action", error);
+  queryClient.recordError("chat action", error);
   const local = [
+    "Connect or replace the provider key in Settings → Integrations / AI, then retry.",
+    "Check your provider access and credits in Settings, then retry.",
+    "sumi's provider is busy. Wait a moment and retry; your draft is kept.",
+    "sumi's AI provider took too long to respond or could not be reached. Your message is saved. Check the chat and your goals before retrying.",
+    "sumi's AI provider is temporarily unavailable. Your message is saved; try again in a moment.",
+    "sumi's AI provider rejected this request. Your message is saved. Try a new chat or update sumi before retrying.",
+    "Your goal or sharing choices changed. Retry with the current context.",
+    "Check that your provider endpoint and model are supported, then retry. Your draft is kept.",
+    "AI assistance is paused. Enable it in Settings → Integrations / AI to continue.",
+    "sumi is finishing another request. Try again in a moment.",
+    "sumi could not prepare a reliable answer. Retry or describe your request more specifically; your draft is kept.",
     "No speech was recognized. Try again or type your message.",
     "The transcript is too long. Record a shorter message.",
     "Local speech recognition is unavailable. Install an on-device speech language or type your message.",
@@ -53,7 +64,8 @@ function chatError(error: unknown) {
     local.find(
       (message) =>
         (error instanceof Error ? error.message : String(error)) === message,
-    ) ?? generic
+    ) ??
+    "sumi couldn't finish this request. Check the chat and your goals before retrying."
   );
 }
 

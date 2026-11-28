@@ -315,6 +315,9 @@ fn user_errors_never_echo_provider_diagnostics_or_credentials() {
 
 #[test]
 fn chat_timeouts_are_not_reported_as_unreliable_answers_or_bad_keys() {
+    let rejected = user_error("chat", "HTTP 400: test-secret");
+    assert!(rejected.contains("rejected this request"));
+    assert!(!rejected.contains("test-secret"));
     for error in [
         "The provider response timed out. Your saved API key has not been removed.",
         "The agent request timed out. Check the verified app state before retrying.",

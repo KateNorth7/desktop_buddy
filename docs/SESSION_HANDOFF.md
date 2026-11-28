@@ -1,5 +1,9 @@
 # sumi session handoff
 
+## 0.52.1 chat failure diagnosed — 27 November 2026
+
+Windows installed 0.52.1 fails its first synthetic create-goal action at `buddy_skill_plan`, before execution. The full planner exceeds Claude's strict-schema union budget (HTTP 400). An unreleased fix on `0511310` uses JSON-encoded action inputs with unchanged local validation/authorization, shows safe chat errors and adds bounded pointer recovery. The source-derived new schema returned HTTP 200 and two separate goal actions on a synthetic Russian request. Frontend: 39 targeted tests pass; full suite 353/354 (unchanged English-date assumption fails under ru-RU); build and lint pass. Rust formatting passes, but native tests are blocked by missing MSVC `link.exe`, including outside the sandbox. The owner authorized commit and push on 28 November; application source and existing validation remain unchanged during that Git-only follow-up. No Mac validation, installer or release; installed code is unchanged. Details and commands: `docs/handoff/chat-failure-0.52.1.md`.
+
 ## 0.52.1 published and self-hosted Mac runner — 17 November 2026
 
 GitHub's hosted macOS arm64 pool refused every job from 16 November ("not acquired by Runner... capacity constraints"). Trusted Apple Silicon validation (manual dispatch, main pushes, releases) now runs on the owner's Mac: runner `sumi-mac`, label `sumi`, as the standard macOS user `sumi-ci` inside that user's logged-in GUI session (a LaunchAgent in `gui/<uid>`; a system daemon cannot sign or relaunch the app). Pull requests stay on hosted runners. After a reboot, log in as `sumi-ci` (Fast User Switching) and switch back, or the Mac job waits. Setup scripts live in the ignored `.tools/runner/`. The Vision OCR test now waits up to 90 s for cold model preparation (about 27 s for a fresh binary on a MacBook Air); the app is unchanged.

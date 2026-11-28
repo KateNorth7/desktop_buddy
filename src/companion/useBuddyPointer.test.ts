@@ -150,15 +150,37 @@ it("never overlaps slow native probes and restores input if stopped in flight", 
   expect(s.unlisten).toHaveBeenCalledTimes(1);
   expect(vi.getTimerCount()).toBe(0);
 });
-it("fails interactive if an OS probe errors", async () => {
+it("restores input and retries a temporary OS probe error", async () => {
   const s = setup();
   await tick(0);
-  vi.mocked(s.adapter.cursor).mockRejectedValue(new Error("probe failed"));
+  vi.mocked(s.adapter.cursor).mockRejectedValueOnce(new Error("probe failed"));
   await tick();
   expect(s.adapter.ignore).toHaveBeenLastCalledWith(false);
-  expect(s.onError).toHaveBeenCalledTimes(1);
+  expect(s.onError).not.toHaveBeenCalled();
+  await tick(250);
+  expect(s.adapter.ignore).toHaveBeenLastCalledWith(true);
+  expect(s.adapter.geometry).toHaveBeenCalledTimes(2);
+  s.stop();
+});
+it("fails interactive after bounded recovery and identifies the failing probe", async () => {
+  const s = setup();
+  vi.mocked(s.adapter.cursor).mockRejectedValue(new Error("probe failed"));
+  await tick(3750);
+  expect(s.adapter.cursor).toHaveBeenCalledTimes(5);
+  expect(s.adapter.ignore).toHaveBeenLastCalledWith(false);
+  expect(s.onError).toHaveBeenCalledExactlyOnceWith("cursor");
   expect(vi.getTimerCount()).toBe(0);
   s.stop();
+});
+it("cancels a pending recovery when disposed", async () => {
+  const s = setup();
+  vi.mocked(s.adapter.cursor).mockRejectedValue(new Error("probe failed"));
+  await tick(0);
+  s.stop();
+  await tick(4000);
+  expect(s.adapter.cursor).toHaveBeenCalledTimes(1);
+  expect(s.onError).not.toHaveBeenCalled();
+  expect(vi.getTimerCount()).toBe(0);
 });
 it("restores input if changing ignore mode fails", async () => {
   const s = setup();
@@ -167,7 +189,9 @@ it("restores input if changing ignore mode fails", async () => {
   );
   await tick(0);
   expect(s.adapter.ignore).toHaveBeenLastCalledWith(false);
-  expect(s.onError).toHaveBeenCalledTimes(1);
+  expect(s.onError).not.toHaveBeenCalled();
+  await tick(250);
+  expect(s.adapter.ignore).toHaveBeenLastCalledWith(true);
   s.stop();
 });
 it("unsubscribes even if disposal precedes native listener registration", async () => {

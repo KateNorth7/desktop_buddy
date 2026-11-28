@@ -18,6 +18,7 @@ import {
 } from "../companion/useBuddySurface";
 import { useBuddyActions } from "../companion/useBuddyActions";
 import { useChatPose } from "../companion/useChatPose";
+import { queryClient } from "../data/client";
 
 export function DesktopBuddy({
   view,
@@ -116,7 +117,11 @@ export function DesktopBuddy({
       !!companion.intervention ||
       !!card,
     busy,
-    () => {
+    (operation) => {
+      queryClient.recordError(
+        `buddy pointer:${operation}`,
+        "Native pointer operation failed after recovery attempts.",
+      );
       setError("Click-through is unavailable. Restart sumi to try again.");
     },
     actions.setNativeHovered,

@@ -276,13 +276,28 @@ it("preserves the typed draft after a local STT failure", async () => {
   );
   await waitFor(() =>
     expect(screen.getByRole("alert").textContent).toContain(
-      "Couldn't save that change. Please try again.",
+      "sumi couldn't finish this request. Check the chat and your goals before retrying.",
     ),
   );
   expect((screen.getByRole("textbox") as HTMLTextAreaElement).value).toBe(
     "Keep this draft",
   );
   expect(aiApi.send).not.toHaveBeenCalled();
+});
+it.each([
+  "sumi's AI provider is temporarily unavailable. Your message is saved; try again in a moment.",
+  "sumi's AI provider rejected this request. Your message is saved. Try a new chat or update sumi before retrying.",
+  "AI assistance is paused. Enable it in Settings → Integrations / AI to continue.",
+])("shows the safe backend chat error: %s", async (message) => {
+  vi.mocked(aiApi.send).mockRejectedValueOnce(message);
+  show();
+  await userEvent.type(screen.getByRole("textbox"), "Create a task{Enter}");
+  await waitFor(() =>
+    expect(screen.getByRole("alert").textContent).toContain(message),
+  );
+  expect(
+    screen.queryByText("Couldn't save that change. Please try again."),
+  ).toBeNull();
 });
 it("explains microphone permission failure and permits typed commands", async () => {
   vi.mocked(recordVoice).mockRejectedValueOnce(

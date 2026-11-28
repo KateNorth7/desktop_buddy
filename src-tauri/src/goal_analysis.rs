@@ -803,6 +803,8 @@ pub fn user_error(operation: &str, error: &str) -> String {
         "provider"
     } else if error.contains("changed") || error.contains("discarded") {
         "context"
+    } else if operation == "chat" && error.contains("HTTP 400") {
+        "request"
     } else if error.contains("400")
         || error.contains("404")
         || error.contains("API_URL")
@@ -836,6 +838,7 @@ pub fn user_error(operation: &str, error: &str) -> String {
         "network" => "sumi's AI provider took too long to respond or could not be reached. Your message is saved. Check the chat and your goals before retrying.",
         "provider" => "sumi's AI provider is temporarily unavailable. Your message is saved; try again in a moment.",
         "context" => "Your goal or sharing choices changed. Retry with the current context.",
+        "request" => "sumi's AI provider rejected this request. Your message is saved. Try a new chat or update sumi before retrying.",
         "configuration" => "Check that your provider endpoint and model are supported, then retry. Your draft is kept.",
         "settings" => "AI assistance is paused. Enable it in Settings → Integrations / AI to continue.",
         "busy" => "sumi is finishing another request. Try again in a moment.",

@@ -47,7 +47,7 @@ pub struct Outcome {
     pub committed: bool,
 }
 
-fn schema(snapshot: &Snapshot, share: bool, context: &Value) -> Value {
+fn action_contracts(snapshot: &Snapshot, share: bool, context: &Value) -> Value {
     let mut visible = snapshot.clone();
     visible.data["goals"] = context["state"]["goals"].clone();
     // A verified search page can expose goals outside the forty workspace summaries.
@@ -69,23 +69,43 @@ fn schema(snapshot: &Snapshot, share: bool, context: &Value) -> Value {
             }
         }
     }
-    let envelope = crate::chat_contract::Contract::default().schema_for_state(&visible, share);
+    crate::chat_contract::Contract::default().schema_for_state(&visible, share)
+}
+
+/// Keep the provider grammar below its union limit. Exact per-skill contracts
+/// remain instructions here and authoritative local validators before execution.
+fn compact_actions(actions: &Value, read_only: bool) -> Value {
+    let registry = skills::registry();
+    let mut contracts = serde_json::Map::new();
+    for variant in actions["items"]["anyOf"].as_array().into_iter().flatten() {
+        if let Some(name) = variant["properties"]["name"]["const"].as_str() {
+            if !read_only
+                || registry
+                    .iter()
+                    .any(|s| s.name == name && s.safety == Safety::ReadOnly)
+            {
+                contracts.insert(name.into(), variant["properties"]["input"].clone());
+            }
+        }
+    }
+    let names: Vec<_> = contracts.keys().cloned().collect();
+    json!({"type":"array","minItems":1,"maxItems":20,"items":{
+        "type":"object","additionalProperties":false,"properties":{
+            "name":{"type":"string","enum":names},
+            "input":{"type":"string","maxLength":65536,"description":format!("A JSON-encoded input object matching the selected skill's exact contract. Encode the object as a JSON string, not an object. Skill input contracts: {}", Value::Object(contracts))},
+            "instruction":{"type":"string","maxLength":4000,"description":"Copy latest_request verbatim for changes. For read-only skills use an empty string."}
+        },"required":["name","input","instruction"]}})
+}
+
+fn schema(snapshot: &Snapshot, share: bool, context: &Value) -> Value {
+    let envelope = action_contracts(snapshot, share, context);
     let object = |properties: Value| {
         let required: Vec<_> = properties.as_object().unwrap().keys().cloned().collect();
         json!({"type":"object","additionalProperties":false,"properties":properties,"required":required})
     };
-    let actions = envelope["properties"]["proposed_actions"].clone();
-    let mut reads = actions.clone();
-    if let Some(variants) = reads["items"]["anyOf"].as_array_mut() {
-        variants.retain(|v| {
-            skills::registry()
-                .iter()
-                .any(|s| s.safety == Safety::ReadOnly && v["properties"]["name"]["const"] == s.name)
-        });
-    }
-    reads["minItems"] = json!(1);
-    let mut changes = actions;
-    changes["minItems"] = json!(1);
+    let actions = &envelope["properties"]["proposed_actions"];
+    let reads = compact_actions(actions, true);
+    let changes = compact_actions(actions, false);
     object(
         json!({"state_version":envelope["properties"]["state_version"],"response":{"anyOf":[
             object(json!({"decision":{"type":"string","const":"answer"},"message":{"type":"string","minLength":1,"maxLength":6000},"web_query":{"type":["string","null"],"maxLength":300},"compose_response":{"type":"boolean"}})),
@@ -104,11 +124,12 @@ fn parse(value: &Value, latest: &str) -> Result<Turn, String> {
         return Err("Invalid dialogue object".into());
     }
     if raw.get("response").is_some() {
-        let response = raw["response"].clone();
+        let mut response = raw["response"].clone();
         let mode = response["decision"]
             .as_str()
-            .ok_or("Missing dialogue decision")?;
-        let allowed: &[&str] = match mode {
+            .ok_or("Missing dialogue decision")?
+            .to_string();
+        let allowed: &[&str] = match mode.as_str() {
             "answer" => &["decision", "message", "web_query", "compose_response"],
             "read" | "change" => &["decision", "actions", "compose_response"],
             "clarification" => &["decision", "question"],
@@ -125,13 +146,28 @@ fn parse(value: &Value, latest: &str) -> Result<Turn, String> {
         {
             return Err("Invalid dialogue response fields".into());
         }
+        if let Some(actions) = response.get_mut("actions").and_then(Value::as_array_mut) {
+            for action in actions {
+                if let Some(encoded) = action["input"].as_str() {
+                    if encoded.len() > 65536 {
+                        return Err("Dialogue skill input is too long".into());
+                    }
+                    let input: Value = serde_json::from_str(encoded)
+                        .map_err(|_| "Invalid dialogue skill input JSON")?;
+                    if !input.is_object() {
+                        return Err("Dialogue skill input must be an object".into());
+                    }
+                    action["input"] = input;
+                }
+            }
+        }
         raw = json!({"situation":"Respond to the explicit user request","decision":mode,
-            "state_version":raw["state_version"],"proposed_actions":if matches!(mode,"read"|"change"){response["actions"].clone()}else{json!([])},
+            "state_version":raw["state_version"],"proposed_actions":if matches!(mode.as_str(),"read"|"change"){response["actions"].clone()}else{json!([])},
             "memory_updates":if mode=="preference" {response["updates"].clone()}else{json!([])},
             "clarification":if mode=="clarification" {response["question"].clone()}else{Value::Null},
             "message":if mode=="answer" {response["message"].clone()}else{json!("")},
             "web_query":if mode=="answer" {response["web_query"].clone()}else{Value::Null},
-            "compose_response":if matches!(mode,"answer"|"read"|"change") {response["compose_response"].clone()}else{json!(false)}});
+            "compose_response":if matches!(mode.as_str(),"answer"|"read"|"change") {response["compose_response"].clone()}else{json!(false)}});
     } else {
         #[cfg(not(test))]
         return Err("Missing structured dialogue response".into());
