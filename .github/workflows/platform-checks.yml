@@ -11,6 +11,9 @@ on:
       build_installers:
         type: boolean
         default: false
+      hosted_macos:
+        type: boolean
+        default: false
     secrets:
       TAURI_SIGNING_PRIVATE_KEY:
         required: false
@@ -39,12 +42,14 @@ jobs:
             name: macos-apple-silicon
             target: aarch64-apple-darwin
     # GitHub's hosted Apple Silicon pool is often unavailable. Trusted runs
-    # (manual dispatch, main pushes, releases) use the owner's registered Mac;
+    # (manual dispatch, main pushes, releases) default to the owner's Mac;
+    # releases can opt into hosted Apple Silicon when that Mac is unavailable.
     # pull requests always stay on hosted runners so outside code never runs there.
-    runs-on: ${{ (matrix.name == 'macos-apple-silicon' && github.event_name != 'pull_request') && fromJSON('["self-hosted","macOS","ARM64","sumi"]') || matrix.runner }}
+    runs-on: ${{ (matrix.name == 'macos-apple-silicon' && github.event_name != 'pull_request' && !inputs.hosted_macos) && fromJSON('["self-hosted","macOS","ARM64","sumi"]') || matrix.runner }}
     timeout-minutes: 45
     concurrency:
-      group: validation-${{ github.sha }}-${{ matrix.name }}
+      # An offline self-hosted job must not hold the hosted fallback in its queue.
+      group: validation-${{ github.sha }}-${{ matrix.name }}${{ inputs.hosted_macos && matrix.name == 'macos-apple-silicon' && '-hosted' || '' }}
       cancel-in-progress: false
     defaults:
       run:
@@ -56,7 +61,10 @@ jobs:
       CARGO_INCREMENTAL: "0"
     steps:
       - uses: actions/checkout@v4
-      - name: Expose Homebrew tools on the self-hosted Mac
+      - name: Require native Apple Silicon validation
+        if: runner.os == 'macOS'
+        run: test "$(uname -m)" = arm64
+      - name: Expose Homebrew tools on macOS
         if: runner.os == 'macOS'
         run: echo /opt/homebrew/bin >> "$GITHUB_PATH"
       - uses: actions/setup-node@v4

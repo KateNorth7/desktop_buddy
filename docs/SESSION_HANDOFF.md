@@ -2,7 +2,7 @@
 
 ## 0.52.2 prepared — 28 November 2026
 
-The owner requested updated Windows/macOS installers after pushing `7848dc4`. Five manifests and `docs/RELEASE_0.52.2.md` are synchronized by `release:prepare`; its check and all 20 release-policy tests pass. The unrelated calendar test now derives its accessible date label from the locale-aware formatter (4 tests pass under ru-RU), resolving the previous full-suite failure without changing the picker. Existing application checks remain valid except version-bound frontend output; the 0.52.2 production build passes. Native validation and signed packaging must run in CI because local MSVC prerequisites are missing. The Mac job on the earlier application run waited for the self-hosted `sumi-mac`; owner asked to confirm it is online with `sumi-ci` logged in. No 0.52.2 publication yet.
+The owner requested updated Windows/macOS installers after pushing `7848dc4`. Commit `8844372` synchronizes five manifests and `docs/RELEASE_0.52.2.md`; preparation checks, 20 release tests, the 0.52.2 frontend build and all 4 locale-independent calendar tests pass. Other frontend checks are reused from `7848dc4`. Local native tests remain blocked by missing MSVC tools. The owner has no access to the self-hosted Mac, so release run `46086725856` was cancelled before publication. Release dispatch now supports `hosted_macos=true` (standard arm64 `macos-15`, same signing and validation gates); its concurrency group avoids waiting behind an offline self-hosted job. Normal trusted CI still defaults to the owner's Mac; PRs stay hosted. Workflow policy tests pass. No 0.52.2 publication yet.
 
 ## 0.52.1 chat failure diagnosed — 27 November 2026
 

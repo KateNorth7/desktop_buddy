@@ -435,7 +435,10 @@ test("workflow policy retains both signed platforms, strict visual gating and ma
 });
 test("lint gates block and their warning budgets cannot be bypassed", () => {
   const read = (path) =>
-    readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
+    readFileSync(new URL(`../${path}`, import.meta.url), "utf8").replaceAll(
+      "\r\n",
+      "\n",
+    );
   const ci = read(".github/workflows/ci.yml"),
     platforms = read(".github/workflows/platform-checks.yml");
   assert.doesNotMatch(ci + platforms, /continue-on-error/);
@@ -451,7 +454,19 @@ test("lint gates block and their warning budgets cannot be bypassed", () => {
   assert.doesNotMatch(ci, /runner: macos-15/);
   assert.match(
     platforms,
-    /runs-on: \$\{\{ \(matrix\.name == 'macos-apple-silicon' && github\.event_name != 'pull_request'\) && fromJSON\('\["self-hosted","macOS","ARM64","sumi"\]'\) \|\| matrix\.runner \}\}/,
+    /runs-on: \$\{\{ \(matrix\.name == 'macos-apple-silicon' && github\.event_name != 'pull_request' && !inputs\.hosted_macos\) && fromJSON\('\["self-hosted","macOS","ARM64","sumi"\]'\) \|\| matrix\.runner \}\}/,
+  );
+  const release = read(".github/workflows/release.yml");
+  assert.match(
+    release,
+    /hosted_macos:\n\s+description: [^\n]+\n\s+type: boolean\n\s+default: false/,
+  );
+  assert.match(release, /hosted_macos: \$\{\{ inputs.hosted_macos \}\}/);
+  assert.match(platforms, /hosted_macos:\n\s+type: boolean\n\s+default: false/);
+  assert.match(platforms, /run: test "\$\(uname -m\)" = arm64/);
+  assert.match(
+    platforms,
+    /group: validation-.*inputs.hosted_macos && matrix.name == 'macos-apple-silicon' && '-hosted'/,
   );
   assert.match(platforms, /components: rustfmt, clippy/);
   assert.match(platforms, /toolchain: 1.99.1/);

@@ -6,6 +6,10 @@ on:
         description: New synchronized version tag, for example v0.23.2
         required: true
         type: string
+      hosted_macos:
+        description: Use GitHub-hosted Apple Silicon when the owner's Mac is unavailable
+        type: boolean
+        default: false
 concurrency:
   group: desktop-buddy-release
   cancel-in-progress: false
@@ -40,6 +44,7 @@ jobs:
     with:
       release: true
       release_tag: ${{ inputs.release_tag }}
+      hosted_macos: ${{ inputs.hosted_macos }}
     secrets: inherit
   visual:
     needs: prepare
